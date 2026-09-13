@@ -31,8 +31,9 @@ describe("independently authored package content", () => {
 
   test("retains candidate, predecessor, startup, privacy, and command-order contracts", () => {
     expect(readme).toContain("The v0.8.1 candidate is not yet admitted.");
-    expect(readme).toContain("For the admitted v0.7.1 artifact, use its [immutable README](https://github.com/hraness/oompa/tree/v0.7.1#get-started).");
-    expect(readme).toContain("https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install");
+    expect(readme).toContain("For the admitted v0.8.0 artifact, use its [verified installation notes](https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact).");
+    expect(readme).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.0");
+    expect(readme).toContain("The v0.8.0 npm mirror is not admitted.");
     expect(readme).toContain(packageCandidateNotice);
     expect(readme.indexOf(packageCandidateNotice)).toBeLessThan(readme.indexOf(packageInstallCommand));
     expect(readme.indexOf("The v0.8.1 candidate is not yet admitted.")).toBeLessThan(readme.indexOf(packageInstallCommand));
@@ -64,12 +65,28 @@ describe("independently authored package content", () => {
         .toThrow("before its prerequisite");
     }
     for (const claim of [
+      "The v0.8.0 npm mirror is admitted.",
       "Install and verify the admitted v0.8.0 CLI artifact",
       "v0.8.0 artifacts admitted", "v0.8.0 is the fully admitted public artifact",
       "Install and verify the admitted v0.8.1 CLI artifact",
       "v0.8.1 artifacts admitted", "v0.8.1 is the fully admitted public artifact",
       "The v0.7.1 candidate is not yet admitted",
     ]) expect(() => assertPackageContent(manifest, readme + claim + "\n")).toThrow("conflicting release claim");
+  });
+
+  test("requires exact canonical predecessor evidence without claiming npm admission", () => {
+    for (const required of [
+      "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact",
+      "https://github.com/hraness/oompa/releases/tag/v0.8.0",
+      "v0.8.0 remains the admitted canonical GitHub artifact.",
+      "The v0.8.0 npm mirror is not admitted.",
+    ]) {
+      expect(() => assertPackageContent(manifest, readme.replaceAll(required, "")))
+        .toThrow("missing its technical identity");
+    }
+    expect(() => assertPackageContent(manifest, readme.replace(
+      "The v0.8.0 npm mirror is not admitted.", "The v0.8.0 npm mirror is admitted.",
+    ))).toThrow("missing its technical identity");
   });
 
   test("never transfers the exact package content contract to another version or identity", () => {
