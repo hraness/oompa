@@ -90,7 +90,7 @@ describe("independently authored package content", () => {
   });
 
   test("never transfers the exact package content contract to another version or identity", () => {
-    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.0", "0.8.2", "v0.8.2", "0.8.2-beta.1", ""]) {
+    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.0", "0.8.1", "v0.8.2", "0.8.2-beta.1", ""]) {
       expect(() => assertPackageContent({ ...manifest, version }, readme)).toThrow();
     }
     for (const name of ["oompa", ["@", "other", "/oompa"].join(""), ""]) {
