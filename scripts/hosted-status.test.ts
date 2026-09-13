@@ -84,7 +84,164 @@ const acceptedBootstrap = JSON.stringify({
   state: "accepted",
 });
 
+const inactiveAttention = {
+  generation: 0,
+  globalState: "absent",
+  outboxOccupancy: 0,
+  safetyFaultOccupancy: 0,
+} as const;
+const attentionKeyName = "OOMPA_ATTENTION_RESEND_API_KEY";
+
+const observeMissingAttentionKey = async (options: Readonly<{
+  admission?: string;
+  attention?: unknown;
+  bootstrap?: string;
+  dedicatedKeyReady?: boolean;
+  missingNames?: readonly string[];
+  requireInactive?: boolean;
+  runtimeSourceCommit?: string;
+}> = {}) => {
+  const requests: CommandRequest[] = [];
+  const verifications: ConvexTarget[] = [];
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const missingNames = options.missingNames ?? [attentionKeyName];
+  const requireInactive = options.requireInactive ?? true;
+  const exitCode = await executeHostedStatus({
+    arguments: [
+      ...statusArguments,
+      "--require-passed",
+      ...(requireInactive ? ["--require-attention-inactive"] : []),
+      ...(options.dedicatedKeyReady === undefined ? [] : ["--require-attention-key-ready"]),
+    ],
+    readAttestation: async () => ({
+      runtimeSourceCommit: options.runtimeSourceCommit ?? sourceCommit,
+      state: "bound",
+    }),
+    runner: statusRunner([
+      {
+        exitCode: 0,
+        stderr: "",
+        stdout: requiredEnvironmentNames.filter((name) => !missingNames.includes(name)).join("\n"),
+      },
+      { exitCode: 0, stderr: "", stdout: options.bootstrap ?? acceptedBootstrap },
+      {
+        exitCode: 0,
+        stderr: "",
+        stdout: options.admission ?? '{"generation":2,"state":"open","updatedAt":1}',
+      },
+      ...(requireInactive ? [{
+        exitCode: 0, stderr: "", stdout: JSON.stringify(options.attention ?? inactiveAttention),
+      }] : []),
+      ...(options.dedicatedKeyReady === undefined ? [] : [{
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify({ dedicatedKeyReady: options.dedicatedKeyReady }),
+      }]),
+    ], requests),
+    stderr: outputWriter(stderr),
+    stdout: outputWriter(stdout),
+    verifyTarget: exactTargetVerifier(verifications),
+  });
+  return { exitCode, requests, stderr, stdout, verifications };
+};
+
 describe("hosted preflight status operator", () => {
+  test("admits the sole absent sending key only at the exact inactive checkpoint", async () => {
+    for (const control of [
+      { generation: 0, globalState: "absent" },
+      { generation: 1, globalState: "disabled" },
+      { generation: 1, globalState: "enabled" },
+    ]) {
+      for (const outboxOccupancy of [0, 1]) {
+        for (const safetyFaultOccupancy of [0, 1]) {
+          const result = await observeMissingAttentionKey({
+            attention: { ...control, outboxOccupancy, safetyFaultOccupancy },
+          });
+          const inactive = control.globalState === "absent"
+            && outboxOccupancy === 0 && safetyFaultOccupancy === 0;
+          expect(result.exitCode).toBe(inactive ? 0 : 1);
+          expect(result.stderr).toEqual([]);
+          expect(result.requests).toHaveLength(4);
+          expect(result.verifications).toHaveLength(10);
+          expect(JSON.parse(result.stdout.join(""))).toMatchObject({
+            attentionNotifications: { state: inactive ? "inactive" : "not_inactive" },
+            environment: { missingRequiredNames: [attentionKeyName], requiredNamesPresent: false },
+            status: inactive ? "live" : "preflight_incomplete",
+            version: 1,
+          });
+          expect(JSON.parse(result.stdout.join(""))).not.toHaveProperty("attentionSending");
+        }
+      }
+    }
+  });
+
+  test("keeps every core environment name mandatory even with exact inactive proof", async () => {
+    for (const name of requiredEnvironmentNames.filter((value) => value !== attentionKeyName)) {
+      for (const missingNames of [[name], [name, attentionKeyName]]) {
+        const result = await observeMissingAttentionKey({ missingNames });
+        expect(result.exitCode).toBe(1);
+        expect(JSON.parse(result.stdout.join(""))).toMatchObject({
+          environment: { missingRequiredNames: missingNames, requiredNamesPresent: false },
+          nextAction: "configure_hosted_sync",
+          status: "preflight_incomplete",
+        });
+      }
+    }
+  });
+
+  test("does not waive a missing sending key without the requested inactive observation", async () => {
+    const result = await observeMissingAttentionKey({ requireInactive: false });
+    expect(result.exitCode).toBe(1);
+    expect(result.requests).toHaveLength(3);
+    expect(JSON.parse(result.stdout.join(""))).toMatchObject({
+      nextAction: "configure_hosted_sync",
+      status: "preflight_incomplete",
+    });
+    expect(JSON.parse(result.stdout.join(""))).not.toHaveProperty("attentionNotifications");
+  });
+
+  test("combined passed and sending-key gates require the name and credential result", async () => {
+    for (const dedicatedKeyReady of [false, true]) {
+      const result = await observeMissingAttentionKey({ dedicatedKeyReady });
+      expect(result.exitCode).toBe(1);
+      expect(result.requests).toHaveLength(5);
+      expect(JSON.parse(result.stdout.join(""))).toMatchObject({
+        attentionNotifications: { state: "inactive" },
+        attentionSending: { dedicatedKeyReady },
+        environment: { missingRequiredNames: [attentionKeyName], requiredNamesPresent: false },
+        status: "preflight_incomplete",
+      });
+    }
+  });
+
+  test("preserves bootstrap, source and admission gates when an inactive key is absent", async () => {
+    for (const scenario of [
+      {
+        options: { bootstrap: readyBootstrap, admission: '{"generation":0,"state":"open","updatedAt":1}' },
+        exitCode: 0, status: "preflight_passed", nextAction: "run_live_acceptance",
+      },
+      {
+        options: { admission: '{"generation":2,"state":"frozen","updatedAt":1}' },
+        exitCode: 1, status: "preflight_incomplete", nextAction: "resume_admissions",
+      },
+      {
+        options: { runtimeSourceCommit: "f".repeat(40) },
+        exitCode: 1, status: "preflight_incomplete", nextAction: "inspect_release_attestation",
+      },
+      {
+        options: { bootstrap: readyBootstrap, admission: '{"generation":1,"state":"open","updatedAt":1}' },
+        exitCode: 1, status: "preflight_inconsistent", nextAction: "inspect_preflight",
+      },
+    ]) {
+      const result = await observeMissingAttentionKey(scenario.options);
+      expect(result.exitCode).toBe(scenario.exitCode);
+      expect(JSON.parse(result.stdout.join(""))).toMatchObject({
+        status: scenario.status, nextAction: scenario.nextAction,
+      });
+    }
+  });
+
   test("reports an accepted deployment with open admission as live", async () => {
     for (const scenario of [
       {
