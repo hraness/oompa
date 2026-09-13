@@ -91,7 +91,7 @@ describe("public server marketing composition", () => {
     const statusText = guideDocument("/docs/status/").querySelector('aside[aria-label="Current runtime hold"]')?.textContent ?? "";
     expect(statusText.includes(publicContent.daemonRolloutNotice)).toBe(true);
     const firstSession = findSection(publicContent, "first-session").blocks.find((block) => block.kind === "commands");
-    if (firstSession === undefined || firstSession.kind !== "commands") throw new Error("Missing public first-session commands.");
+    if (firstSession === undefined) throw new Error("Missing public first-session commands.");
     const firstSessionGuide = guideDocument("/docs/start/");
     expect([...firstSessionGuide.querySelectorAll("#first-session pre")].map((node) => node.textContent))
       .toContain(firstSession.commands.join("\n"));
