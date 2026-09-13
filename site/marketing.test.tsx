@@ -65,35 +65,33 @@ describe("public server marketing composition", () => {
 
   test("keeps activation warnings beside examples and exact setup commands in their owning guide", () => {
     const { document } = parseHTML(renderMarketingPage(publicContent));
-    expect(document.querySelector('.hraness-marketing-hero__copy')).not.toBeNull();
-    return;
     const setup = guideDocument("/docs/start/");
     const commandBlocks = [...setup.querySelectorAll("main pre")];
-    const installNotice = setup.querySelector('aside[aria-label="Canonical artifact installation"]');
-    expect(installNotice?.textContent).toContain("The admitted v0.8.1 canonical GitHub artifact may be installed");
-    expect(installNotice?.querySelector("a")?.getAttribute("href")).toBe(publicContent.links.admittedInstall);
-    expect(installNotice?.nextElementSibling).toBe(commandBlocks[0]);
-    expect(commandBlocks[0]?.textContent).toBe(publicContent.installCommand);
-    const admissionNotice = setup.querySelector('aside[aria-label="Canonical artifact installation"]');
-    expect(admissionNotice).not.toBeNull();
-    expect(admissionNotice?.textContent).toContain("The admitted v0.8.1 canonical GitHub artifact may be installed");
-    expect(admissionNotice?.textContent).toContain("Neither artifact admission nor installation authorizes daemon startup.");
-    expect(admissionNotice?.querySelector('a[href="https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact"]')?.getAttribute("href")).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
-    expect(admissionNotice?.nextElementSibling).toBe(commandBlocks[0]);
+    const installNotice = setup.querySelector('aside[aria-label="CLI artifact admitted; daemon startup blocked"]');
+    const installText = installNotice?.textContent ?? "";
+    expect(commandBlocks.length > 0).toBe(true);
+    expect(installNotice !== null).toBe(true);
+    expect(installText.includes("canonical GitHub artifact")).toBe(true);
+    expect(installNotice?.querySelector("a")?.getAttribute("href") === publicContent.links.admittedInstall).toBe(true);
+    expect(installNotice?.nextElementSibling === commandBlocks[0]).toBe(true);
+    expect(commandBlocks[0]?.textContent === publicContent.installCommand).toBe(true);
+    expect(installText.includes("Neither artifact admission nor installation authorizes daemon startup.")).toBe(true);
+    expect(installNotice?.querySelector('a[href*="admitted-v081-canonical-artifact"]') !== null).toBe(true);
     for (const command of [publicContent.installCommand, publicContent.doctorCommand, publicContent.initCommand]) {
       expect(commandBlocks.some((block) => block.textContent.split("\n").includes(command))).toBe(true);
     }
     for (const block of commandBlocks) expect(block.getAttribute("tabindex")).toBe("0");
     const setupNotice = setup.querySelector('aside[aria-label="Before you start a daemon"]');
-    expect(setupNotice).not.toBeNull();
-    expect(setupNotice?.textContent).toContain("Initialization, daemon startup, and hosted command writers remain blocked on capacity.");
-    expect(setupNotice?.querySelector("a")?.getAttribute("href")).toBe("/docs/status/#install-and-update");
+    const setupNoticeText = setupNotice?.textContent ?? "";
+    expect(setupNotice !== null).toBe(true);
+    expect(setupNoticeText.includes("Initialization, daemon startup, and hosted command writers remain blocked on capacity.")).toBe(true);
+    expect(setupNotice?.querySelector("a")?.getAttribute("href") === "/docs/status/#install-and-update").toBe(true);
     const setupText = setup.querySelector("main")?.textContent ?? "";
-    expect(setupText.indexOf(setupNotice!.textContent)).toBeLessThan(setupText.indexOf(publicContent.initCommand));
-    expect(guideDocument("/docs/status/").querySelector('aside[aria-label="Current runtime hold"]')?.textContent)
-      .toContain(publicContent.daemonRolloutNotice);
+    expect(setupText.indexOf(setupNoticeText) < setupText.indexOf(publicContent.initCommand)).toBe(true);
+    const statusText = guideDocument("/docs/status/").querySelector('aside[aria-label="Current runtime hold"]')?.textContent ?? "";
+    expect(statusText.includes(publicContent.daemonRolloutNotice)).toBe(true);
     const firstSession = findSection(publicContent, "first-session").blocks.find((block) => block.kind === "commands");
-    if (firstSession?.kind !== "commands") throw new Error("Missing public first-session commands.");
+    if (firstSession === undefined || firstSession.kind !== "commands") throw new Error("Missing public first-session commands.");
     const firstSessionGuide = guideDocument("/docs/start/");
     expect([...firstSessionGuide.querySelectorAll("#first-session pre")].map((node) => node.textContent))
       .toContain(firstSession.commands.join("\n"));
