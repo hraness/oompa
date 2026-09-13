@@ -107,10 +107,12 @@ import {
   createClaudeLoginSignalCustody,
   resolvePinnedClaudeRuntime,
   runClaudeForegroundLogin,
+  resolveClaudeLoginBrowserMode,
   spawnBunClaudeProcess,
   type ClaudeHostToolPublicResult,
   type ClaudeHostToolResponseWritten,
   type ClaudeForegroundLoginResult,
+  type ClaudeLoginBrowserMode,
   type ClaudeLoginSignalCustody,
   type ClaudeLoginSignalSource,
   type PinnedClaudeRuntime,
@@ -1276,6 +1278,7 @@ export type CliMainInput = Readonly<{
   attachmentBlobStore?: AttachmentBlobStore;
   /** Narrow test seam around Claude's foreground-only authentication command. */
   runClaudeForegroundLogin?: (input: Readonly<{
+    browserMode: ClaudeLoginBrowserMode;
     configDir: string;
     signal: AbortSignal;
     signalCustody: ClaudeLoginSignalCustody;
@@ -5219,6 +5222,7 @@ async function executeClaudeAccountAuthentication(
   output: Output,
   input: CliMainInput,
 ): Promise<number> {
+  const browserMode = resolveClaudeLoginBrowserMode(invocation.browserMode);
   const isTerminalDescriptor = input.isTerminalDescriptor ?? isatty;
   if (
     invocation.json
@@ -5260,7 +5264,12 @@ async function executeClaudeAccountAuthentication(
   if (status.data.recovery !== undefined) {
     return renderFailure({
       code: "RECOVERY_REQUIRED",
-      details: status.data.recovery,
+      details: {
+        ...status.data.recovery,
+        sameKeyReplayCommand: claudeAccountLoginCommand(
+          status.data.account.id, status.data.recovery.idempotencyKey, browserMode,
+        ),
+      },
       message: status.data.recovery.diagnostic,
     }, invocation.json, output);
   }
@@ -5327,8 +5336,12 @@ async function executeClaudeAccountAuthentication(
           ? 143
           : 0;
     }
-    const grant = prepared.data.login;
-    const exactReplayCommand = claudeAccountLoginCommand(prepared.data.account.id, grant.idempotencyKey);
+    const grant = Object.freeze({
+      ...prepared.data.login,
+      accountId: prepared.data.account.id,
+      browserMode,
+    });
+    const exactReplayCommand = claudeAccountLoginCommand(grant.accountId, grant.idempotencyKey, grant.browserMode);
     // Retain prepare-bound custody through path revalidation, spawn, child join,
     // and the exact daemon completion RPC.
     let foreground: ClaudeForegroundLoginResult | undefined = signalCustody.interruptedBy === null
@@ -5382,7 +5395,13 @@ async function executeClaudeAccountAuthentication(
     }
     if (foreground === undefined) {
       try {
+        if (grant.browserMode === "owner_manual") {
+          output.writeStderr(`Claude login for Oompa profile ${terminalSafe(prepared.data.account.label)}.\n`
+            + "Close all prior private/incognito windows, then open one fresh private window; keep normal browser sessions unchanged.\n"
+            + "Copy Claude's printed link unchanged into that window. Check the intended account before approving sign-in.\n");
+        }
         foreground = await (input.runClaudeForegroundLogin ?? runClaudeForegroundLogin)({
+          browserMode: grant.browserMode,
           configDir: preflight.configDir,
           runtime: preflight.runtime,
           signal: controller.signal,
@@ -5391,7 +5410,7 @@ async function executeClaudeAccountAuthentication(
         });
       } catch {
         return claudeLoginRecovery({
-          accountId: prepared.data.account.id,
+          accountId: grant.accountId,
           attemptId: grant.attemptId,
           idempotencyKey: grant.idempotencyKey,
           providerGeneration: grant.providerGeneration,
@@ -5401,7 +5420,7 @@ async function executeClaudeAccountAuthentication(
     }
     const complete = localCommandSchema.parse({
       kind: "account.claude-login.complete",
-      account: prepared.data.account.id,
+      account: grant.accountId,
       attemptId: grant.attemptId,
       idempotencyKey: grant.idempotencyKey,
       providerGeneration: grant.providerGeneration,
@@ -5413,7 +5432,7 @@ async function executeClaudeAccountAuthentication(
     } catch (error: unknown) {
       if (!(error instanceof LocalDaemonIndeterminateError)) throw error;
       return claudeLoginRecovery({
-        accountId: prepared.data.account.id,
+        accountId: grant.accountId,
         attemptId: grant.attemptId,
         idempotencyKey: grant.idempotencyKey,
         providerGeneration: grant.providerGeneration,
@@ -5422,7 +5441,7 @@ async function executeClaudeAccountAuthentication(
     }
     if (!completedResponse.ok) {
       return claudeLoginRecovery({
-        accountId: prepared.data.account.id,
+        accountId: grant.accountId,
         attemptId: grant.attemptId,
         idempotencyKey: grant.idempotencyKey,
         providerGeneration: grant.providerGeneration,
@@ -5432,13 +5451,13 @@ async function executeClaudeAccountAuthentication(
     const completed = claudeLoginCompleteResponseSchema.safeParse(completedResponse.data);
     if (
       !completed.success
-      || completed.data.account.id !== prepared.data.account.id
+      || completed.data.account.id !== grant.accountId
       || completed.data.login.attemptId !== grant.attemptId
       || completed.data.login.idempotencyKey !== grant.idempotencyKey
       || completed.data.login.providerGeneration !== grant.providerGeneration
     ) {
       return claudeLoginRecovery({
-        accountId: prepared.data.account.id,
+        accountId: grant.accountId,
         attemptId: grant.attemptId,
         idempotencyKey: grant.idempotencyKey,
         providerGeneration: grant.providerGeneration,
@@ -5462,7 +5481,7 @@ async function executeClaudeAccountAuthentication(
         details: {
           accountSelector: completed.data.account.id,
           accountState: "signed_out",
-          nextCommand: claudeAccountLoginCommand(completed.data.account.id),
+          nextCommand: claudeAccountLoginCommand(completed.data.account.id, undefined, grant.browserMode),
           provider: "claude",
         },
         message: "Claude Code finished without an authenticated session in this account's isolated profile.",

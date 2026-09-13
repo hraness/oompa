@@ -83,6 +83,37 @@ describe("CLI parser", () => {
     });
   });
 
+  test("keeps manual browser selection local while preserving exact Claude replay commands", () => {
+    const key = "00000000-0000-4000-8000-000000000101";
+    const base = ["account", "login", "work profile", "--provider", "claude", "--idempotency-key", key];
+    const ordinary = parseCli(base);
+    const manual = parseCli([...base, "--manual-browser"]);
+    if (ordinary.kind !== "account.claude-login" || manual.kind !== "account.claude-login") throw new Error("Expected Claude login.");
+    expect(ordinary.browserMode).toBe("provider_default");
+    expect(manual.browserMode).toBe("owner_manual");
+    expect(manual.command).toEqual(ordinary.command);
+    expect(Object.keys(manual.command).sort()).toEqual(["account", "idempotencyKey", "kind"]);
+    expect(manual.replayCommand).toBe(`oompa account login 'work profile' --provider claude --manual-browser --idempotency-key ${key}`);
+    expect(claudeAccountLoginCommand("work profile", undefined, "owner_manual")).toBe("oompa account login 'work profile' --provider claude --manual-browser");
+    for (const argv of [
+      ["account", "login", "profile", "--manual-browser"],
+      ["account", "login", "profile", "--provider", "codex", "--manual-browser"],
+      [...base, "--manual-browser=true"], [...base, "--manual-browser", "false"],
+      [...base, "--manual-browser", "--manual-browser"],
+      [...base, "--browser", "/arbitrary/opener"],
+      [...base, "--manual-browser", "--device-code"],
+      [...base, "--manual-browser", "--handoff-file", "/private/handoff"],
+      ["account", "show", "profile", "--provider", "claude", "--manual-browser"],
+    ]) expect(() => parseCli(argv)).toThrow(CliUsageError);
+    fc.assert(fc.property(fc.boolean(), (manualBrowser) => {
+      const parsed = parseCli([...base, ...(manualBrowser ? ["--manual-browser"] : [])]);
+      if (parsed.kind !== "account.claude-login") throw new Error("Expected Claude login.");
+      expect(parsed.command).toEqual(ordinary.command);
+      expect(parsed.browserMode).toBe(manualBrowser ? "owner_manual" : "provider_default");
+      expect(parsed.replayCommand.includes("--manual-browser")).toBe(manualBrowser);
+    }), { numRuns: 40, seed: 20260913 });
+  });
+
   test("keeps Claude login and status in a provider-scoped foreground CLI flow", () => {
     const generated = parseCli(["account", "login", "personal", "--provider", "claude"]);
     expect(generated).toMatchObject({
@@ -96,6 +127,7 @@ describe("CLI parser", () => {
 
     const key = "00000000-0000-4000-8000-000000000101";
     expect(parseCli(["account", "login", " personal ", "--provider", "claude", "--idempotency-key", key, "--json"])).toEqual({
+      browserMode: "provider_default",
       command: { account: "personal", idempotencyKey: key, kind: "account.claude-login.prepare" },
       json: true,
       kind: "account.claude-login",

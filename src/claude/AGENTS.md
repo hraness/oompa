@@ -3,6 +3,7 @@
 - Pin holds the one exact Claude Code version, Fable model id, reasoning effort, and reviewed stream-json matrix digests.
 - Runtime discovery locates and version-admits the pinned `claude` executable and builds its exact argv.
 - Account metadata reads expose only normalized cached identity scalars through the existing bounded no-follow reader. Authentication and credential-principal evidence remain separate from those cached fields.
+- Foreground authentication accepts the local `provider_default` or opt-in `owner_manual` browser presentation. Manual mode uses only the fixed system opener after environment allowlisting; it does not alter durable login authority, status, recovery or platform admission.
 - Process spawns that executable with the same environment allowlist Codex uses. Managed profiles set a reviewed absolute `CLAUDE_CONFIG_DIR`; the explicitly bound personal profile omits that variable so Claude resolves its canonical default home itself. The runtime profile records which mode was used.
 - `process-observation.ts` observes the original child's identity, root exit, stream EOF and local write fulfillment without replacing its values or transforming its bytes. Its callback contract contains no qualification counters or nonce policy.
 - Protocol parses every stream-json line from `unknown` into a closed union and maps `can_use_tool` onto Oompa interaction kinds.
