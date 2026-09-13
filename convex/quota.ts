@@ -1839,17 +1839,19 @@ export const hostedBootstrapStatus = internalQuery({
 });
 
 type QuotaUpgradeRuntime = Infer<typeof runtimeReleaseAttestation>;
-type QuotaUpgradeDisposition = "legacy" | "unmarked_current" | "current";
+type QuotaUpgradeDisposition = "legacy" | "unmarked_current" | "current" | "incomplete_empty_memory";
 type QuotaUpgradeClassification = Readonly<{
   disposition: QuotaUpgradeDisposition;
   identityRowId: Id<"storageUsageByUser">;
+  needsMarker: boolean;
+  missingMemory: "none" | "category" | "resource" | "both";
 }>;
 
 export const quotaUpgradeCorruptionReasons = [
   "identity_missing", "service_authority", "duplicate_categories", "duplicate_resources",
   "category_authority", "category_ceiling", "user_total", "service_total",
   "resource_authority", "resource_ceiling", "identity_category_missing",
-  "memory_counters", "schema_shape", "legacy_memory_present", "unknown_authority",
+  "memory_counters", "schema_shape", "legacy_memory_present", "incomplete_memory_present", "unknown_authority",
 ] as const;
 type QuotaUpgradeCorruptionReason = typeof quotaUpgradeCorruptionReasons[number];
 
@@ -1865,7 +1867,7 @@ export const emptyQuotaUpgradeCorruptionCounts = (): Record<QuotaUpgradeCorrupti
   identity_missing: 0, service_authority: 0, duplicate_categories: 0, duplicate_resources: 0,
   category_authority: 0, category_ceiling: 0, user_total: 0, service_total: 0,
   resource_authority: 0, resource_ceiling: 0, identity_category_missing: 0,
-  memory_counters: 0, schema_shape: 0, legacy_memory_present: 0, unknown_authority: 0,
+  memory_counters: 0, schema_shape: 0, legacy_memory_present: 0, incomplete_memory_present: 0, unknown_authority: 0,
 });
 
 class QuotaUpgradeClassificationError extends Error {
@@ -1973,19 +1975,24 @@ async function classifyUserQuotaUpgrade(
     return {
       disposition: identity.quotaSchemaVersion === undefined ? "unmarked_current" : "current",
       identityRowId: identity._id,
+      needsMarker: identity.quotaSchemaVersion === undefined,
+      missingMemory: "none",
     };
   }
-  if (
-    identity.quotaSchemaVersion !== undefined
-    || categories.length !== predecessorQuotaCategories.length
-    || resources.length !== predecessorQuotaResources.length
-    || !predecessorQuotaCategories.every((category) => byCategory.has(category))
-    || !predecessorQuotaResources.every((resource) => byResource.has(resource))
-  ) {
+  const memory = byCategory.get("memory");
+  const memorySpace = byResource.get("memory_space");
+  // Exactly this predecessor plus the two named additions. Do not interpret
+  // any other missing authority as zero, including future schema additions.
+  const incompleteMemoryShape = predecessorQuotaCategories.every((category) => byCategory.has(category))
+    && predecessorQuotaResources.every((resource) => byResource.has(resource))
+    && categories.length === predecessorQuotaCategories.length + (memory === undefined ? 0 : 1)
+    && resources.length === predecessorQuotaResources.length + (memorySpace === undefined ? 0 : 1)
+    && (memory === undefined || memorySpace === undefined);
+  const retainedMemoryIsZero = (memory === undefined || (memory.logicalBytes === 0 && memory.records === 0))
+    && (memorySpace === undefined || memorySpace.records === 0);
+  if (!incompleteMemoryShape || !retainedMemoryIsZero) {
     // Project the already validated rows at the exact failure. No second read
     // can describe a different ledger or turn missing authority into zero.
-    const memory = byCategory.get("memory");
-    const memorySpace = byResource.get("memory_space");
     throw new QuotaUpgradeClassificationError("schema_shape", {
       marker: identity.quotaSchemaVersion === undefined ? "unmarked" : "current",
       missingCategories: QUOTA_CATEGORIES.filter((category) => !byCategory.has(category)),
@@ -1994,6 +2001,7 @@ async function classifyUserQuotaUpgrade(
       memoryResource: memorySpace === undefined ? "absent" : memorySpace.records === 0 ? "zero" : "nonzero",
     });
   }
+  const legacy = identity.quotaSchemaVersion === undefined && memory === undefined && memorySpace === undefined;
   const [space, operation] = await Promise.all([
     ctx.db.query("memorySpaces")
       .withIndex("by_user_and_public_id", (query) => query.eq("userId", userId)).take(1),
@@ -2002,8 +2010,15 @@ async function classifyUserQuotaUpgrade(
   ]);
   // Even an orphan operation disproves zero usage. Never infer absence from
   // missing space rows or inspect another owner's content.
-  if (space.length !== 0 || operation.length !== 0) return quotaUpgradeCorrupt("legacy_memory_present");
-  return { disposition: "legacy", identityRowId: identity._id };
+  if (space.length !== 0 || operation.length !== 0) {
+    return quotaUpgradeCorrupt(legacy ? "legacy_memory_present" : "incomplete_memory_present");
+  }
+  return {
+    disposition: legacy ? "legacy" : "incomplete_empty_memory",
+    identityRowId: identity._id,
+    needsMarker: identity.quotaSchemaVersion === undefined,
+    missingMemory: memory === undefined ? (memorySpace === undefined ? "both" : "category") : "resource",
+  };
 }
 
 function requireQuotaUpgradePageSize(numItems: number): void {
@@ -2031,7 +2046,7 @@ export async function auditUserQuotaUpgradePageForRuntime(
     maximumRowsRead: maximumUserQuotaUpgradeBatch,
   });
   if (page.page.length > maximumUserQuotaUpgradeBatch) return corrupt();
-  const counts = { legacy: 0, unmarkedCurrent: 0, current: 0, corrupt: 0 };
+  const counts = { legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
   for (const user of page.page) {
     try {
       const result = await classifyUserQuotaUpgrade(ctx, user._id);
@@ -2039,13 +2054,14 @@ export async function auditUserQuotaUpgradePageForRuntime(
         case "legacy": counts.legacy += 1; break;
         case "unmarked_current": counts.unmarkedCurrent += 1; break;
         case "current": counts.current += 1; break;
+        case "incomplete_empty_memory": counts.incompleteEmptyMemory += 1; break;
       }
     } catch (error: unknown) {
       if (!(error instanceof Error) || error.message !== "QUOTA_AUTHORITY_CORRUPT") throw error;
       counts.corrupt += 1;
     }
   }
-  return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone, scanned: page.page.length, schemaVersion: 1 as const };
+  return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone, scanned: page.page.length, schemaVersion: 2 as const };
 }
 
 /** One first-failure reason per inconsistent ledger, never identities or raw counters. */
@@ -2065,7 +2081,7 @@ export async function diagnoseUserQuotaUpgradePageForRuntime(
   if (page.page.length > maximumUserQuotaUpgradeBatch) return corrupt();
   const reasons = emptyQuotaUpgradeCorruptionCounts();
   const shapes = new Map<string, { shape: QuotaUpgradeMissingShape; count: number }>();
-  const counts = { legacy: 0, unmarkedCurrent: 0, current: 0, corrupt: 0 };
+  const counts = { legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
   for (const user of page.page) {
     try {
       const result = await classifyUserQuotaUpgrade(ctx, user._id);
@@ -2073,6 +2089,7 @@ export async function diagnoseUserQuotaUpgradePageForRuntime(
         case "legacy": counts.legacy += 1; break;
         case "unmarked_current": counts.unmarkedCurrent += 1; break;
         case "current": counts.current += 1; break;
+        case "incomplete_empty_memory": counts.incompleteEmptyMemory += 1; break;
       }
     } catch (error: unknown) {
       if (!(error instanceof Error) || error.message !== "QUOTA_AUTHORITY_CORRUPT") throw error;
@@ -2087,7 +2104,7 @@ export async function diagnoseUserQuotaUpgradePageForRuntime(
   }
   return { ...counts, reasons, missingShapes: [...shapes.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([, value]) => value), continueCursor: page.continueCursor, isDone: page.isDone,
-    scanned: page.page.length, schemaVersion: 1 as const };
+    scanned: page.page.length, schemaVersion: 2 as const };
 }
 
 export async function upgradeUserQuotaPageForRuntime(
@@ -2106,23 +2123,33 @@ export async function upgradeUserQuotaPageForRuntime(
   if (page.page.length > maximumUserQuotaUpgradeBatch) return corrupt();
   let upgraded = 0;
   let marked = 0;
+  let changed = 0;
+  let repairedMemory = 0;
   for (const user of page.page) {
     const result = await classifyUserQuotaUpgrade(ctx, user._id);
     if (result.disposition === "current") continue;
-    if (result.disposition === "legacy") {
+    if (result.missingMemory !== "none") {
       const updatedAt = Date.now();
-      await ctx.db.insert("storageUsageByUser", {
-        category: "memory", logicalBytes: 0, records: 0, updatedAt, userId: user._id,
-      });
-      await ctx.db.insert("storageResourceUsageByUser", {
-        resource: "memory_space", records: 0, updatedAt, userId: user._id,
-      });
-      upgraded += 1;
+      if (result.missingMemory === "category" || result.missingMemory === "both") {
+        await ctx.db.insert("storageUsageByUser", {
+          category: "memory", logicalBytes: 0, records: 0, updatedAt, userId: user._id,
+        });
+      }
+      if (result.missingMemory === "resource" || result.missingMemory === "both") {
+        await ctx.db.insert("storageResourceUsageByUser", {
+          resource: "memory_space", records: 0, updatedAt, userId: user._id,
+        });
+      }
     }
-    await ctx.db.patch(result.identityRowId, { quotaSchemaVersion: currentUserQuotaSchemaVersion });
-    marked += 1;
+    if (result.disposition === "legacy") upgraded += 1;
+    if (result.disposition === "incomplete_empty_memory") repairedMemory += 1;
+    if (result.needsMarker) {
+      await ctx.db.patch(result.identityRowId, { quotaSchemaVersion: currentUserQuotaSchemaVersion });
+      marked += 1;
+    }
+    changed += 1;
   }
-  return { continueCursor: page.continueCursor, current: page.page.length - marked, isDone: page.isDone, marked, scanned: page.page.length, schemaVersion: 1 as const, upgraded };
+  return { continueCursor: page.continueCursor, current: page.page.length - changed, isDone: page.isDone, changed, marked, repairedMemory, scanned: page.page.length, schemaVersion: 2 as const, upgraded };
 }
 
 /** Read-only aggregate classification; raw identity and quota rows stay internal. */

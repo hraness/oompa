@@ -4,7 +4,7 @@
 - Auth modules implement verified-email login and device enrollment.
 - Sync and command modules authorize exact device and lease generations. Session commands are lease-fenced; device commands are addressed to a device and fenced by that daemon's boot authority instead.
 - `commandLifecycle.ts` exposes a bounded read-only authority-reduction quota diagnostic. It shares current ledger validation with quota accounting, emits aggregate ceiling counts and keeps unknown byte costs explicit.
-- `quota.ts` audits predecessor ledger upgrades and exposes bounded read-only corruption reason counts and missing-shape histograms through the same classifier; diagnosis never grants repair authority or changes stored counters.
+- `quota.ts` audits predecessor ledger upgrades and exposes bounded read-only corruption reason counts and missing-shape histograms through the same classifier. Its distinct empty-memory completion requires both owner indexes empty and inserts only absent memory authority rows; diagnosis never grants repair authority or changes stored counters.
 - Tests prove rate limits, transactions, encryption boundaries, recovery, and retention.
 
 # Guidelines
