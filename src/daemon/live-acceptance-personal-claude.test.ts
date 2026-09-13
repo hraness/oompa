@@ -51,7 +51,7 @@ describe("personal Claude acceptance observation adapter", () => {
 
   test("a stopped consumer or stream failure never synthesizes EOF", async () => {
     const f = fixture(); const process = observePersonalClaudeAcceptanceProcess(f.child, f.observation);
-    for await (const _bytes of process.stdout) break;
+    for await (const bytes of process.stdout) { expect(bytes.byteLength).toBeGreaterThan(0); break; }
     expect(f.events).not.toContain("stdout-eof");
     const failed = observePersonalClaudeAcceptanceProcess({ ...f.child,
       stderr: { async *[Symbol.asyncIterator]() { yield new Uint8Array([4]); throw new Error("stream failed"); } },

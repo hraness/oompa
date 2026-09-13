@@ -112,16 +112,18 @@ export async function createPersonalClaudeDaemonProof(input: unknown): Promise<R
     },
     runtimeAdmitted(value) {
       if (!runtimePending) refused(); runtimePending = false;
-      if (value.executablePath !== descriptor.executablePath || value.version !== "2.1.260") refused();
+      if (!z.literal("2.1.260").safeParse(value.version).success) refused();
+      if (value.executablePath !== descriptor.executablePath) refused();
       assertOpen();
     },
     runtimeFailed() { runtimePending = false; runtimeUncertain = true; operationFailure = true; },
     prepareLaunch(value) {
       attempts.launchAttempted();
       assertOpen();
+      if (!z.literal("2.1.260").safeParse(value.runtime.version).success) refused();
       if (launchPending || runtimePending || runtimeUncertain || descriptor.stage === "C" || value.launch !== "resume"
         || value.configHome !== "isolated" || value.configDir !== paths.profile || value.projectRoot !== paths.project
-        || value.runtime.executablePath !== descriptor.executablePath || value.runtime.version !== "2.1.260"
+        || value.runtime.executablePath !== descriptor.executablePath
         || value.argv[0] !== descriptor.executablePath || value.argv.at(-1) !== descriptor.providerThreadId) refused();
       // This is set before the product's synchronous spawn. If spawn or its
       // identity inspector throws, no later empty-set census can imply join.

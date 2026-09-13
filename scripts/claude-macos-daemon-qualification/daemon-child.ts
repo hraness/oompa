@@ -89,12 +89,12 @@ async function main(): Promise<number> {
       credentialStorePreflight: { cliAuth: "file", mcpOauth: "file", cwd: layout.project },
       codexEnvironment: async () => { throw invalid(); }, prepareCodexHome: async () => { throw invalid(); },
     };
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; controller.abort(invalid()); }, 300_000);
+    const deadline = new AbortController();
+    const timer = setTimeout(() => { deadline.abort(invalid()); controller.abort(invalid()); }, 300_000);
     let outcome: "stopped" | "refused" = "refused";
     try {
       if (await runDaemon(installation, { stopSignal: controller.signal, liveAcceptancePersonalClaudeProof: proof.port }) === 0
-        && !timedOut && proof.snapshot().collection === "joined" && !proof.snapshot().observationViolation) outcome = "stopped";
+        && !deadline.signal.aborted && proof.snapshot().collection === "joined" && !proof.snapshot().observationViolation) outcome = "stopped";
     } catch { /* Operation diagnostics and credentials do not cross this pipe. */ }
     finally { clearTimeout(timer); }
     await writeResult({ version: 1, purpose: "authenticated_personal_daemon_restart", runId: descriptor.runId,

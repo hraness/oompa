@@ -15,7 +15,7 @@ const recordSchema = z.strictObject({ version: z.literal(1), runId: z.string().u
   childIntents: z.array(z.strictObject({ stage: z.enum(["A", "B", "C"]), descriptorTag: z.string().regex(/^[0-9a-f]{64}$/u),
     joined: z.boolean() })).max(3), commandIntents: z.array(commandIntentSchema).max(6), observations: z.array(z.unknown()).max(10), failure: z.boolean() });
 type RecordValue = z.infer<typeof recordSchema>;
-const refused = (): never => { throw new Error("DARWIN_DAEMON_JOURNAL_REFUSED"); };
+function refused(): never { throw new Error("DARWIN_DAEMON_JOURNAL_REFUSED"); }
 
 export async function tagDaemonQualificationValue(seed: DarwinSessionCustody,
   domain: "descriptor" | "thread" | "command" | "turn" | "idempotency" | "intent", value: string): Promise<string> {

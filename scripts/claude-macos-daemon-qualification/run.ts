@@ -29,7 +29,7 @@ const path = z.string().min(2).max(4096).refine((value) => isAbsolute(value) && 
 const inputSchema = z.strictObject({ repositoryRoot: path, sourceCommit: z.string().regex(/^[0-9a-f]{40}$/u), executablePath: path,
   environment: z.strictObject({ HOME: path, PATH: z.literal("/usr/bin:/bin:/usr/sbin:/sbin"), LANG: z.literal("C"),
     LC_ALL: z.literal("C"), TMPDIR: z.literal("/private/tmp") }), signal: z.instanceof(AbortSignal) });
-const refused = (): never => { throw new Error("DARWIN_DAEMON_QUALIFICATION_REFUSED"); };
+function refused(): never { throw new Error("DARWIN_DAEMON_QUALIFICATION_REFUSED"); }
 let nativeActive = false;
 export type DarwinDaemonQualificationOutcome = Readonly<{
   source: "native_process"; status: "complete_retained" | "recovery_required";
