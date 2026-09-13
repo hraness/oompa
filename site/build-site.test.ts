@@ -446,7 +446,7 @@ describe("static-site build", () => {
     expect(emittedFontBytes.some((bytes) => bytes.equals(bold))).toBe(true);
     const fontUrls: string[] = [];
     transform({ filename: foundationPath, code: Buffer.from(foundation), visitor: { Url(value) { fontUrls.push(value.url); } } });
-    expect(fontUrls).toHaveLength(16);
+    expect(fontUrls).toHaveLength(18);
     const resolvedFonts = fontUrls.map((url) => {
       expect(url).not.toMatch(/^(?:data:|https?:|\/)/iu);
       const resolved = new URL(url, `https://oompa.app/${foundationPath}`);
@@ -455,7 +455,10 @@ describe("static-site build", () => {
       expect(resolved.hash).toBe("");
       return decodeURIComponent(resolved.pathname.slice(1));
     });
-    expect(resolvedFonts.sort()).toEqual([...fontPaths, ...fieldPaths].sort());
+    expect(new Set(resolvedFonts).size).toBe(16);
+    for (const path of fontPaths) expect(resolvedFonts.filter((url) => url === path)).toHaveLength(1);
+    for (const path of fieldPaths) expect(resolvedFonts.filter((url) => url === path)).toHaveLength(2);
+    expect(resolvedFonts.sort()).toEqual([...fontPaths, ...fieldPaths, ...fieldPaths].sort());
     const previewPaths = inventory.filter((path) => path.startsWith("examples/app/"));
     expect(previewPaths).toContain("examples/app/index.html");
     expect(previewPaths).toContain("examples/app/stylex.css");

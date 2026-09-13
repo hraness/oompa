@@ -42,7 +42,7 @@ export function renderMarketingHeader(content: PublicContent, currentPath: strin
       className={`${mobileHeaderFlowClassName()} hraness-material-chrome${currentPath === "/" ? " hraness-marketing-header-surface" : ""}`}
       trailing={<SiteAppearanceMenu />}
       action={{ emphasis: "primary", href: content.links.app, label: "Open Oompa" }}
-      brand={content.productName}
+      brand={<><span aria-hidden="true">🟠</span> {content.productName}</>}
       brandHref="/"
       links={[
         { href: "/#product-preview", label: "Product", current: currentPath === "/" },

@@ -6,7 +6,7 @@ import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { restoreSiteMaterialMedia, readSiteMaterial, assertSiteMaterialPaint, assertAppColorScheme, assertSitePublicFontsUnchanged, assertDefaultButtonPresentation, assertDefaultPalette, assertKeyboardFocusStrip, assertNativeModalFocus, assertProductPreviewObservation, assetContentType, assetPath, boundedBrowserOperation, browserExecutableSha256, browserFailureDetails, captureBrowserResponseBody, installBrowserServiceWorkerRefusal, inventory, loadedStylesheetControl, productionCsp, settleBrowserResponseBodies, siteFoundationFontPaths, siteProductionCsp, siteStylesheetPaths, snapshotProductPreview, snapshotStaticSite, waitForClosedProductPreview, withBrowserResourceCapture } from "./app-browser";
+import { restoreSiteMaterialMedia, readSiteMaterial, assertSiteMaterialPaint, assertAppColorScheme, assertSitePublicFontsUnchanged, assertDefaultButtonPresentation, assertDefaultPalette, assertKeyboardFocusStrip, assertNativeModalFocus, assertProductPreviewObservation, assetContentType, assetPath, boundedBrowserOperation, browserExecutableSha256, browserFailureDetails, captureBrowserResponseBody, installBrowserServiceWorkerRefusal, inventory, loadedStylesheetControl, productionCsp, settleBrowserResponseBodies, siteFoundationFontPaths, siteFoundationResourcePaths, siteProductionCsp, siteStylesheetPaths, snapshotProductPreview, snapshotStaticSite, waitForClosedProductPreview, withBrowserResourceCapture } from "./app-browser";
 import { browserIoModules } from "../app/fixtures/browser/config";
 
 describe("browser response lifetime", () => {
@@ -197,7 +197,7 @@ function staticSiteFixture(sanitized = false) {
     ["marketing-assets/cells.svg", Buffer.from("<svg>cells</svg>")],
     ...attributions.map(([, path]) => [path, Buffer.from(`canonical:${path}`)] as const),
   ]);
-  const css = fontPaths.map((path, index) => `@font-face{font-family:"Fixture ${index}";src:url("./${path.split("/").at(-1)}") format("woff2")}`).join("") + `:root{--grain:url("./grain-fixture.svg");--cells:url("./cells-fixture.svg")}.field{background-image:var(--grain),var(--cells)}`;
+  const css = fontPaths.map((path, index) => `@font-face{font-family:"Fixture ${index}";src:url("./${path.split("/").at(-1)}") format("woff2")}`).join("") + `:root{--grain:url("./grain-fixture.svg");--cells:url("./cells-fixture.svg")}.field{background-image:var(--grain),var(--cells)}.wall{background-image:url("./grain-fixture.svg"),url("./cells-fixture.svg")}`;
   const appearance = '<script src="/appearance.js"></script>';
   const menu = '<header><details data-oompa-appearance><summary>Appearance</summary></details></header>';
   const html = Buffer.from(`<!doctype html><html data-hraness-theme="paper" data-palette="paper" data-theme="light"><head><link rel="stylesheet" href="/${foundation}"><link rel="stylesheet" href="/stylex.css">${appearance}</head><body>${menu}<h1 class="x123">Fixture</h1></body></html>`);
@@ -389,6 +389,20 @@ describe("static site graph acceptance", () => {
       fixture.publicFonts.set("../unowned.woff2", Buffer.from("escape"));
       await expect(assertSitePublicFontsUnchanged(installed, vendor, fixture.publicFonts)).rejects.toThrow();
     } finally { await rm(directory, { recursive: true }); }
+  });
+
+  test("requires four texture references with exactly two uses of each physical asset", () => {
+    const fixture = staticSiteFixture();
+    expect(siteFoundationResourcePaths(fixture.foundation, Buffer.from(fixture.css))).toEqual({
+      fonts: [...fixture.fontPaths].sort(), textures: [...fixture.texturePaths].sort(),
+    });
+    for (const css of [
+      fixture.css.replace('.wall{background-image:url("./grain-fixture.svg"),url("./cells-fixture.svg")}', ""),
+      fixture.css.replace('url("./grain-fixture.svg")', "none"),
+      fixture.css.replace('url("./grain-fixture.svg")', 'url("./cells-fixture.svg")'),
+      fixture.css.replaceAll('./grain-fixture.svg', './cells-fixture.svg'),
+      fixture.css + '.extra{background-image:url("./grain-fixture.svg")}',
+    ]) expect(() => siteFoundationResourcePaths(fixture.foundation, Buffer.from(css))).toThrow();
   });
 
   test("keeps texture URL spelling and substitution closed in token-valued CSS", () => {
@@ -960,13 +974,14 @@ describe("browser acceptance boundaries", () => {
 
 
 describe("native website Lantern material acceptance", () => {
-  const paint = (background: string, ink = "rgb(28, 25, 23)", image = "none", backdrop = "none") => ({ background, ink, image, backdrop });
-  const fixture = (home: boolean, opaque: boolean) => {
+  const paint = (background: string, ink = "rgb(28, 25, 23)", image = "none", backdrop = "none", size = "auto") => ({ background, ink, image, backdrop, size });
+  const fixture = (home: boolean, opaque: boolean, viewportWidth = 1280) => {
     const chrome = paint("rgb(255, 254, 250)", undefined, "none", opaque ? "none" : "blur(20px) saturate(1.1)");
     const pane = paint("rgb(255, 254, 250)");
     const choice = paint("rgb(250, 244, 228)");
-    const wall = paint("rgb(248, 247, 244)", undefined, opaque ? "none" : "repeating-linear-gradient(90deg, transparent, white), repeating-linear-gradient(0deg, transparent, white), radial-gradient(white, transparent)");
-    return { material: "lantern", preset: home ? "editorial" : null, walls: home ? 1 : 0, fields: 0, header: chrome,
+    const cells = viewportWidth <= 760 ? 576 : 768;
+    const wall = paint("rgb(248, 247, 244)", undefined, opaque ? "none" : 'url("https://site.invalid/graphs/foundation/assets/grain-fixture.svg"), url("https://site.invalid/graphs/foundation/assets/cells-fixture.svg"), radial-gradient(white, transparent), linear-gradient(110deg, white, transparent)', "none", `64px 64px, ${cells}px ${cells}px, 100% 100%, 100% 100%`);
+    return { material: "lantern", preset: home ? "editorial" : null, origin: "https://site.invalid", viewportWidth, walls: home ? 1 : 0, fields: 0, header: chrome,
       panes: [pane], wall: home ? wall : null, selected: home ? [choice] : [], disclosures: home ? [choice] : [],
       references: { chrome, pane, choice, wall } };
   };
@@ -1077,6 +1092,32 @@ describe("native website Lantern material acceptance", () => {
       expect(() => assertSiteMaterialPaint(fixture(home, opaque), home, opaque)).not.toThrow();
     }
   });
+  test("requires native grain/cell order and responsive frequency even if the reference shares a bad value", () => {
+    for (const width of [390, 760, 761, 1440]) {
+      const sample = fixture(true, false, width);
+      expect(() => assertSiteMaterialPaint(sample, true, false)).not.toThrow();
+      for (const patch of [
+        { image: "repeating-linear-gradient(90deg, white, transparent), repeating-linear-gradient(0deg, white, transparent), radial-gradient(white, transparent)" },
+        { image: sample.wall!.image.replace(/url\("[^"\n]+"\), /u, "") },
+        { image: sample.wall!.image.replace("grain-fixture.svg", "cells-fixture.svg") },
+        { image: sample.wall!.image.replace("https://site.invalid", "https://outside.invalid") },
+        { image: sample.wall!.image.replace("grain-fixture.svg", "grain-fixture.svg?other=1") },
+        { image: sample.wall!.image.replace("grain-fixture.svg", "grain-fixture.svg#other") },
+        { image: sample.wall!.image.replace("/graphs/foundation/assets/grain-", "/other/grain-") },
+        { image: sample.wall!.image.replace(", radial-gradient(white, transparent)", "") },
+        { image: sample.wall!.image + ", linear-gradient(white, transparent)" },
+        { size: `64px 64px, ${width <= 760 ? 768 : 576}px ${width <= 760 ? 768 : 576}px, 100% 100%, 100% 100%` },
+        { size: sample.wall!.size.replace("64px 64px", "96px 96px") },
+      ]) {
+        const wall = { ...sample.wall!, ...patch };
+        expect(() => assertSiteMaterialPaint({ ...sample, wall, references: { ...sample.references, wall } }, true, false)).toThrow();
+      }
+      for (const patch of [{ viewportWidth: 0 }, { viewportWidth: 760.5 }, { origin: "https://site.invalid/path" }]) {
+        expect(() => assertSiteMaterialPaint({ ...sample, ...patch }, true, false)).toThrow();
+      }
+    }
+  });
+
   test("rejects lost scopes, compiled paint overrides and missing native selected/disclosure observations", () => {
     const sample = fixture(true, false);
     const baseWall = sample.references.wall;
