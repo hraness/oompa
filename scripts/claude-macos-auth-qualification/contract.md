@@ -71,3 +71,27 @@ Run the credential-free tests with `bun test ./scripts/claude-macos-auth-qualifi
 The native custody suite is inert unless `OOMPA_CLAUDE_MACOS_AUTH_CUSTODY_NATIVE=1`. Resolve the installed absolute `oompa-host-run` command and use its shared `mac-native` lane to run `env OOMPA_CLAUDE_MACOS_AUTH_CUSTODY_NATIVE=1 bun test ./scripts/claude-macos-auth-qualification/custody.test.ts`. It creates only fresh synthetic roots and noncredential keys, retains evidence on uncertain release, and removes its exact test roots after all owners release. This test teardown is separate from the product adapter's retained-evidence policy.
 
 The native observer suite is inert unless `OOMPA_CLAUDE_MACOS_NATIVE_OBSERVER=1`. Its explicitly scheduled mac-native command supplies the pinned Zig path through `OOMPA_OWNED_CONTROLLER_ZIG`, compiles only the unchanged synthetic process fixture, and uses genuine metadata readers on fresh empty roots. It joins compiler/version/absence runners, each status child, its two original inspectors and any three added overlap inspectors before deleting the exact test root. An unsuccessful probe with incomplete proof retains recovery. Synthetic success remains separate from real authentication and driver activation.
+
+## Browserless account ceremony
+
+Fresh 22-step runs use `createNativeManualBrowser` and authenticate the optional
+version-2 binding field `browserMode: owner_manual`. The entry refuses an absent
+mode before provider preflight, and every collected login must report the same
+manual-browser binding. Existing native creators keep their previous policy.
+Old version-2 checkpoint bytes and their HMAC domain remain unchanged; successful
+deserialization does not upgrade a historical receipt or admit another login.
+
+Each of the four login stages explains A, distinct B, interrupted A, or recovered A
+before launch. The owner prepares a fresh private browser session and presses Enter.
+Claude's printed URL must be copied unchanged into that session, rather than clicked
+into the normal browser. The interruption stage requires Ctrl-C without opening
+the link. The existing post-login identity challenges and interruption arming remain
+in place. A new private window alone is insufficient if another private window
+shares its cookies. Oompa changes no normal browser windows, cookies or preferences.
+
+An owner-refused, dispatched login stays pending even when its exact process joined.
+Keep its checkpoint, proof key, owner lock and profile roots. Do not replay, logout,
+remove roots or adopt profiles to retry. A separately recorded retired disposition
+may distinguish joined process custody from unqualified account selection without
+rewriting that checkpoint. A later fresh run uses different roots and retains all
+initial signed-out checks. No automatic recovery or cleanup path was added.

@@ -4,7 +4,7 @@ import { CLAUDE_PIN, PINNED_CLAUDE_ARTIFACT_DIGESTS } from "../../src/claude/pin
 import { qualificationTag } from "./identity.ts";
 import { encodeNativeQualificationCheckpoint, encodeQualificationCheckpoint, restoreNativeQualificationCheckpoint,
   restoreQualificationCheckpoint, validateNativeQualificationCheckpoint, validateQualificationCheckpoint } from "./receipt.ts";
-import { createNativeQualification, createQualification, observeQualification, publicQualificationReceipt, type QualificationState } from "./state.ts";
+import { assertManualBrowserQualificationBinding, createNativeQualification, createQualification, observeQualification, publicQualificationReceipt, type QualificationState } from "./state.ts";
 
 const key = new Uint8Array(32).fill(53);
 const id = (n: number): string => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
@@ -29,6 +29,33 @@ function dispatch(initial: QualificationState): QualificationState {
   return observeQualification(state, { type: "dispatch", attemptId, bindingTag: state.bindingTag,
     sourceAndExecutableRevalidated: true, privateCustodyRevalidated: true, environmentRevalidated: true });
 }
+
+test("historical native v2 bytes remain unchanged but cannot admit a new manual-browser ceremony", () => {
+  const state = native();
+  const payload = JSON.stringify({ version: 2, mode: "native_qualification", binding: state.binding,
+    initialOwnerEpoch: state.initialOwnerEpoch, events: state.events, failure: state.failure });
+  const expected = bytes({ version: 2, payload, mac: qualificationTag(key, state.binding.runId, "native_receipt_v2", payload) });
+  expect(encodeNativeQualificationCheckpoint(state, key)).toEqual(expected);
+  const restored = validateNativeQualificationCheckpoint(expected, key);
+  expect(restored).toEqual(state);
+  expect(() => assertManualBrowserQualificationBinding(restored.binding)).toThrow("binding_invalid");
+  expect(Object.hasOwn(restored.binding, "browserMode")).toBeFalse();
+});
+
+test("manual-browser mode is authenticated, closed, and cannot be added to an old receipt", () => {
+  const initial = native();
+  const state = createNativeQualification({ ...initial.binding, browserMode: "owner_manual" }, key, id(10));
+  expect(() => assertManualBrowserQualificationBinding(state.binding)).not.toThrow();
+  expect(state.bindingTag).not.toBe(initial.bindingTag);
+  expect(validateNativeQualificationCheckpoint(encodeNativeQualificationCheckpoint(state, key), key)).toEqual(state);
+  for (const mode of [undefined, "automatic", "/usr/bin/true", null, true]) {
+    expect(() => assertManualBrowserQualificationBinding({ ...state.binding, browserMode: mode })).toThrow();
+  }
+  const original = record(encodeNativeQualificationCheckpoint(initial, key));
+  const payload = JSON.parse(original.payload as string) as { binding: Record<string, unknown> };
+  payload.binding.browserMode = "owner_manual";
+  expect(() => validateNativeQualificationCheckpoint(bytes({ ...original, payload: JSON.stringify(payload) }), key)).toThrow();
+});
 
 test("fixture checkpoint bytes retain their original version, field order and HMAC domain", () => {
   for (const state of [fixture(), dispatch(fixture())]) {

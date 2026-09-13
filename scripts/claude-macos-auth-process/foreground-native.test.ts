@@ -29,6 +29,7 @@ const resultSchema = z.object({
     z.object({ state: z.literal("not_started"), reason: z.literal("interrupted_before_spawn"), interruptedBy: signal }).strict(),
   ]),
   settlement: z.object({ cleanup: z.enum(["joined", "uncertain"]), childJoined: z.boolean(), exitCode: z.number().int().min(0).max(255).nullable(),
+    browserMode: z.literal("owner_manual").optional(),
     ownerTerminalVerified: z.literal(true), stdin: z.literal(0), stdout: z.literal(1), stderr: z.literal(2),
     requestedSignals: z.object({ SIGINT: count, SIGTERM: count, SIGKILL: count }).strict(),
   }).strict().nullable(),
@@ -109,7 +110,7 @@ const start = async (mode: string): Promise<Owner> => {
   let terminalResult: number | null = null;
   let disconnected = false;
   spawnUncertain = true;
-  const child = Bun.spawn([process.execPath, join(import.meta.dir, "foreground-native-worker.ts")], {
+  const child = Bun.spawn([process.execPath, "--no-install", join(import.meta.dir, "foreground-native-worker.ts")], {
     cwd: directory, env: { ...neutral, HOME: homedir(), TMPDIR: tmpdir(), OOMPA_CLAUDE_MACOS_FOREGROUND_WORKER: "1" },
     ipc() { /* No child-to-owner payload is admitted. */ },
     onDisconnect() { disconnected = true; if (observed !== null) observed.disconnected = true; },
@@ -146,6 +147,16 @@ nativeTest("foreground login inherits the owner's terminal and joins normally wi
   const marker = await readFile(join(owner.directory, owner.mode, "started"), "utf8");
   const fields = marker.trim().split(" ");
   expect(fields.slice(1)).toEqual([String(owner.child.pid), String(owner.child.pid), String(owner.child.pid), "inherited-owner-tty"]);
+});
+
+nativeTest("manual-browser qualification passes exactly the fixed opener to the synthetic child", async () => {
+  const owner = await start("manual_browser"); const result = await finish(owner);
+  // The fixed Zig child exits before writing its marker unless BROWSER is exactly /usr/bin/true.
+  // It never executes that command, a browser, a provider, or an OAuth operation.
+  expect(result.result).toEqual({ state: "joined", exitCode: 0, interruptedBy: null });
+  expect(result.settlement).toMatchObject({ cleanup: "joined", childJoined: true, browserMode: "owner_manual",
+    requestedSignals: { SIGINT: 0, SIGTERM: 0, SIGKILL: 0 } });
+  expect(await exists(join(owner.directory, owner.mode, "started"))).toBeTrue();
 });
 
 nativeTest("explicit abort forwards TERM once then forces and joins the exact foreground child", async () => {
