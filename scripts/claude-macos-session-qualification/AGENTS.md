@@ -5,6 +5,7 @@
 - `session-runtime.ts` exercises the production Claude runtime manager, process adapter and current host-tool transport inside the new qualification scope.
 - `turn.ts` observes bounded streaming, approval, denial and interrupt scenarios without granting process or provider authority.
 - `custody.ts` holds a separate native owner, authenticated session-effect journal and one-use process/frame dispatch tickets. Its pure reducer is fixture-only.
+- `custody-port.ts` names the internal methods shared by guarded session and daemon qualification; native public entries still construct their own custody.
 - The colocated tests cover ordering, uncertain effects, scope binding and custody refusal. Native custody cases require explicit opt-in and do not invoke a provider.
 - `contract.md` records the sequence, proof limits and remaining live acceptance.
 

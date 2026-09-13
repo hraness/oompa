@@ -5,7 +5,7 @@ import { PassThrough, Writable } from "node:stream";
 import { expect, test } from "bun:test";
 
 import { armOwnerTerminalInterruption, armOwnerTerminalNoPromptWindow, createQualificationTerminalSignals,
-  readOwnerTerminalResponse, type OwnerInterruptionArm } from "./owner-terminal";
+  prepareOwnerManualBrowserLogin, readOwnerTerminalResponse, type OwnerInterruptionArm } from "./owner-terminal";
 
 const runId = randomUUID();
 const scope = (step: number) => ({ runId, attemptId: randomUUID(), step });
@@ -17,10 +17,44 @@ function terminal(reply: "exact" | "wrong" | "none" = "exact") {
     if (text.includes("Type exactly:") && reply !== "none") setTimeout(() => {
       const value = Buffer.from(reply === "exact" ? text.split("Type exactly: ")[1]! : "yes\n"); buffers.push(value); input.write(value);
     }, 0);
+    if (text.includes("Press Enter when ready") && reply !== "none") setTimeout(() => {
+      const value = Buffer.from(reply === "exact" ? "\n" : "yes\n"); buffers.push(value); input.write(value);
+    }, 0);
   } });
   return { input, output, messages, buffers, assertCurrent() { checks += 1; if (!current) throw new Error("synthetic stale owner"); },
     checks: () => checks, stale() { current = false; } };
 }
+
+test("each manual-browser readiness challenge precedes authentication and explains separate private sessions", async () => {
+  for (const step of [1, 4, 13, 15]) {
+    const streams = terminal();
+    await prepareOwnerManualBrowserLogin(streams, new AbortController().signal, scope(step));
+    const message = streams.messages.join("");
+    expect(message).toContain("Claude has not started this login");
+    expect(message).toContain("Automatic browser opening is disabled");
+    expect(message).toContain("Close all prior private/incognito windows");
+    expect(message).toContain("multiple private windows can share cookies");
+    if (step !== 13) expect(message).toContain("Copy that exact link");
+    expect(message).toContain("Press Enter when ready");
+    expect(message).not.toContain("Type exactly");
+    expect(message).toContain("Keep your normal windows and sessions unchanged");
+    expect(message).not.toContain("Confirm you signed in");
+    if (step === 4) expect(message).toContain("different from A");
+    if (step === 13) expect(message).toContain("do not open the link");
+    if (step === 15) expect(message).toContain("original intended A account");
+    expect(streams.input.listenerCount("data")).toBe(0);
+    expect(streams.buffers.every((value) => value.every((byte) => byte === 0))).toBeTrue();
+  }
+});
+
+test("wrong, stale and non-login readiness cannot become permission to begin a login", async () => {
+  await expect(prepareOwnerManualBrowserLogin(terminal("wrong"), new AbortController().signal, scope(4))).rejects.toMatchObject({ code: "owner_refused" });
+  const stale = terminal(); stale.stale();
+  await expect(prepareOwnerManualBrowserLogin(stale, new AbortController().signal, scope(4))).rejects.toThrow();
+  const cancelled = new AbortController(); cancelled.abort();
+  await expect(prepareOwnerManualBrowserLogin(terminal(), cancelled.signal, scope(1))).rejects.toMatchObject({ code: "aborted" });
+  await expect(prepareOwnerManualBrowserLogin(terminal(), new AbortController().signal, scope(2))).rejects.toMatchObject({ code: "order_refused" });
+});
 function signals() {
   const controller = new AbortController(); const events = new EventEmitter(); const counts: number[] = []; const unrelated = (): void => {};
   events.on("SIGINT", unrelated);

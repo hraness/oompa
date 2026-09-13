@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 
 import fc from "fast-check";
 
@@ -8,6 +9,7 @@ import {
   readClaudeAuthenticationObservation,
   readClaudeAuthStatus,
   runClaudeForegroundLogin,
+  resolveClaudeLoginBrowserMode,
   type ClaudeAuthStatusProcess,
   type ClaudeLoginSignal,
   type ClaudeLoginSignalSource,
@@ -439,12 +441,15 @@ describe("Claude foreground login", () => {
     expect(spawnCalls).toBe(0);
   });
 
-  test("runs the exact subscription-login argv with explicit stdio and scrubbed env", async () => {
+  test.each(["provider_default", "owner_manual"] as const)("runs exact foreground argv and scrubbed env with %s", async (browserMode) => {
     let launch: Parameters<NonNullable<Parameters<typeof runClaudeForegroundLogin>[0]["processFactory"]>>[0] | undefined;
     const result = await runClaudeForegroundLogin({
+      browserMode,
       configDir: CONFIG_DIR,
       environment: {
         ANTHROPIC_API_KEY: "must-not-cross",
+        BROWSER: "/arbitrary/opener",
+        CLAUDE_BG_RENDEZVOUS_SOCK: "/private/rendezvous",
         HOME: "/Users/test",
         PATH: "/usr/bin:/bin",
       },
@@ -465,6 +470,7 @@ describe("Claude foreground login", () => {
     expect(launch).toEqual({
       argv: [runtime.executablePath, "auth", "login", "--claudeai"],
       environment: {
+        ...(browserMode === "owner_manual" ? { BROWSER: "/usr/bin/true" } : {}),
         CLAUDE_CONFIG_DIR: CONFIG_DIR,
         HOME: "/Users/test",
         NO_COLOR: "1",
@@ -476,11 +482,69 @@ describe("Claude foreground login", () => {
     });
   });
 
-  test("does not double-forward terminal process-group signals", async () => {
+  test("rejects invalid browser modes and unsupported manual hosts before resolving or spawning", async () => {
+    expect(resolveClaudeLoginBrowserMode(undefined)).toBe("provider_default");
+    expect(resolveClaudeLoginBrowserMode("provider_default", "win32")).toBe("provider_default");
+    for (const host of ["win32", "freebsd", "aix"] as const) {
+      expect(() => resolveClaudeLoginBrowserMode("owner_manual", host)).toThrow("supported POSIX host");
+    }
+    let resolutions = 0; let spawns = 0;
+    for (const mode of [null, true, false, 1, "", "manual", "/usr/bin/true", {}, []]) {
+      const options: Parameters<typeof runClaudeForegroundLogin>[0] = {
+        configDir: CONFIG_DIR, signal: new AbortController().signal,
+        stdio: { stdin: 0, stdout: 1, stderr: 2 },
+        resolveRuntime: async () => { resolutions += 1; return runtime; },
+        processFactory: () => { spawns += 1; throw new Error("Unexpected spawn."); },
+      };
+      Reflect.set(options, "browserMode", mode);
+      await expect(runClaudeForegroundLogin(options)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    }
+    expect(resolutions).toBe(0); expect(spawns).toBe(0);
+  });
+
+  test("refuses unavailable fixed manual opener without resolving, spawning or falling back", async () => {
+    let resolutions = 0; let spawns = 0;
+    const metadata = spyOn(fs, "lstatSync").mockImplementation(() => { throw new Error("Synthetic missing fixed opener."); });
+    try {
+      await expect(runClaudeForegroundLogin({
+        browserMode: "owner_manual", configDir: CONFIG_DIR,
+        signal: new AbortController().signal, stdio: { stdin: 0, stdout: 1, stderr: 2 },
+        resolveRuntime: async () => { resolutions += 1; return runtime; },
+        processFactory: () => { spawns += 1; throw new Error("Unexpected spawn."); },
+      })).rejects.toMatchObject({ code: "INVALID_INPUT", message: "Claude manual-browser login requires the fixed system opener." });
+      expect(resolutions).toBe(0); expect(spawns).toBe(0);
+    } finally { metadata.mockRestore(); }
+  });
+
+  test("captures browser mode and profile before a mutable caller crosses runtime resolution", async () => {
+    let release!: (runtime: PinnedClaudeRuntime) => void;
+    let launched = 0;
+    const options: Parameters<typeof runClaudeForegroundLogin>[0] = {
+      browserMode: "owner_manual", configDir: CONFIG_DIR,
+      signal: new AbortController().signal, signalSource: new FakeSignalSource(),
+      stdio: { stdin: 0, stdout: 1, stderr: 2 },
+      resolveRuntime: (input) => { expect(input.configDir).toBe(CONFIG_DIR); return new Promise((resolve) => { release = resolve; }); },
+      processFactory: (input) => {
+        launched += 1;
+        expect(input.environment.BROWSER).toBe("/usr/bin/true");
+        expect(input.environment.CLAUDE_CONFIG_DIR).toBe(CONFIG_DIR);
+        return { exited: Promise.resolve(0), forceTerminate() {}, sendSignal() {} };
+      },
+    };
+    const pending = runClaudeForegroundLogin(options);
+    Reflect.set(options, "browserMode", "provider_default");
+    Reflect.set(options, "configDir", "/other/profile");
+    release(runtime);
+    await expect(pending).resolves.toEqual({ state: "joined", exitCode: 0, interruptedBy: null });
+    expect(launched).toBe(1);
+  });
+
+  test.each(["provider_default", "owner_manual"] as const)("does not double-forward terminal process-group signals with %s", async (browserMode) => {
     const signalSource = new FakeSignalSource();
     const forwarded: ClaudeLoginSignal[] = [];
     let resolveExit!: (code: number) => void;
     const pending = runClaudeForegroundLogin({
+      browserMode,
       configDir: CONFIG_DIR,
       processFactory: () => ({
         exited: new Promise((resolve) => { resolveExit = resolve; }),
@@ -501,13 +565,14 @@ describe("Claude foreground login", () => {
     expect(signalSource.listeners.get("SIGTERM")?.size ?? 0).toBe(0);
   });
 
-  test("forwards only explicit abort, force-terminates, and joins the child", async () => {
+  test.each(["provider_default", "owner_manual"] as const)("forwards only explicit abort, force-terminates, and joins the child with %s", async (browserMode) => {
     const controller = new AbortController();
     const forwarded: ClaudeLoginSignal[] = [];
     let resolveExit!: (code: number) => void;
     let spawned!: () => void;
     const didSpawn = new Promise<void>((resolve) => { spawned = resolve; });
     const pending = runClaudeForegroundLogin({
+      browserMode,
       configDir: CONFIG_DIR,
       processFactory: () => {
         spawned();
@@ -545,11 +610,12 @@ describe("Claude foreground login", () => {
     expect(forced).toBe(true);
   });
 
-  test("bounds the post-interruption join without claiming an unproven exit", async () => {
+  test.each(["provider_default", "owner_manual"] as const)("bounds the post-interruption join without claiming an unproven exit with %s", async (browserMode) => {
     const controller = new AbortController();
     let releaseExit!: (code: number) => void;
     let forced = false;
     const pending = runClaudeForegroundLogin({
+      browserMode,
       configDir: CONFIG_DIR,
       processFactory: () => ({
         exited: new Promise<number>((resolve) => { releaseExit = resolve; }),

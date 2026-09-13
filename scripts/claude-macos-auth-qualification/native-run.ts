@@ -8,7 +8,7 @@ import { runClaudeForegroundLogin, type ClaudeForegroundLoginResult } from "../.
 import { CLAUDE_PIN } from "../../src/claude/pin";
 import type { PinnedClaudeRuntime } from "../../src/claude/runtime";
 import { bindDarwinQualificationEnvironment } from "../claude-macos-auth-process/binding";
-import { bindDarwinForegroundLogin, type ForegroundQualificationSettlement } from "../claude-macos-auth-process/foreground";
+import { bindDarwinForegroundLogin, bindDarwinManualBrowserForegroundLogin, type ForegroundQualificationSettlement } from "../claude-macos-auth-process/foreground";
 import { assertPrivateDirectoryIdentity } from "../live-acceptance-private-custody";
 import { captureNativeClaudeMacosAdmission } from "./admission";
 import { QualificationCustody, QualificationCustodyError, type QualificationCustodySource, type QualificationDispatchScope } from "./custody";
@@ -17,10 +17,10 @@ import { ClaudeMacosLogoutError, collectNativeClaudeMacosLogout } from "./native
 import { NativeIdentityObserverError, observeNativePrivateClaudeIdentity, observeNativePrivateClaudeIdentityPair,
   type NativeIdentityAuthorityScope, type NativeIdentityProbeInput } from "./native-observer";
 import { OwnerTerminalError, armOwnerTerminalInterruption, armOwnerTerminalNoPromptWindow,
-  createQualificationTerminalSignals, readOwnerTerminalResponse, type OwnerTerminalScope } from "./owner-terminal";
+  createQualificationTerminalSignals, prepareOwnerManualBrowserLogin, readOwnerTerminalResponse, type OwnerTerminalScope } from "./owner-terminal";
 import { ClaudeMacosPreflightError, collectNativeClaudeMacosCapabilities, type ClaudeMacosCapabilities } from "./preflight";
 import { encodeNativeQualificationCheckpoint, encodeQualificationCheckpoint } from "./receipt";
-import { nativeQualificationBindingSchema, observeQualification, qualificationBindingSchema, QUALIFICATION_CLEANUP_ROOTS,
+import { assertManualBrowserQualificationBinding, nativeQualificationBindingSchema, observeQualification, qualificationBindingSchema, QUALIFICATION_CLEANUP_ROOTS,
   type QualificationCleanupRoot, type QualificationEvent, type QualificationResult, type QualificationState } from "./state";
 
 const path = z.string().refine((value) => value.length >= 2 && value.length <= 4096 && isAbsolute(value)
@@ -75,6 +75,7 @@ const capabilitiesSchema = z.strictObject({ source: z.enum(["native_process", "c
   probes: z.array(z.unknown()).length(6), runtimes: z.strictObject({ A: z.object({ executablePath: path, version: z.literal(CLAUDE_PIN) }),
     B: z.object({ executablePath: path, version: z.literal(CLAUDE_PIN) }) }) });
 const settlementSchema = z.strictObject({ cleanup: z.literal("joined"), childJoined: z.literal(true), exitCode: z.number().int().safe(),
+  browserMode: z.literal("owner_manual").optional(),
   ownerTerminalVerified: z.literal(true), stdin: z.literal(0), stdout: z.literal(1), stderr: z.literal(2),
   requestedSignals: z.strictObject({ SIGINT: z.number().int().nonnegative(), SIGTERM: z.number().int().nonnegative(), SIGKILL: z.number().int().nonnegative() }) });
 const logoutEvidenceSchema = z.object({ source: z.enum(["native_process", "credential_free_fixture"]), kind: z.literal("logout_process_joined"),
@@ -172,6 +173,7 @@ async function run(input: Input, mode: Mode, ports: Ports): Promise<ClaudeMacosQ
     outcome = { ...outcome, status: "recovery_required", ownerRelease: "uncertain", checkpoint: "initial",
       recovery: { runId: custody.runId, runRoot: custody.recoveryRoot, receiptPath: custody.receiptPath } };
     const state = custody.state(); const schema = mode === "native_process" ? nativeQualificationBindingSchema : qualificationBindingSchema;
+    if (mode === "native_process") assertManualBrowserQualificationBinding(state.binding);
     if (!schema.safeParse(state.binding).success || state.step !== 0 || state.pending !== null || state.failure !== null || state.needsRecovery || state.events.length !== 0
       || state.binding.runId !== custody.runId || JSON.stringify({ sourceSha: state.binding.sourceSha, sourceTree: state.binding.sourceTree, executable: state.binding.executable }) !== JSON.stringify(admission.source)) refuse("custody_refused");
     phase = "fresh_roots_refused"; checkAbort(); await ports.assertFresh(custody); checkAbort();
@@ -200,6 +202,7 @@ async function run(input: Input, mode: Mode, ports: Ports): Promise<ClaudeMacosQ
           const collected = await collectLogin(login);
           if (collected !== "uncertain" && collected !== null && settlementSchema.safeParse(collected).success) {
             outcome = { ...outcome, cleanup: "joined" };
+            if (mode === "native_process" && collected.browserMode !== "owner_manual") refuse("login_refused");
             if (result?.state !== "joined" || result.exitCode !== collected.exitCode) refuse("login_refused");
           } else if (collected === null && result?.state === "not_started") outcome = { ...outcome, cleanup: "joined" };
           else { retainedUncertainLogins.add(login); refuse("login_refused"); }
@@ -316,7 +319,7 @@ export async function runNativeClaudeMacosQualification(input: unknown): Promise
     outcome = await run(request, "native_process", {
       capture(actual) { admission = captureNativeClaudeMacosAdmission({ repositoryRoot: actual.repositoryRoot, sourceCommit: actual.sourceCommit, executablePath: actual.executablePath }); return admission; },
       async create(source) {
-        native = await QualificationCustody.createNative(source); const custody = native;
+        native = await QualificationCustody.createNativeManualBrowser(source); const custody = native;
         return { runId: custody.runId, recoveryRoot: custody.recoveryRoot, receiptPath: custody.receiptPath, state,
           assertCurrent: QualificationCustody.prototype.assertCurrent.bind(custody),
           withProofKey<T>(observe: (key: Uint8Array) => Promise<T>): Promise<T> { return custody.withProofKey(observe); },
@@ -353,8 +356,10 @@ export async function runNativeClaudeMacosQualification(input: unknown): Promise
       async prepareLogin(step, scope, runtime) {
         assertScope(step, scope); const profile = step === 4 ? "B" : "A";
         if (scope.profile !== profile) refuse("authority_refused");
-        const bound = bindDarwinForegroundLogin(runtimeBinding(profile)); const ownerScope = { runId: scope.runId, attemptId: scope.attemptId, step };
+        assertManualBrowserQualificationBinding(state().binding);
+        const bound = bindDarwinManualBrowserForegroundLogin(runtimeBinding(profile)); const ownerScope = { runId: scope.runId, attemptId: scope.attemptId, step };
         const streams = ownerStreams(ownerScope, bound); await held().assertCurrent(); streams.assertCurrent();
+        await prepareOwnerManualBrowserLogin(streams, request.signal, ownerScope);
         const arm = step === 13 ? await armOwnerTerminalInterruption(streams, request.signal, ownerScope) : undefined;
         await held().assertCurrent(); streams.assertCurrent();
         const loginSignals = signals.beginLogin(ownerScope, arm); let used = false;

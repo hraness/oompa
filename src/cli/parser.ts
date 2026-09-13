@@ -149,6 +149,7 @@ export type AccountLoginCliInvocation = Readonly<{
 
 /** Claude owns the foreground interaction; the daemon owns its durable attempt. */
 export type ClaudeAccountAuthCliInvocation = Readonly<{
+  browserMode: "provider_default" | "owner_manual";
   command: Extract<LocalCommand, { kind: "account.claude-login.prepare" }>;
   json: boolean;
   kind: "account.claude-login";
@@ -345,7 +346,7 @@ Examples:
 
 Usage:
   oompa account add <label>
-  oompa account login <profile> [--provider <codex|claude>] [--device-code] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]
+  oompa account login <profile> [--provider <codex|claude>] [--device-code] [--manual-browser] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]
   oompa account login-cancel <profile> [--provider codex]
   oompa account login-cancel <profile> --provider claude --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited
   oompa account login-cancel <profile> --provider devin --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited
@@ -363,6 +364,11 @@ Provider listing:
   This read does not refresh providers, sign in, or change the active account.
   Without --provider, account list keeps the existing profile listing.
 
+Claude browser selection:
+  --manual-browser leaves Claude's link in the terminal for you to copy unchanged
+  into a fresh private browser session. Close all prior private windows first,
+  keep normal sessions unchanged, and choose the intended account. Claude only.
+
 Platform:
   Codex account commands run on macOS and Linux. Claude login and status
   require Linux; macOS refuses before launching Claude.
@@ -370,7 +376,7 @@ Platform:
 Examples:
   oompa account add personal
   oompa account login personal --device-code --handoff-file /private/path/login.json
-  oompa account login personal --provider claude
+  oompa account login personal --provider claude --manual-browser
   oompa account list --provider codex
   oompa account list --provider claude --json
   oompa account show personal --provider claude
@@ -1035,10 +1041,12 @@ export const accountLoginCancelCommand = (account: string): string =>
 export const claudeAccountLoginCommand = (
   account: string,
   idempotencyKey?: string,
+  browserMode: ClaudeAccountAuthCliInvocation["browserMode"] = "provider_default",
 ): string => [
   "oompa account login",
   shellArgument(account),
   "--provider claude",
+  ...(browserMode === "owner_manual" ? ["--manual-browser"] : []),
   ...(idempotencyKey === undefined ? [] : ["--idempotency-key", idempotencyKey]),
 ].join(" ");
 
@@ -1191,12 +1199,14 @@ const parseAccount = (
       return { kind: "account.show", account };
     }
     case "login": {
+      const manualBrowser = flag(cursor, "--manual-browser");
       const deviceCode = flag(cursor, "--device-code");
       const handoffFile = option(cursor, "--handoff-file");
       const provider = selectedProvider(option(cursor, "--provider") ?? "codex");
       const account = take(cursor, "account");
       finish(cursor);
       if (provider === "claude") {
+        const browserMode = manualBrowser ? "owner_manual" : "provider_default";
         if (deviceCode) {
           throw new CliUsageError("Claude Code does not expose a device-code login. Run the foreground Claude login without --device-code.");
         }
@@ -1212,12 +1222,14 @@ const parseAccount = (
           throw new CliUsageError("Claude account login command is invalid.");
         }
         return {
+          browserMode,
           command: parsed,
           json,
           kind: "account.claude-login",
-          replayCommand: claudeAccountLoginCommand(parsed.account, parsed.idempotencyKey),
+          replayCommand: claudeAccountLoginCommand(parsed.account, parsed.idempotencyKey, browserMode),
         };
       }
+      if (manualBrowser) throw new CliUsageError("--manual-browser is supported only for foreground Claude login.");
       if (handoffFile !== undefined && (!isAbsolute(handoffFile) || resolve(handoffFile) !== handoffFile)) {
         throw new CliUsageError("--handoff-file must be an absolute normalized path to an existing protected file.");
       }

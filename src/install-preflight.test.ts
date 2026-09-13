@@ -161,7 +161,7 @@ const officialReleaseRecord = (
   draft: false,
   id: 9_715_113,
   immutable: true,
-  tag_name: "v0.8.1",
+  tag_name: "v0.8.2",
   ...overrides,
 });
 
@@ -663,7 +663,7 @@ beforeAll(async () => {
     root,
   ], { cwd: repositoryRoot });
   if (packed.exitCode !== 0) throw new Error(`Could not build installer fixture: ${packed.stderr}${packed.stdout}`);
-  const productionArchivePath = join(root, "hraness-oompa-0.8.1.tgz");
+  const productionArchivePath = join(root, "hraness-oompa-0.8.2.tgz");
   const extractedRoot = join(root, "extracted");
   await mkdir(extractedRoot, { mode: 0o700 });
   const extracted = await run(["tar", "-xzf", productionArchivePath, "-C", extractedRoot], { cwd: root });
@@ -872,10 +872,10 @@ describe("transactional Oompa installer", () => {
 
   test("binds the public command to one tagged preflight and one exact tagged archive", async () => {
     expect(OOMPA_INSTALL_PREFLIGHT_SOURCE_URL).toBe(
-      "https://raw.githubusercontent.com/hraness/oompa/v0.8.1/src/install-preflight-runtime.ts",
+      "https://raw.githubusercontent.com/hraness/oompa/v0.8.2/src/install-preflight-runtime.ts",
     );
     expect(OOMPA_INSTALL_ARCHIVE_URL).toBe(
-      "https://github.com/hraness/oompa/releases/download/v0.8.1/hraness-oompa-0.8.1.tgz",
+      "https://github.com/hraness/oompa/releases/download/v0.8.2/hraness-oompa-0.8.2.tgz",
     );
     const runtimeBytes = await readFile(resolve(import.meta.dir, "install-preflight-runtime.ts"));
     // The public digest names the runtime at the released tag; the working
@@ -1019,7 +1019,7 @@ describe("transactional Oompa installer", () => {
       archiveAssetId: 8_675_309,
       archiveBytes: 123,
       archiveReleaseId: 9_715_113,
-      archiveReleaseTag: "v0.8.1",
+      archiveReleaseTag: "v0.8.2",
       archiveRepositoryId: OOMPA_INSTALL_REPOSITORY_ID,
       archiveSha256,
       archiveSource: "official",
@@ -1060,7 +1060,7 @@ describe("transactional Oompa installer", () => {
         message: "one exact archive asset",
         record: officialReleaseRecord({
           assets: [officialArchiveAsset({
-            browser_download_url: "https://example.com/oompa-v0.8.1.tgz",
+            browser_download_url: "https://example.com/oompa-v0.8.2.tgz",
             name: "other.tgz",
           })],
         }),
@@ -1117,7 +1117,7 @@ describe("transactional Oompa installer", () => {
       expect(call.init.signal).toBeInstanceOf(AbortSignal);
       expect(headers.get("accept")).toBe("application/vnd.github+json");
       expect(headers.get("accept-encoding")).toBe("identity");
-      expect(headers.get("user-agent")).toBe("oompa-installer/0.8.1");
+      expect(headers.get("user-agent")).toBe("oompa-installer/0.8.2");
       expect(headers.get("x-github-api-version")).toBe("2022-11-28");
       expect(headers.get("authorization")).toBeNull();
     }
@@ -1219,7 +1219,7 @@ describe("transactional Oompa installer", () => {
       "install",
       "global",
       "package.json",
-    ))).toEqual({ dependencies: { "@hraness/oompa": "0.8.1" } });
+    ))).toEqual({ dependencies: { "@hraness/oompa": "0.8.2" } });
 
     const second = await runInstaller(root);
     expect(second).toEqual({

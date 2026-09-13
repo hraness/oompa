@@ -10,6 +10,12 @@ import { detachedProcessError } from "./detachment";
 const descriptors = Object.freeze({ stdin: 0, stdout: 1, stderr: 2 });
 const loginArguments = ["auth", "login", "--claudeai"] as const;
 
+/** Pure environment construction; this supplies no process or login authority. */
+export function manualBrowserEnvironment(environment: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
+  if (Object.hasOwn(environment, "BROWSER")) throw detachedProcessError("foreground_request_refused");
+  return Object.freeze({ ...environment, BROWSER: "/usr/bin/true" });
+}
+
 /** The only accepted factory request is the bound login and the owner's standard terminal. */
 export function assertForegroundLoginRequest(
   expected: Readonly<{ executablePath: string; environment: Readonly<Record<string, string>> }>,
@@ -70,6 +76,7 @@ export type ForegroundQualificationSettlement = Readonly<{
   stdout: 1;
   stderr: 2;
   requestedSignals: Readonly<{ SIGINT: number; SIGTERM: number; SIGKILL: number }>;
+  browserMode?: "owner_manual";
 }>;
 
 /** A single-attempt process factory; the existing auth runner owns login signal policy. */
@@ -80,7 +87,18 @@ export function bindDarwinForegroundLogin(input: ClaudeQualificationBindingInput
   assertOwnerTerminalCurrent(): void;
   settled(): Promise<ForegroundQualificationSettlement | null>;
 }> {
+  return bindForeground(input, false);
+}
+
+const manualBrowserBrand = Symbol("qualification-manual-browser");
+/** Closed qualification operation. Ambient browser commands never enter this binding. */
+export function bindDarwinManualBrowserForegroundLogin(input: ClaudeQualificationBindingInput) {
+  return Object.freeze({ ...bindForeground(input, true), [manualBrowserBrand]: true as const, browserMode: "owner_manual" as const });
+}
+
+function bindForeground(input: ClaudeQualificationBindingInput, manualBrowser: boolean) {
   const binding = bindDarwinQualificationEnvironment(input);
+  const childEnvironment = manualBrowser ? manualBrowserEnvironment(binding.environment) : binding.environment;
   const terminal = bindOwnerTerminal();
   let used = false;
   let settlement: Promise<ForegroundQualificationSettlement> | null = null;
@@ -93,7 +111,7 @@ export function bindDarwinForegroundLogin(input: ClaudeQualificationBindingInput
     // All fallible admission is complete. After spawn, retain this exact child
     // and express any missing native join through its promises, never a new throw.
     const child = Bun.spawn([binding.executablePath, ...loginArguments], {
-      cwd: binding.configDir, env: binding.environment, detached: false,
+      cwd: binding.configDir, env: childEnvironment, detached: false,
       stdin: 0, stdout: 1, stderr: 2,
     });
     let joined = false;
@@ -102,6 +120,7 @@ export function bindDarwinForegroundLogin(input: ClaudeQualificationBindingInput
     const receipt = (exitCode: number | null): ForegroundQualificationSettlement => Object.freeze({
       cleanup: joined ? "joined" : "uncertain", childJoined: joined, exitCode, ownerTerminalVerified: true,
       stdin: 0, stdout: 1, stderr: 2, requestedSignals: Object.freeze({ ...requestedSignals }),
+      ...(manualBrowser ? { browserMode: "owner_manual" as const } : {}),
     });
     settlement = exited.then(receipt, () => receipt(null));
     return Object.freeze({ exited,

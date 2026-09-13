@@ -156,3 +156,30 @@ pre-spawn refusal and single-attempt ownership. Cleanup separately joins the
 worker, its direct fixture child, PTY EOF and close, and IPC disconnect. Uncertain
 setup or collection retains the private recovery root. The test worker is never
 a live login entrypoint.
+
+## Manual browser handoff for the account ceremony
+
+The new 22-step account ceremony uses the separate named manual-browser binding.
+It validates the ordinary fixed foreground request, then supplies only the fixed
+`BROWSER=/usr/bin/true` to its actual child. Ambient browser commands and
+`CLAUDE_BG_RENDEZVOUS_SOCK` remain excluded. The production environment allowlist,
+ordinary foreground factory, terminal descriptors and signal ownership are unchanged.
+
+This behavior is tied to the reviewed Darwin arm64 Claude 2.1.260 executable
+SHA-256 `3c269f66801028823e24a63ced9fdd3988cb86cf85fccd9f03f87e463b9d3e3c`.
+Read-only inspection of those exact bytes traced `auth login` through its OAuth
+flow to the opener, which selects `BROWSER` before macOS `open`. The higher-priority
+in-process attacher capability starts null and requires the rendezvous environment
+input excluded by this boundary. The examined byte regions begin at offsets
+176928800 (login), 171993011 (OAuth flow), 167702626 (opener), 155934580 (initial
+capabilities), 155975700 (capability accessor), and 175487320 (rendezvous admission).
+A changed provider artifact requires renewed source evidence; neither an environment
+variable name nor the synthetic fixture alone establishes provider semantics.
+
+The provider prints its own URL into the owner's terminal. Oompa does not capture,
+rewrite, log or open it. Before each login, the owner closes prior private windows
+and prepares a fresh private session; multiple private windows can share cookies.
+The readiness response is Enter, not identity evidence. Existing post-login account
+attestations and independent status observations remain required. The synthetic
+Darwin child checks its exact environment and joins without starting a browser or
+provider. Real owner authentication remains separate acceptance.
