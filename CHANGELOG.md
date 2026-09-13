@@ -5,6 +5,10 @@
 - Interactive root help shows a compact ASCII orange-circle introduction on a capable terminal. Redirected help, JSON, version, nested help and errors retain their existing output. No daemon, provider, store or command authority changes.
 - This patch needs its own exact immutable artifact admission. The v0.8.0 canonical GitHub artifact is admitted; its optional npm mirror failed before publication and is not admitted. Its historical entry below retains the candidate wording from that source. Capacity activation, daemon startup and intended-target gates remain unchanged.
 
+## v0.8.1
+
+Immutable GitHub release admission completed in [release run 34781400584](https://github.com/hraness/oompa/actions/runs/34781400584), attempt 1, from source `135a69bd592e41c3c1649241f3310ff41fc7e81e`. The canonical archive is `hraness-oompa-0.8.1.tgz` (1,707,906 bytes, SHA-256 `e84d6efe6779c359bf013663e50c8d9e4a43e380d837e92ac755e55e8c559208`). The optional npm mirror failed before publication and is not admitted. Daemon startup and hosted command writers remain capacity-gated; this release does not claim live provider qualification.
+
 Every entry names the release or the plan wave it belongs to. Unreleased work sits under the wave that produced it until a version ships.
 
 ## Desktop switching removed (unreleased)
