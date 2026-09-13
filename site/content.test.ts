@@ -106,11 +106,11 @@ describe("public content contract", () => {
     const llms = renderLlmsText();
     expect(llms).toContain(publicContent.statusLine);
     expect(llms).toContain("Local CLI v0.8.2 is a release candidate");
-    expect(llms).toContain("v0.8.0 remains the admitted canonical GitHub artifact");
+    expect(llms).toContain("v0.8.1 remains the admitted canonical GitHub artifact");
     expect(publicContent.links.admittedInstall).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact");
     const visibleSite = htmlVisibleText(renderSiteHtml());
     expect(visibleSite).toContain("The v0.8.2 candidate is not yet admitted.");
-    expect(visibleSite).toContain("The admitted v0.8.0 CLI has its own");
+    expect(visibleSite).toContain("The admitted v0.8.1 CLI has its own");
     expect(visibleSite).not.toContain("The v0.8.0 candidate is not yet admitted.");
     expect(visibleSite).toContain("Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass.");
     expect(visibleSite).not.toContain("v0.8.2 artifacts admitted");
@@ -121,9 +121,9 @@ describe("public content contract", () => {
       expect(surface).toContain(publicContent.daemonRolloutNotice);
     }
     for (const surface of [renderDocumentationMarkdown("/docs/status/"), htmlVisibleText(renderDocumentationHtml("/docs/status/"))]) {
-      expect(surface).toContain("v0.8.2 is a candidate. v0.8.0 remains admitted.");
+      expect(surface).toContain("v0.8.2 is a candidate. v0.8.1 remains admitted.");
       expect(surface).toContain("The v0.8.2 candidate is not yet admitted and requires its own immutable GitHub proof.");
-      expect(surface).toContain("The v0.8.0 CLI passed immutable GitHub artifact admission.");
+      expect(surface).toContain("The v0.8.1 CLI passed immutable GitHub artifact admission.");
       expect(surface).not.toContain("v0.8.0 candidate");
       expect(surface).toContain(publicContent.daemonRolloutNotice);
       expect(surface).not.toContain("v0.8.2 artifacts admitted");
@@ -141,7 +141,7 @@ describe("public content contract", () => {
   test("never transfers current admission to another version", () => {
     expect(isAdmittedRelease("0.8.0")).toBe(true);
     const admittedContent = { ...publicContent, releaseVersion: admittedReleaseVersion };
-    expect(renderLlmsText(admittedContent)).toContain("Install the admitted v0.8.0 local CLI artifact");
+    expect(renderLlmsText(admittedContent)).toContain("Install the admitted v0.8.1 local CLI artifact");
     for (const surface of [renderLlmsText(admittedContent)]) {
       expect(surface).not.toContain("The v0.8.0 candidate is not yet admitted");
       expect(surface).toContain(admittedContent.daemonRolloutNotice);
@@ -279,7 +279,7 @@ describe("public content contract", () => {
     });
     expect(structured).not.toHaveProperty("softwareVersion");
     expect(publicContent.description).toContain("v0.8.2 is a release candidate");
-    expect(publicContent.description).toContain("v0.8.0 remains admitted");
+    expect(publicContent.description).toContain("v0.8.1 remains admitted");
     expect(publicContent.description).toContain("daemon and hosted command-writer rollout remains blocked on capacity");
     expect(html).toContain('href="/docs/status/"');
     expect(html).toContain(`<title>${publicContent.productName} | ${publicContent.tagline}</title>`);
@@ -498,7 +498,7 @@ describe("public content contract", () => {
   test("keeps startup prerequisites adjacent to setup without turning the homepage into a runbook", () => {
     const prerequisite = publicContent.daemonRolloutNotice;
     expect(prerequisite).toContain("Do not initialize, start, or autostart");
-    expect(prerequisite).toContain("either the admitted v0.8.0 daemon or the v0.8.2 candidate");
+    expect(prerequisite).toContain("either the admitted v0.8.1 daemon or the v0.8.2 candidate");
     expect(prerequisite).toContain("protected two-pass zero-debt capacity evidence and its exact .activated readback receipt");
     expect(prerequisite).toContain("target marker-2 proofs before globally enabling hosted writers");
     const setupHtml = renderDocumentationHtml("/docs/start/");
