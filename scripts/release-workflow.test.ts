@@ -615,13 +615,13 @@ describe("release workflow", () => {
     expect(readme).not.toContain("Install and verify the admitted v0.8.2 CLI artifact");
     expect(readme).toContain("Only after immutable GitHub release admission, install and verify the v0.8.2 candidate CLI artifact. This does not start the daemon:");
     expect(readme).toContain("The v0.8.2 candidate is not yet admitted");
-    expect(readme).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact");
+    expect(readme).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
     expect(releaseNotes).toContain("## Admitted v0.7.0 predecessor");
     expect(releaseNotes).toContain("## Admitted v0.7.1 predecessor");
     for (const surface of [readme, releaseNotes, availability, gettingStarted]) {
       expect(surface).toContain("This release candidate is not yet admitted");
-      expect(surface).toContain(surface === releaseNotes ? "#admitted-v080-canonical-artifact" : "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact");
-      expect(surface).toContain("v0.8.0");
+      expect(surface).toContain(surface === releaseNotes ? "#admitted-v081-canonical-artifact" : "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
+      expect(surface).toContain("v0.8.1");
       expect(surface).toContain("npm mirror");
       expect(surface).toContain("install command");
       expect(surface).toContain("unavailable until");
@@ -643,7 +643,7 @@ describe("release workflow", () => {
     const homepageAvailability = publicContent.questions.find(({ question }) => question === "Can I start using it now?");
     expect(homepageAvailability).toBeDefined();
     expect(homepageAvailability?.answer).toContainEqual({ kind: "link", label: "Check the setup status", href: "/docs/status/" });
-    expect(homepageAvailability?.answer).toContainEqual({ kind: "link", label: "verified installation notes", href: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact" });
+    expect(homepageAvailability?.answer).toContainEqual({ kind: "link", label: "verified installation notes", href: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact" });
     const homepageAvailabilityText = homepageAvailability?.answer.filter((part) => part.kind === "text").map((part) => part.value).join("");
     expect(homepageAvailabilityText).toContain("The admitted v0.8.1 CLI has its own");
     expect(homepageAvailabilityText).toContain("The v0.8.2 candidate is not yet admitted.");
@@ -1096,7 +1096,7 @@ describe("release workflow", () => {
     expect(releaseRecord).toContain("coordinate completed its non-executable bootstrap");
     expect(releaseRecord).toContain("npm trusted publishing has exactly one binding");
     expect(releaseRecord).toContain("Stable `@hraness/hra@0.7.1` remains an admitted npm predecessor");
-    expect(releaseRecord).toContain("current canonical GitHub artifact is `@hraness/oompa@0.8.0`, whose optional npm mirror is not admitted");
+    expect(releaseRecord).toContain("current canonical GitHub artifact is `@hraness/oompa@0.8.1`, whose optional npm mirror is not admitted");
     expect(releaseRecord).toContain("The canonical README and website use a two-phase local-release surface");
     expect(releaseRecord).toContain("The `v0.8.1` canonical GitHub artifact is admitted; the npm mirror is not");
     expect(releaseRecord).toContain("preserves that predecessor's admission record and the pre-admission wording captured in its immutable README and package metadata");
