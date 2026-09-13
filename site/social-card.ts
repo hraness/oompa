@@ -55,7 +55,7 @@ export const socialCardLines = (content: PublicContent = publicContent): SocialC
   return {
     commands: [`$ ${content.doctorCommand}`, "$ oompa status --json"],
     comment: "# Daemon rollout blocked on capacity",
-    tagline: `CLI candidate v${content.releaseVersion} · oompa.app`,
+    tagline: `CLI v${content.releaseVersion} · canonical GitHub release · oompa.app`,
     title: content.productName,
   };
 };

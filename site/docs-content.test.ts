@@ -127,22 +127,21 @@ describe("task-oriented documentation content", () => {
     }
   });
 
-  test("refuses candidate availability before its install command and preserves the blocked-startup prerequisite", () => {
+  test("keeps canonical install notice before the command and preserves the blocked-startup prerequisite", () => {
     const page = pageAt("/docs/start/");
     const blocks = page.sections.flatMap((section) => section.blocks);
-    expect(blocks[0]).toMatchObject({ kind: "notice", label: "Candidate artifact not yet admitted" });
-    expect(blockText(blocks[0]!)).toContain(publicContent.installNotice);
+    expect(blocks[0]).toMatchObject({ kind: "notice", label: "CLI artifact admitted; daemon startup blocked" });
+    expect(blockText(blocks[0]!)).toContain("The admitted v0.8.1 canonical GitHub artifact may be installed with the command below.");
     expect(blockLinks(blocks[0]!)).toContain(publicContent.links.admittedInstall);
-    expect(blockText(blocks[0]!)).toContain("Only after immutable GitHub release admission");
-    expect(blockText(blocks[0]!)).toContain("admitted v0.8.1 artifact");
+    expect(blockText(blocks[0]!)).toContain("admitted v0.8.1 canonical GitHub artifact");
     expect(blockText(blocks[0]!)).toContain("Neither artifact admission nor installation authorizes daemon startup.");
     expect(blockLinks(blocks[0]!)).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
     expect(blocks[1]).toEqual({ kind: "commands", commands: [publicContent.installCommand] });
     const text = pageText(page);
-    expect(text.indexOf("Candidate artifact not yet admitted")).toBeLessThan(text.indexOf(publicContent.installCommand));
+    expect(text.indexOf("CLI artifact admitted; daemon startup blocked")).toBeLessThan(text.indexOf(publicContent.installCommand));
     expect(text.indexOf(publicContent.installCommand)).toBeLessThan(text.indexOf(publicContent.doctorCommand));
-    expect(text.indexOf(publicContent.installNotice)).toBeLessThan(text.indexOf(publicContent.installCommand));
-    expect(text).not.toContain("You can install and check v0.8.2 now");
+    expect(text.indexOf("The admitted v0.8.1 canonical GitHub artifact may be installed with the command below.")).toBeLessThan(text.indexOf(publicContent.installCommand));
+    expect(text).not.toContain("You can install and check v0.8.1 now");
     expect(text.indexOf(publicContent.doctorCommand)).toBeLessThan(text.indexOf(publicContent.initCommand));
     const noticeIndex = blocks.findIndex((block) => block.kind === "notice"
       && blockText(block).includes("Initialization, daemon startup, and hosted command writers remain blocked on capacity"));
@@ -156,11 +155,10 @@ describe("task-oriented documentation content", () => {
     expect(parseCli(["session", "start", "personal", "--provider", "claude", "--preset", "fable-max"])).toMatchObject({ kind: "command", command: { kind: "session.start", provider: "claude", preset: "fable-max" } });
     const status = pageText(pageAt("/docs/status/"));
     expect(status).toContain(publicContent.daemonRolloutNotice);
-    expect(status).toContain("v0.8.2 is a candidate. v0.8.1 remains admitted.");
-    expect(status).toContain(publicContent.installNotice);
+    expect(status).toContain("The v0.8.1 CLI passed immutable GitHub artifact admission. Its optional npm mirror requires separate admission.");
+    expect(status).toContain("The admitted v0.8.1 canonical GitHub artifact may be installed");
     expect(status).toContain("The v0.8.1 CLI passed immutable GitHub artifact admission.");
-    expect(status).not.toContain("The v0.8.2 CLI passed");
-    expect(status).not.toContain("v0.8.2 is released");
+    expect(status).not.toContain("v0.8.1 is released");
   });
 
   test("puts machine sign-in formats before browser enrollment", () => {

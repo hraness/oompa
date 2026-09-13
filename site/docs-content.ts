@@ -52,16 +52,16 @@ const candidateInstallNotice: ContentBlock = {
   kind: "notice",
   label: isAdmittedRelease(publicContent.releaseVersion)
     ? "CLI artifact admitted; daemon startup blocked"
-    : "Candidate artifact not yet admitted",
+    : "Canonical artifact admitted; daemon startup blocked",
   content: [
     text(isAdmittedRelease(publicContent.releaseVersion)
-      ? `The admitted v${admittedReleaseVersion} artifact may be installed with the command below.`
+      ? `The admitted v${admittedReleaseVersion} canonical GitHub artifact may be installed with the command below.`
       : publicContent.installNotice),
     text(" Read the "),
     link("admitted release installation notes", publicContent.links.admittedInstall),
     text(isAdmittedRelease(publicContent.releaseVersion)
-      ? ` for v${admittedReleaseVersion}, or use its `
-      : ` for v${admittedReleaseVersion}. Only after immutable GitHub release admission may you run the candidate install command below. For the admitted v${admittedReleaseVersion} artifact, you can also use its `),
+      ? ` for v${admittedReleaseVersion}; its optional npm mirror requires separate admission. Use its `
+      : ` for v${admittedReleaseVersion}. Only after immutable GitHub release admission may you run the release install command below. For the admitted v${admittedReleaseVersion} artifact, you can also use its `),
     link("verified installation notes", publicContent.links.admittedInstall),
     text(". Neither artifact admission nor installation authorizes daemon startup."),
   ],
@@ -71,7 +71,7 @@ const setupNotice: ContentBlock = {
   kind: "notice",
   label: "Before you start a daemon",
   content: [
-    text(`${isAdmittedRelease(publicContent.releaseVersion) ? `The v${publicContent.releaseVersion} CLI artifact is admitted for installation.` : `The v${publicContent.releaseVersion} candidate is not yet admitted. Install it only after its own immutable GitHub release admission.`} Initialization, daemon startup, and hosted command writers remain blocked on capacity. Complete the `),
+    text(`${isAdmittedRelease(publicContent.releaseVersion) ? `The v${publicContent.releaseVersion} CLI artifact is admitted for installation.` : `The v${publicContent.releaseVersion} canonical artifact is admitted; install it from the exact release notes.`} Initialization, daemon startup, and hosted command writers remain blocked on capacity. Complete the `),
     link("rollout and update prerequisites", "/docs/status/#install-and-update"),
     text(" before the steps below. Installing the CLI or opening the app does not clear that gate."),
   ],
@@ -134,7 +134,7 @@ export const docsPages: readonly DocsPage[] = [
   {
     path: "/docs/start/",
     title: "Set up Oompa",
-    description: "Find the admitted CLI and this candidate's installation limits, then follow the first-run path only when artifact admission and rollout prerequisites are satisfied.",
+    description: "Find the admitted CLI and its installation limits, then follow the first-run path only when artifact admission and rollout prerequisites are satisfied.",
     keywords: ["install", "setup", "login", "first session", "Bun"],
     reviewDate: "2026-09-10",
     admission: {
@@ -143,7 +143,7 @@ export const docsPages: readonly DocsPage[] = [
       reassessOn: "2026-10-06",
       decision: "keep",
       readerJob: "Install Oompa safely and understand the shortest path to a first local conversation.",
-      contribution: "An ordered installer-to-session path separates the immutable admitted predecessor from the unavailable candidate installer and puts the still-closed startup boundary before the first state-changing setup command.",
+      contribution: "An ordered installer-to-session path separates the immutable admitted artifact from the optional npm mirror and puts the still-closed startup boundary before the first state-changing setup command.",
       overlapDecision: "The homepage offers a product overview, Sessions covers an existing setup, and Status owns upgrade and rollout detail. This page alone owns first-run order.",
       evidence: ["src/install-preflight.ts", "src/cli/parser.ts", "site/content.ts", "docs/beta-release-notes.md"],
       scores: [2, 2, 2, 2, 2, 1],
@@ -387,7 +387,7 @@ export const docsPages: readonly DocsPage[] = [
   {
     path: "/docs/status/",
     title: "Availability and release status",
-    description: "Distinguish the v0.8.2 candidate from the admitted v0.8.1 CLI, check provider support, and understand the runtime rollout prerequisites.",
+    description: "Use the admitted v0.8.1 CLI, distinguish its optional npm mirror, check provider support, and understand the runtime rollout prerequisites.",
     keywords: ["release", "availability", "platforms", "Codex", "Claude", "upgrade"],
     reviewDate: "2026-09-09",
     admission: {
@@ -406,11 +406,11 @@ export const docsPages: readonly DocsPage[] = [
         id: "current-release",
         heading: isAdmittedRelease(publicContent.releaseVersion)
           ? `v${publicContent.releaseVersion} artifacts are admitted. Daemon rollout remains blocked.`
-          : `v${publicContent.releaseVersion} is a candidate. v${admittedReleaseVersion} remains admitted.`,
+          : `v${publicContent.releaseVersion} is admitted canonically. Its optional npm mirror remains separate.`,
         blocks: [
           candidateInstallNotice,
-          paragraph(text(`The v${admittedReleaseVersion} CLI passed immutable GitHub artifact admission. Its optional npm mirror is not admitted. ${isAdmittedRelease(publicContent.releaseVersion) ? "For its exact installation instructions, use the " : `The v${publicContent.releaseVersion} candidate is not yet admitted and requires its own immutable GitHub proof. For the admitted predecessor, use its `}`), link("verified installation notes", publicContent.links.admittedInstall), text(" to install and run "), code("oompa doctor --offline"), text(". The public website, browser app, and open-beta sync service are available; their availability does not authorize starting the current daemon or sending new hosted commands.")),
-          paragraph(text(`The v${publicContent.releaseVersion} ${isAdmittedRelease(publicContent.releaseVersion) ? "release" : "candidate"} retains the read-only exact Codex default-profile observation admitted in v0.7.1. The display remains unavailable until the intended daemon publishes a matching fresh companion after its rollout gates pass. This does not change Ultra defaults, admit models, choose a route, or authorize a command.`)),
+          paragraph(text(`The v${admittedReleaseVersion} CLI passed immutable GitHub artifact admission. Its optional npm mirror requires separate admission. For its exact installation instructions, use the `), link("verified installation notes", publicContent.links.admittedInstall), text(" to install and run "), code("oompa doctor --offline"), text(". The public website, browser app, and open-beta sync service are available; their availability does not authorize starting the current daemon or sending new hosted commands.")),
+          paragraph(text(`The v${publicContent.releaseVersion} release retains the read-only exact Codex default-profile observation admitted in v0.7.1. The display remains unavailable until the intended daemon publishes a matching fresh companion after its rollout gates pass. This does not change Ultra defaults, admit models, choose a route, or authorize a command.`)),
           releaseAdmissionNotice,
           { kind: "notice", label: "Current runtime hold", content: [text(publicContent.daemonRolloutNotice)] },
           paragraph(text("The operator must complete protected capacity activation, then prove the current daemon and every intended target before enabling writers. Installing a release, signing in, or loading a fresh browser tab does not substitute for those proofs. "), link("Release record", source("docs/beta-release.md")), text(" · "), link("Hosted rollout procedure", source("docs/hosted-sync.md#converge-command-lifecycle-capacity-before-writer-rollout"))),

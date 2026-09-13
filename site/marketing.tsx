@@ -70,7 +70,7 @@ export function renderMarketingPage(content: PublicContent): string {
         heading={content.hero.heading}
         headingId="oompa-title"
         name={content.productName}
-        notice={<><WonkaArtifact /><p className={sitePresentationClasses("installNote")}><strong>New machine setup is temporarily paused.</strong> This release candidate is not yet admitted, and current daemon and hosted command-writer rollout remains blocked on capacity. <a href="/docs/status/">Check current availability</a></p></>}
+        notice={<><WonkaArtifact /><p className={sitePresentationClasses("installNote")}><strong>New machine setup is temporarily paused.</strong> The v0.8.1 canonical GitHub artifact is admitted; its optional npm mirror requires separate admission, and current daemon and hosted command-writer rollout remains blocked on capacity. <a href="/docs/status/">Check current availability</a></p></>}
         summary={content.hero.summary}
         tone="paper"
       />
@@ -123,7 +123,7 @@ export function renderMarketingPage(content: PublicContent): string {
         heading="Keep the work in view."
         headingId="closing-heading"
         id="closing"
-        summary="The setup guide starts with the admitted predecessor and this candidate's unavailable install command. Wait for exact artifact admission and the capacity rollout prerequisites before starting a new machine."
+        summary="The setup guide starts with the admitted canonical artifact. The optional npm mirror and capacity rollout prerequisites remain separate before starting a new machine."
         tone="paper"
       />
     </MarketingPage>,
