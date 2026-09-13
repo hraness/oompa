@@ -188,6 +188,17 @@ publish an intent, upgrade an identity or clear the command-capacity hold. If
 the audit reports corruption, stop and diagnose a forward repair; never
 reinitialize existing quota authority or infer a missing counter's value.
 
+Repeat that read command with `diagnose` instead of `status` to identify the
+closed reason counts. It uses the same source, candidate, predecessor, target
+and runtime checks. It reports the first classification failure per identity:
+missing or duplicate authority, invalid counters or markers, exceeded ceilings,
+inconsistent totals, incomplete schema shape, or unexpected legacy memory data.
+It emits no identity, raw counter, cursor or content. Global service-authority
+corruption still refuses the scan. Counts are consistent within each bounded
+page; a multi-page scan is not a single snapshot. Diagnosis publishes no repair
+evidence and authorizes neither repair nor activation. Both read commands
+reject mutation acknowledgements and an output evidence path.
+
 For an admissible legacy or unmarked current ledger, repeat the same command
 with `repair` instead of `status` and add
 `--evidence-path /protected/release/quota-upgrade.json --execute --acknowledge-forward-only`.

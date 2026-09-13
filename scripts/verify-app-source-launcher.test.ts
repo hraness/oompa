@@ -520,7 +520,7 @@ describe("Oompa browser app source proof launcher", () => {
     }
   });
 
-  test("launches only the fixed quota operator after frozen installation and every source recheck", () => {
+  test.each(["status", "diagnose"])("launches quota %s only after frozen installation and every source recheck", (action) => {
     const fixture = launcherFixture({ remoteMain: "7".repeat(40) });
     const stdout = output();
     const stderr = output();
@@ -533,7 +533,7 @@ describe("Oompa browser app source proof launcher", () => {
       VERCEL_TOKEN: "fixture-secret",
     };
     try {
-      expect(executeAppSourceProofLauncher(quotaUpgradeArguments, {
+      expect(executeAppSourceProofLauncher(quotaUpgradeArguments.map((value) => value === "status" ? action : value), {
         ...fixture.dependencies, runtimeEnvironment, stderr: stderr.writer, stdout: stdout.writer,
       })).toBe(0);
       expect(stderr.lines).toEqual([]);
@@ -547,7 +547,7 @@ describe("Oompa browser app source proof launcher", () => {
       expect(sourceChecks.filter((index) => index < install)).toHaveLength(2);
       expect(sourceChecks.filter((index) => index > install && index < child)).toHaveLength(2);
       expect(commands[child]).toContain("/hra-app-source-verifier-");
-      expect(commands[child]).toContain("/source/scripts/manage-quota-upgrade.ts\0status\0--source-commit\0");
+      expect(commands[child]).toContain(`/source/scripts/manage-quota-upgrade.ts\0${action}\0--source-commit\0`);
       expect(commands[child]).not.toContain(`${fixture.root}/scripts/manage-quota-upgrade.ts`);
       expect(commands[child]?.endsWith(":none")).toBe(true);
       expect(commands.filter((event) => event.includes(":/trusted/bun\0")).every((event) =>

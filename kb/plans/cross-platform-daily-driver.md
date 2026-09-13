@@ -8,6 +8,16 @@ The owner selected macOS for their own execution and native macOS, Linux and Win
 
 ## Current evidence
 
+On 2026-09-13 the current candidate deployed with a bound attestation. Its quota
+upgrade audit found two legacy ledgers and one corrupt ledger. The bounded
+capacity diagnostic evaluated no quota ceiling for the identity with missing
+capacity, so headroom remains unproved. No quota repair or activation occurred.
+The new read-only quota diagnostic reports a closed count of each identity's
+first classification failure while preserving the existing upgrade refusal.
+Its source validation and delivery are in progress; no live reason result has
+yet been collected. Earlier predecessor/configuration observations below are
+historical and do not describe this newly deployed candidate.
+
 The v0.8.0 GitHub artifact is published from `2dae06babe263b22bd6f382b3f92018ebb80a25a`. Its immutable artifact admission is separate from daemon rollout. Current source requires protected two-pass capacity evidence, its exact activation receipt, and intended-target marker proofs before current hosted writers are available.
 
 macOS and Linux have installer and local storage implementations. Managed Claude authentication and new managed sessions remain Linux-only under the current platform policy. Existing exact personal Claude bindings have a separate macOS continuation path; that exception does not establish managed profile isolation. The existing [Claude process adapter](../../src/claude/process.ts) already admits Darwin process identity, and the [runtime manager](../../src/daemon/claude-runtime-adapter.ts) supports personal and isolated configuration-home selection. Managed macOS qualification can exercise these existing boundaries through a separately reviewed harness. It does not require replacing them with the experimental controller first. Native Windows installation, private-file custody, local transport, process identity, protected terminal I/O and release qualification remain incomplete. CI currently covers macOS and Ubuntu.

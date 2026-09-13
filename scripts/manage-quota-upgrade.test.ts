@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import fc from "fast-check";
+import { emptyQuotaUpgradeCorruptionCounts } from "../convex/quota";
 
 import {
-  finishQuotaUpgradeSource, manageQuotaUpgrade, parseQuotaUpgradeArguments, quotaUpgradeAuditPageSchema, quotaUpgradeFailureResult, quotaUpgradeMutationPageSchema,
+  finishQuotaUpgradeSource, manageQuotaUpgrade, parseQuotaUpgradeArguments, quotaUpgradeAuditPageSchema, quotaUpgradeDiagnosticPageSchema, quotaUpgradeFailureResult, quotaUpgradeMutationPageSchema,
   type QuotaUpgradeArguments, type QuotaUpgradeDependencies,
 } from "./manage-quota-upgrade";
 import { BoundedProcessCleanupUnprovenError, BoundedProcessInvocationGuard, BoundedProcessRecoveryJournalError } from "./bounded-process";
@@ -63,6 +64,100 @@ function world() {
 }
 
 describe("quota upgrade operator", () => {
+  const diagnosticOptions = { action: "diagnose" as const, sourceCommit, target,
+    deployEvidencePath: options.deployEvidencePath, previousDeployEvidencePath: options.previousDeployEvidencePath };
+  const diagnosticPage = { schemaVersion: 1 as const, continueCursor: "", isDone: true, scanned: 2,
+    legacy: 1, unmarkedCurrent: 0, current: 0, corrupt: 1,
+    reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 1 } };
+
+  test("diagnose rejects mutation flags and evidence paths before effects", async () => {
+    const readArguments = ["diagnose", ...arguments_.slice(1).filter((value, index, values) =>
+      value !== "--evidence-path" && values[index - 1] !== "--evidence-path"
+      && value !== "--execute" && value !== "--acknowledge-forward-only")];
+    expect(parseQuotaUpgradeArguments(readArguments)).toEqual(diagnosticOptions);
+    for (const extra of [["--execute"], ["--acknowledge-forward-only"], ["--evidence-path", "/protected/new.json"]]) {
+      expect(() => parseQuotaUpgradeArguments([...readArguments, ...extra])).toThrow();
+    }
+    const { dependencies, state } = world();
+    await expect(manageQuotaUpgrade({ ...diagnosticOptions, evidencePath: "/protected/new.json" }, dependencies))
+      .rejects.toMatchObject({ code: "usage_invalid" });
+    expect(state.calls).toEqual([]);
+  });
+
+  test("diagnose aggregates closed counts without reading or writing repair evidence", async () => {
+    const { dependencies } = world();
+    let pages = 0;
+    const result = await manageQuotaUpgrade(diagnosticOptions, { ...dependencies,
+      invoke: async (name, args) => {
+        expect(name).toBe("quota:diagnoseUserQuotaUpgradePage");
+        expect(args).toEqual({ expectedRuntimeAttestation: after, paginationOpts: { numItems: 8, cursor: pages === 0 ? null : "next" } });
+        pages += 1;
+        return { ...diagnosticPage, isDone: pages === 2, continueCursor: pages === 2 ? "" : "next" };
+      },
+      readIntent: () => { throw new Error("unexpected intent read"); },
+      writeIntent: () => { throw new Error("unexpected intent write"); },
+      readReceipt: () => { throw new Error("unexpected receipt read"); },
+      writeReceipt: () => { throw new Error("unexpected receipt write"); },
+    });
+    expect(result).toEqual({ schemaVersion: 1, kind: "quota_upgrade_diagnostic", state: "diagnostic_complete",
+      scanned: 4, legacy: 2, unmarkedCurrent: 0, current: 0, corrupt: 2,
+      reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 2 }, pages: 2,
+      consistency: "per_page_only", reasonSelection: "first_failure_per_identity", repairAuthorized: false, activationAuthorized: false });
+  });
+
+  test("diagnostic rejects missing, extra and inconsistent provider fields", async () => {
+    const missing = { ...diagnosticPage.reasons }; Reflect.deleteProperty(missing, "schema_shape");
+    for (const value of [null, {}, { ...diagnosticPage, rawUserId: "private" },
+      { ...diagnosticPage, reasons: missing }, { ...diagnosticPage, reasons: { ...diagnosticPage.reasons, other: 0 } },
+      { ...diagnosticPage, corrupt: 0 }, { ...diagnosticPage, reasons: emptyQuotaUpgradeCorruptionCounts() },
+      { ...diagnosticPage, reasons: { ...diagnosticPage.reasons, schema_shape: -1 } }]) {
+      expect(quotaUpgradeDiagnosticPageSchema.safeParse(value).success).toBe(false);
+      const { dependencies, state } = world();
+      await expect(manageQuotaUpgrade(diagnosticOptions, { ...dependencies, invoke: async () => value }))
+        .rejects.toMatchObject({ code: "provider_result_invalid" });
+      expect(state.mutations).toBe(0); expect(state.intent).toBeUndefined(); expect(state.receipts).toBe(0);
+    }
+  });
+
+  test("diagnostic parser preserves bounded partition counts through JSON round trips", () => {
+    fc.assert(fc.property(fc.integer({ min: 0, max: 8 }), fc.integer({ min: 0, max: 8 }), (legacy, corrupt) => {
+      const value = { ...diagnosticPage, scanned: legacy + corrupt, legacy, corrupt,
+        reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: corrupt } };
+      const parsed = quotaUpgradeDiagnosticPageSchema.safeParse(JSON.parse(JSON.stringify(value)) as unknown);
+      expect(parsed.success).toBe(legacy + corrupt <= 8);
+      if (parsed.success) expect(parsed.data).toEqual(value);
+      expect(quotaUpgradeDiagnosticPageSchema.safeParse({ ...value,
+        reasons: { ...value.reasons, schema_shape: corrupt + 1 } }).success).toBe(false);
+    }), { numRuns: 40 });
+  });
+
+  test("diagnostic refuses stalled cursors and bounded scan overflow", async () => {
+    for (const mode of ["empty", "repeat", "overflow"] as const) {
+      const { dependencies } = world(); let calls = 0;
+      await expect(manageQuotaUpgrade(diagnosticOptions, { ...dependencies, invoke: async () => {
+        calls += 1;
+        return { ...diagnosticPage, isDone: false, continueCursor: mode === "overflow" ? `page-${calls}` : "same",
+          scanned: mode === "empty" ? 0 : 8, legacy: mode === "empty" ? 0 : 8, corrupt: 0,
+          reasons: emptyQuotaUpgradeCorruptionCounts() };
+      } })).rejects.toMatchObject({ code: "pagination_invalid" });
+      expect(calls).toBeLessThanOrEqual(mode === "overflow" ? 626 : 2);
+    }
+  });
+
+  test("diagnostic refuses source, target or runtime changes before and after a page", async () => {
+    for (const phase of ["before", "after"] as const) for (const drift of ["source", "target", "runtime"] as const) {
+      const { dependencies } = world(); let pages = 0;
+      const changed = () => phase === "before" || pages > 0;
+      await expect(manageQuotaUpgrade(diagnosticOptions, { ...dependencies,
+        assertSource: () => { if (drift === "source" && changed()) throw new Error("changed"); },
+        verifyTarget: async () => { if (drift === "target" && changed()) throw new Error("changed"); },
+        readAttestation: async () => drift === "runtime" && changed() ? before : after,
+        invoke: async () => { pages += 1; return diagnosticPage; },
+      })).rejects.toThrow();
+      expect(pages).toBe(phase === "before" ? 0 : 1);
+    }
+  });
+
   test("joins exact source cleanup only after process custody permits it", async () => {
     let cleanups = 0;
     const source: HostedOperationSourceBinding = { path: "/protected/source-root/source", recoveryPath: "/protected/source-root",
