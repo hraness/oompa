@@ -577,8 +577,8 @@ dependencies = [
 
 [[package]]
 name = "desktop-foundation"
-version = "0.1.0"
-source = "git+https://github.com/hraness/desktop-foundation?tag=v0.1.0#9f5dfa36fe08299a31ceb6a09cdd4611b32f948e"
+version = "0.2.0"
+source = "git+https://github.com/hraness/desktop-foundation?tag=v0.2.0#3458a67dac9093a3d1b266fa981528fb8cccfa4c"
 dependencies = [
  "serde_json",
  "tauri",

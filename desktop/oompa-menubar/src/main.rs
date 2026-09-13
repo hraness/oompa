@@ -157,8 +157,8 @@ fn main() {
         None => return,
     };
     let host = Arc::new(OompaHost { daemon });
-    let options = Options { refresh: Duration::from_secs(5) };
-    if let Err(error) = desktop_foundation::run(tauri::generate_context!(), host, options) {
+    let options = Options { refresh: Duration::from_secs(5), companion_window: false };
+    if let Err(error) = desktop_foundation::run(tauri::generate_context!(), host, options, |b| b) {
         eprintln!("oompa-menubar: {error}");
         std::process::exit(1);
     }

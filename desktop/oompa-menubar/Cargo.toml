@@ -11,7 +11,7 @@ publish = false
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
-desktop-foundation = { git = "https://github.com/hraness/desktop-foundation", tag = "v0.1.0" }
+desktop-foundation = { git = "https://github.com/hraness/desktop-foundation", tag = "v0.2.0" }
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
