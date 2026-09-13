@@ -10,3 +10,5 @@ coverage/
 .vercel/
 tmp/
 .env.local
+desktop/target/
+desktop/oompa-menubar/gen/

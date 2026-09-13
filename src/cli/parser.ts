@@ -164,6 +164,7 @@ export type CliInvocation =
   | { kind: "init"; yes: boolean; json: boolean }
   | { kind: "daemon.start"; json: boolean }
   | { kind: "daemon.run" }
+  | { kind: "menubar"; json: boolean }
   | { kind: "remote"; command: RemoteCliCommand; idempotencyKey?: string; json: boolean }
   | ProtectedAuthLoginCliInvocation
   | ProtectedInteractionCliInvocation
@@ -230,6 +231,7 @@ Usage:
   oompa init [--yes] [--json]
   oompa doctor [--offline] [--json]
   oompa daemon start|status|stop|run
+  oompa menubar [--json]
   oompa account add|list|show|login|login-cancel|logout|usage|usage-history|switch|switch-recover
   oompa account list --provider codex|claude
   oompa usage auto status|on|off|inherit
@@ -341,6 +343,17 @@ Usage:
 Examples:
   oompa daemon start
   oompa daemon status --json`,
+  menubar: `Oompa menu bar
+
+Usage:
+  oompa menubar [--json]
+
+Launches the detached menu-bar companion, which shows daemon status and live
+sessions in the macOS status item. Build it once with
+\`cargo build --release --manifest-path desktop/Cargo.toml\`.
+
+Examples:
+  oompa menubar`,
   account: `Oompa account
 
 Usage:
@@ -2388,6 +2401,10 @@ export function parseCli(argv: readonly string[], cwd = process.cwd()): CliInvoc
     }
     if (action === "status" || action === "stop") return { kind: "command", command: { kind: `daemon.${action}` }, json };
     throw new CliUsageError("Unknown daemon action. Run `oompa daemon --help` for supported actions.");
+  }
+  if (group === "menubar") {
+    finish(cursor);
+    return { kind: "menubar", json };
   }
   if (group === "remote") {
     // The two policy switches are local daemon state, not a hosted command, so
