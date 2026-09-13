@@ -8,11 +8,32 @@ The owner selected macOS for their own execution and native macOS, Linux and Win
 
 ## Current evidence
 
+On 2026-09-13 the current candidate deployed with a bound attestation. Its quota
+upgrade audit found two legacy ledgers and one corrupt ledger. The bounded
+capacity diagnostic evaluated no quota ceiling for the identity with missing
+capacity, so headroom remains unproved. No quota repair or activation occurred.
+The new read-only quota diagnostic reports a closed count of each identity's
+first classification failure while preserving the existing upgrade refusal.
+Its source validation and delivery are in progress; no live reason result has
+yet been collected. Earlier predecessor/configuration observations below are
+historical and do not describe this newly deployed candidate.
+
 The v0.8.0 GitHub artifact is published from `2dae06babe263b22bd6f382b3f92018ebb80a25a`. Its immutable artifact admission is separate from daemon rollout. Current source requires protected two-pass capacity evidence, its exact activation receipt, and intended-target marker proofs before current hosted writers are available.
 
 macOS and Linux have installer and local storage implementations. Managed Claude authentication and new managed sessions remain Linux-only under the current platform policy. Existing exact personal Claude bindings have a separate macOS continuation path; that exception does not establish managed profile isolation. The existing [Claude process adapter](../../src/claude/process.ts) already admits Darwin process identity, and the [runtime manager](../../src/daemon/claude-runtime-adapter.ts) supports personal and isolated configuration-home selection. Managed macOS qualification can exercise these existing boundaries through a separately reviewed harness. It does not require replacing them with the experimental controller first. Native Windows installation, private-file custody, local transport, process identity, protected terminal I/O and release qualification remain incomplete. CI currently covers macOS and Ubuntu.
 
-The 2026-09-11 supported live capacity audit still reports one identity missing authority-reduction capacity and one service debt, with no lifecycle, terminal, orphan-cleanup or topology debt. It performs no reservation and therefore does not clear the historical hard-quota blocker. No repair or activation occurred. Hosted release attestation still names a predecessor, and four required canonical configuration names are absent.
+The retained 2026-09-11 supported live capacity audit reports one identity missing authority-reduction capacity and one service debt, with no lifecycle, terminal, orphan-cleanup or topology debt. It performs no reservation and therefore does not clear the historical hard-quota blocker. No repair or activation occurred. At that checkpoint, hosted release attestation named a predecessor and four required canonical configuration names were absent.
+
+The hosted status correction permits an unconfigured notification key only
+when `--require-attention-inactive` reads the exact generation-zero, absent,
+empty-outbox, empty-safety-fault tuple and all six core configuration names are
+present. The complete seven-name observation remains visible, and combining
+`--require-passed` with `--require-attention-key-ready` still requires both the
+name and the separate credential check. This changes only the read-only
+readiness classification;
+it does not configure notifications, clear capacity debt or activate writers.
+Focused regressions and independent source review pass. Complete Required CI
+and actual hosted readback remain pending.
 
 The initial source-only macOS controller passes 17 native fixture cases, including pre-exec gating, malformed control, cancellation, deadlines, owner control EOF, helper death and the survival of a deliberately detached finite descendant. Its pure protocol tests and source checks pass. The subsequent [stdio-v1 transport experiment](../../scripts/owned-controller/transport.md) passes 28 native cases, including those 17 controller cases, and 14 pure transport cases. The native run proves byte preservation, bounded blocked input and output, delayed output EOF, and closure of all 44 extra host descriptors. All exact fixture processes were collected and their private temporary roots removed. Independent review admitted the seven-file transport experiment for integration; the repository's final integration and delivery gates remain separate. These credential-free fixtures qualify their tested process and pipe behavior, not managed Claude authentication, Windows or a production writer.
 
