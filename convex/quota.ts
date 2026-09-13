@@ -1845,6 +1845,32 @@ type QuotaUpgradeClassification = Readonly<{
   identityRowId: Id<"storageUsageByUser">;
 }>;
 
+export const quotaUpgradeCorruptionReasons = [
+  "identity_missing", "service_authority", "duplicate_categories", "duplicate_resources",
+  "category_authority", "category_ceiling", "user_total", "service_total",
+  "resource_authority", "resource_ceiling", "identity_category_missing",
+  "memory_counters", "schema_shape", "legacy_memory_present", "unknown_authority",
+] as const;
+type QuotaUpgradeCorruptionReason = typeof quotaUpgradeCorruptionReasons[number];
+
+export const emptyQuotaUpgradeCorruptionCounts = (): Record<QuotaUpgradeCorruptionReason, number> => ({
+  identity_missing: 0, service_authority: 0, duplicate_categories: 0, duplicate_resources: 0,
+  category_authority: 0, category_ceiling: 0, user_total: 0, service_total: 0,
+  resource_authority: 0, resource_ceiling: 0, identity_category_missing: 0,
+  memory_counters: 0, schema_shape: 0, legacy_memory_present: 0, unknown_authority: 0,
+});
+
+class QuotaUpgradeClassificationError extends Error {
+  constructor(readonly reason: QuotaUpgradeCorruptionReason) {
+    // Preserve the existing audit and mutation refusal contract. Only the
+    // separate read-only diagnostic projects the closed reason count.
+    super("QUOTA_AUTHORITY_CORRUPT");
+  }
+}
+const quotaUpgradeCorrupt = (reason: QuotaUpgradeCorruptionReason): never => {
+  throw new QuotaUpgradeClassificationError(reason);
+};
+
 // This list names one reviewed predecessor schema. Deriving it by subtracting
 // today's additions would silently authorize future unknown upgrade shapes.
 const predecessorQuotaCategories = [
@@ -1886,11 +1912,13 @@ async function classifyUserQuotaUpgrade(
       .withIndex("by_user_and_resource", (query) => query.eq("userId", userId))
       .take(USER_QUOTA_RESOURCES.length + 1),
   ]);
-  if (user === null || serviceRows.length !== 1) return corrupt();
+  if (user === null) return quotaUpgradeCorrupt("identity_missing");
+  if (serviceRows.length !== 1) return quotaUpgradeCorrupt("service_authority");
   const service = requireHardServiceAuthority(serviceRows[0]);
   const byCategory = new Map(categories.map((row) => [row.category, row]));
   const byResource = new Map(resources.map((row) => [row.resource, row]));
-  if (byCategory.size !== categories.length || byResource.size !== resources.length) return corrupt();
+  if (byCategory.size !== categories.length) return quotaUpgradeCorrupt("duplicate_categories");
+  if (byResource.size !== resources.length) return quotaUpgradeCorrupt("duplicate_resources");
   let logicalBytes = 0;
   let records = 0;
   for (const row of categories) {
@@ -1901,30 +1929,29 @@ async function classifyUserQuotaUpgrade(
       || !safeCounter(row.records)
       || !isFiniteTimestamp(row.updatedAt)
       || !canonicalUsagePair(row.logicalBytes, row.records)
-      || row.logicalBytes > CATEGORY_QUOTAS[row.category].logicalBytes
-      || row.records > CATEGORY_QUOTAS[row.category].records
-    ) return corrupt();
+    ) return quotaUpgradeCorrupt("category_authority");
+    if (row.logicalBytes > CATEGORY_QUOTAS[row.category].logicalBytes
+      || row.records > CATEGORY_QUOTAS[row.category].records) return quotaUpgradeCorrupt("category_ceiling");
     logicalBytes += row.logicalBytes;
     records += row.records;
-    if (!safeCounter(logicalBytes) || !safeCounter(records)) return corrupt();
+    if (!safeCounter(logicalBytes) || !safeCounter(records)) return quotaUpgradeCorrupt("user_total");
   }
   if (
     logicalBytes > USER_TOTAL_QUOTA.logicalBytes
     || records > USER_TOTAL_QUOTA.records
-    || logicalBytes > service.userLogicalBytes
-    || records > service.userRecords
     || !canonicalUsagePair(logicalBytes, records)
-  ) return corrupt();
+  ) return quotaUpgradeCorrupt("user_total");
+  if (logicalBytes > service.userLogicalBytes || records > service.userRecords) return quotaUpgradeCorrupt("service_total");
   for (const row of resources) {
     if (
       !USER_QUOTA_RESOURCES.includes(row.resource)
       || !safeCounter(row.records)
       || !isFiniteTimestamp(row.updatedAt)
-      || row.records > USER_RESOURCE_QUOTAS[row.resource]
-    ) return corrupt();
+    ) return quotaUpgradeCorrupt("resource_authority");
+    if (row.records > USER_RESOURCE_QUOTAS[row.resource]) return quotaUpgradeCorrupt("resource_ceiling");
   }
   const identity = byCategory.get("identity");
-  if (identity === undefined) return corrupt();
+  if (identity === undefined) return quotaUpgradeCorrupt("identity_category_missing");
   const current = categories.length === QUOTA_CATEGORIES.length
     && resources.length === USER_QUOTA_RESOURCES.length
     && QUOTA_CATEGORIES.every((category) => byCategory.has(category))
@@ -1934,7 +1961,7 @@ async function classifyUserQuotaUpgrade(
     const memorySpace = byResource.get("memory_space");
     // Every charged memory space is also one record in its category. A
     // complete ledger with contradictory counters must not acquire a marker.
-    if (memory === undefined || memorySpace === undefined || memorySpace.records > memory.records) return corrupt();
+    if (memory === undefined || memorySpace === undefined || memorySpace.records > memory.records) return quotaUpgradeCorrupt("memory_counters");
     return {
       disposition: identity.quotaSchemaVersion === undefined ? "unmarked_current" : "current",
       identityRowId: identity._id,
@@ -1946,7 +1973,7 @@ async function classifyUserQuotaUpgrade(
     || resources.length !== predecessorQuotaResources.length
     || !predecessorQuotaCategories.every((category) => byCategory.has(category))
     || !predecessorQuotaResources.every((resource) => byResource.has(resource))
-  ) return corrupt();
+  ) return quotaUpgradeCorrupt("schema_shape");
   const [space, operation] = await Promise.all([
     ctx.db.query("memorySpaces")
       .withIndex("by_user_and_public_id", (query) => query.eq("userId", userId)).take(1),
@@ -1955,7 +1982,7 @@ async function classifyUserQuotaUpgrade(
   ]);
   // Even an orphan operation disproves zero usage. Never infer absence from
   // missing space rows or inspect another owner's content.
-  if (space.length !== 0 || operation.length !== 0) return corrupt();
+  if (space.length !== 0 || operation.length !== 0) return quotaUpgradeCorrupt("legacy_memory_present");
   return { disposition: "legacy", identityRowId: identity._id };
 }
 
@@ -2001,6 +2028,41 @@ export async function auditUserQuotaUpgradePageForRuntime(
   return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone, scanned: page.page.length, schemaVersion: 1 as const };
 }
 
+/** One first-failure reason per inconsistent ledger, never identities or raw counters. */
+export async function diagnoseUserQuotaUpgradePageForRuntime(
+  ctx: QueryCtx,
+  args: QuotaUpgradePageArgs,
+  runtime: QuotaUpgradeRuntime,
+) {
+  requireQuotaUpgradeRuntime(args.expectedRuntimeAttestation, runtime);
+  requireQuotaUpgradePageSize(args.paginationOpts.numItems);
+  await requireHardQuotaAuthority(ctx);
+  const page = await ctx.db.query("users").paginate({
+    cursor: args.paginationOpts.cursor,
+    numItems: args.paginationOpts.numItems,
+    maximumRowsRead: maximumUserQuotaUpgradeBatch,
+  });
+  if (page.page.length > maximumUserQuotaUpgradeBatch) return corrupt();
+  const reasons = emptyQuotaUpgradeCorruptionCounts();
+  const counts = { legacy: 0, unmarkedCurrent: 0, current: 0, corrupt: 0 };
+  for (const user of page.page) {
+    try {
+      const result = await classifyUserQuotaUpgrade(ctx, user._id);
+      switch (result.disposition) {
+        case "legacy": counts.legacy += 1; break;
+        case "unmarked_current": counts.unmarkedCurrent += 1; break;
+        case "current": counts.current += 1; break;
+      }
+    } catch (error: unknown) {
+      if (!(error instanceof Error) || error.message !== "QUOTA_AUTHORITY_CORRUPT") throw error;
+      counts.corrupt += 1;
+      reasons[error instanceof QuotaUpgradeClassificationError ? error.reason : "unknown_authority"] += 1;
+    }
+  }
+  return { ...counts, reasons, continueCursor: page.continueCursor, isDone: page.isDone,
+    scanned: page.page.length, schemaVersion: 1 as const };
+}
+
 export async function upgradeUserQuotaPageForRuntime(
   ctx: MutationCtx,
   args: QuotaUpgradePageArgs,
@@ -2043,6 +2105,14 @@ export const auditUserQuotaUpgradePage = internalQuery({
     paginationOpts: userQuotaUpgradePaginationOpts,
   },
   handler: async (ctx, args) => await auditUserQuotaUpgradePageForRuntime(ctx, args, RELEASE_ATTESTATION),
+});
+
+export const diagnoseUserQuotaUpgradePage = internalQuery({
+  args: {
+    expectedRuntimeAttestation: runtimeReleaseAttestation,
+    paginationOpts: userQuotaUpgradePaginationOpts,
+  },
+  handler: async (ctx, args) => await diagnoseUserQuotaUpgradePageForRuntime(ctx, args, RELEASE_ATTESTATION),
 });
 
 /** One atomic page. Any refusal rolls back additions for every selected user. */

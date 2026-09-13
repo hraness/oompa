@@ -188,6 +188,17 @@ publish an intent, upgrade an identity or clear the command-capacity hold. If
 the audit reports corruption, stop and diagnose a forward repair; never
 reinitialize existing quota authority or infer a missing counter's value.
 
+Repeat that read command with `diagnose` instead of `status` to identify the
+closed reason counts. It uses the same source, candidate, predecessor, target
+and runtime checks. It reports the first classification failure per identity:
+missing or duplicate authority, invalid counters or markers, exceeded ceilings,
+inconsistent totals, incomplete schema shape, or unexpected legacy memory data.
+It emits no identity, raw counter, cursor or content. Global service-authority
+corruption still refuses the scan. Counts are consistent within each bounded
+page; a multi-page scan is not a single snapshot. Diagnosis publishes no repair
+evidence and authorizes neither repair nor activation. Both read commands
+reject mutation acknowledgements and an output evidence path.
+
 For an admissible legacy or unmarked current ledger, repeat the same command
 with `repair` instead of `status` and add
 `--evidence-path /protected/release/quota-upgrade.json --execute --acknowledge-forward-only`.
@@ -1088,6 +1099,15 @@ row per table and reports only zero-or-one occupancy; it does not expose a
 candidate, recipient, delivery record, fault record, or execution lease. Keep
 this flag on the inactive checkpoint only; a later reviewed enablement phase
 must define its own production proof.
+At this exact inactive checkpoint, `OOMPA_ATTENTION_RESEND_API_KEY` may be
+absent when all six other managed names are present and
+`--require-attention-key-ready` was not requested. The normal source,
+bootstrap and admission checks still decide `preflight_passed` or `live`.
+The environment observation remains unchanged: `missingRequiredNames` still
+lists the absent attention key and `requiredNamesPresent` remains `false`.
+Without the requested exact inactive observation, all seven names remain
+required for a passing status. Disabled notification control, nonzero
+generation, occupied outbox or safety faults cannot use this exception.
 Add `--require-attention-key-ready` together with `--require-passed` to require
 the current runtime's separate boolean credential check. Its named internal
 query returns only `{dedicatedKeyReady}`, which hosted status exposes as
@@ -1098,6 +1118,9 @@ control is inactive. Without this flag, status makes no credential-readiness
 claim. A true value does not prove Resend account identity, key domain scope,
 sender verification, consent, or notification enablement. Combine it with
 `--require-attention-inactive` when checking a still-inactive configured target.
+With `--require-passed`, this explicit key gate requires the attention
+environment name as well as the separate credential-readiness result;
+inactive control never substitutes for either check.
 Malformed, unavailable, or ambiguous provider reads exit one; unresolved local
 custody exits 75.
 
@@ -1118,8 +1141,9 @@ Convex-owned runtime configuration, not an Oompa-managed protected value, so it
 is intentionally neither required nor reported by this command.
 
 `preflight_passed` means the bound release attestation names the supplied
-source commit, the seven managed names are present, and the deployment presents
-the exact first-bootstrap authority frame with open generation-zero admission.
+source commit, the managed names satisfy the requirements above, including
+the narrowly defined inactive attention-key exception, and the deployment
+presents the exact first-bootstrap authority frame with open generation-zero admission.
 `live` means the same runtime and environment facts hold, the first invitation
 was accepted (the control row carries a durable accepted timestamp ordered
 after bootstrap completion), and admission is open at any generation. An

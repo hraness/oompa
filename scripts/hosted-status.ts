@@ -4,6 +4,8 @@ import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { z } from "zod";
 
+import { oompaAttentionResendApiKeyEnvironmentName } from "../convex/resendApiKey";
+
 import { createBoundedAuthorityFetch, type AuthorityFetcher } from "./bounded-authority-fetch";
 import {
   BoundedProcessInvocationGuard,
@@ -473,8 +475,14 @@ export async function readHostedStatus(options: HostedStatusOptions): Promise<Ho
     );
   }
 
-  const runtimeCurrent = releaseAttestation.state === "current"
-    && missingRequiredNames.length === 0;
+  // Keep the complete seven-name observation visible. Only this exact inactive
+  // checkpoint can omit the sending key; an explicit key-readiness gate cannot.
+  const inactiveAttentionKeyAbsent = options.requireAttentionKeyReady !== true
+    && attentionNotifications?.state === "inactive"
+    && missingRequiredNames.length === 1
+    && missingRequiredNames[0] === oompaAttentionResendApiKeyEnvironmentName;
+  const environmentReady = missingRequiredNames.length === 0 || inactiveAttentionKeyAbsent;
+  const runtimeCurrent = releaseAttestation.state === "current" && environmentReady;
   const preflightPassed = runtimeCurrent
     && bootstrapRead.state === "ready"
     && admission.state === "open"
@@ -502,7 +510,7 @@ export async function readHostedStatus(options: HostedStatusOptions): Promise<Ho
         ? "inspect_preflight"
         : releaseAttestation.state !== "current"
           ? "inspect_release_attestation"
-          : missingRequiredNames.length !== 0
+          : !environmentReady
             ? "configure_hosted_sync"
             : bootstrapRead.state === "uninitialized"
               ? "bootstrap_hosted_sync"

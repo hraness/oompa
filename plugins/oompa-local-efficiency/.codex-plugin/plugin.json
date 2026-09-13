@@ -1,6 +1,6 @@
 {
   "name": "oompa-local-efficiency",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Managed Codex and Claude autonomy, local scheduling, CI isolation, and guarded maintenance for Hraness repository work.",
   "author": {
     "name": "Hraness",

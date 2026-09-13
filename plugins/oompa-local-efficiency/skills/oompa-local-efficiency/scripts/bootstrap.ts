@@ -73,6 +73,7 @@ function legacyName(name: string): string {
 
 const commandScripts = Object.freeze([
   "host-run.ts",
+  "host-queue.ts",
   "validation-run.ts",
   "workspace-audit.ts",
   "session-audit.ts",
@@ -241,6 +242,7 @@ export function claudeAutoModeCapability(
 
 const commandNames = Object.freeze([
   Object.freeze(["oompa-host-run", "host-run.ts"] as const),
+  Object.freeze(["oompa-host-queue", "host-queue.ts"] as const),
   Object.freeze(["oompa-validate", "validation-run.ts"] as const),
   Object.freeze(["oompa-workspace-audit", "workspace-audit.ts"] as const),
   Object.freeze(["oompa-session-audit", "session-audit.ts"] as const),

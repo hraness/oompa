@@ -4,7 +4,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { z } from "zod";
 
-import { SERVICE_TOTAL_QUOTA } from "../convex/quota";
+import { emptyQuotaUpgradeCorruptionCounts, quotaUpgradeCorruptionReasons, SERVICE_TOTAL_QUOTA } from "../convex/quota";
 import { createBoundedAuthorityFetch } from "./bounded-authority-fetch";
 import {
   BoundedProcessInvocationGuard,
@@ -34,6 +34,16 @@ export const quotaUpgradeAuditPageSchema = page.extend({
 }).strict().superRefine((value, context) => {
   if (value.legacy + value.unmarkedCurrent + value.current + value.corrupt !== value.scanned) {
     context.addIssue({ code: "custom", message: "quota_upgrade_counts_invalid" });
+  }
+});
+
+export const quotaUpgradeDiagnosticPageSchema = page.extend({
+  legacy: count, unmarkedCurrent: count, current: count, corrupt: count,
+  reasons: z.record(z.enum(quotaUpgradeCorruptionReasons), count),
+}).strict().superRefine((value, context) => {
+  if (value.legacy + value.unmarkedCurrent + value.current + value.corrupt !== value.scanned
+    || Object.values(value.reasons).reduce((total, amount) => total + amount, 0) !== value.corrupt) {
+    context.addIssue({ code: "custom", message: "quota_upgrade_diagnostic_counts_invalid" });
   }
 });
 
@@ -74,7 +84,7 @@ const absolute = (value: string | undefined): string => {
 };
 
 export type QuotaUpgradeArguments = Readonly<{
-  action: "status" | "repair"; sourceCommit: string; deployEvidencePath: string;
+  action: "status" | "diagnose" | "repair"; sourceCommit: string; deployEvidencePath: string;
   previousDeployEvidencePath: string; evidencePath?: string; target: ConvexTarget;
 }>;
 
@@ -82,7 +92,7 @@ export function parseQuotaUpgradeArguments(args: readonly string[]): QuotaUpgrad
   let targetArgs: ReturnType<typeof parseConvexTargetArguments>;
   try { targetArgs = parseConvexTargetArguments(args); } catch { return refuse("usage_invalid"); }
   const [action, ...rest] = targetArgs.otherArguments;
-  if (action !== "status" && action !== "repair") return refuse("usage_invalid");
+  if (action !== "status" && action !== "diagnose" && action !== "repair") return refuse("usage_invalid");
   const values = new Map<string, string>();
   const flags = new Set<string>();
   const names = ["--source-commit", "--deploy-evidence", "--previous-deploy-evidence", "--evidence-path"];
@@ -102,7 +112,7 @@ export function parseQuotaUpgradeArguments(args: readonly string[]): QuotaUpgrad
   const deployEvidencePath = absolute(values.get("--deploy-evidence"));
   const previousDeployEvidencePath = absolute(values.get("--previous-deploy-evidence"));
   const evidencePath = values.has("--evidence-path") ? absolute(values.get("--evidence-path")) : undefined;
-  if ((action === "status" && (flags.size !== 0 || evidencePath !== undefined))
+  if ((action !== "repair" && (flags.size !== 0 || evidencePath !== undefined))
     || (action === "repair" && (flags.size !== 2 || evidencePath === undefined))) return refuse("usage_invalid");
   const paths = [deployEvidencePath, previousDeployEvidencePath, ...(evidencePath === undefined ? [] : [evidencePath, `${evidencePath}.intent`])];
   if (paths.some((path) => path.length > 4096) || new Set(paths).size !== paths.length) return refuse("usage_invalid");
@@ -116,7 +126,7 @@ type PageArguments = Readonly<{
   expectedRuntimeAttestation: RuntimeReleaseAttestation;
   paginationOpts: Readonly<{ numItems: number; cursor: string | null }>;
 }>;
-type FunctionName = "quota:auditUserQuotaUpgradePage" | "quota:upgradeUserQuotaPage";
+type FunctionName = "quota:auditUserQuotaUpgradePage" | "quota:diagnoseUserQuotaUpgradePage" | "quota:upgradeUserQuotaPage";
 
 export type QuotaUpgradeDependencies = Readonly<{
   assertSource: () => void | Promise<void>;
@@ -132,6 +142,7 @@ export type QuotaUpgradeDependencies = Readonly<{
 
 /** Closed migration orchestration; adapters own source, target, protected evidence and process custody. */
 export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, dependencies: QuotaUpgradeDependencies) {
+  if (options.action === "diagnose" && options.evidencePath !== undefined) return refuse("usage_invalid");
   const target = parseConvexTarget(options.target);
   await dependencies.assertSource();
   const candidate = dependencies.readCandidate(options.deployEvidencePath);
@@ -156,6 +167,33 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
       || !same(dependencies.readCandidate(options.previousDeployEvidencePath), predecessor)) refuse("binding_changed");
     await dependencies.assertSource();
   };
+  if (options.action === "diagnose") {
+    let total: Audit = { scanned: 0, legacy: 0, unmarkedCurrent: 0, current: 0, corrupt: 0 };
+    const reasons = emptyQuotaUpgradeCorruptionCounts();
+    let cursor: string | null = null;
+    const seen = new Set<string>();
+    for (let index = 0; index < maximumPages; index += 1) {
+      await prove();
+      const parsed = quotaUpgradeDiagnosticPageSchema.safeParse(await dependencies.invoke("quota:diagnoseUserQuotaUpgradePage", {
+        expectedRuntimeAttestation: candidate.after, paginationOpts: { numItems: pageSize, cursor },
+      }));
+      await prove();
+      if (!parsed.success) return refuse("provider_result_invalid");
+      const value = parsed.data;
+      total = { scanned: total.scanned + value.scanned, legacy: total.legacy + value.legacy,
+        unmarkedCurrent: total.unmarkedCurrent + value.unmarkedCurrent, current: total.current + value.current,
+        corrupt: total.corrupt + value.corrupt };
+      if (total.scanned > SERVICE_TOTAL_QUOTA.identities) return refuse("pagination_invalid");
+      for (const reason of quotaUpgradeCorruptionReasons) reasons[reason] += value.reasons[reason];
+      if (value.isDone) return { schemaVersion: 1 as const, kind: "quota_upgrade_diagnostic" as const,
+        state: "diagnostic_complete" as const, ...total, reasons, pages: index + 1,
+        consistency: "per_page_only" as const, reasonSelection: "first_failure_per_identity" as const,
+        repairAuthorized: false as const, activationAuthorized: false as const };
+      if (value.scanned === 0 || value.continueCursor === "" || seen.has(value.continueCursor)) return refuse("pagination_invalid");
+      cursor = value.continueCursor; seen.add(cursor);
+    }
+    return refuse("pagination_invalid");
+  }
   const audit = async (): Promise<Audit> => {
     let total: Audit = { scanned: 0, legacy: 0, unmarkedCurrent: 0, current: 0, corrupt: 0 };
     let cursor: string | null = null;

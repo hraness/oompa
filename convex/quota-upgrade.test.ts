@@ -7,6 +7,8 @@ import fc from "fast-check";
 import {
   logicalDocumentBytes,
   auditUserQuotaUpgradePageForRuntime,
+  diagnoseUserQuotaUpgradePageForRuntime,
+  emptyQuotaUpgradeCorruptionCounts,
   upgradeUserQuotaPageForRuntime,
   initializeUserQuotaAuthority,
   reserveQuotaForInsert,
@@ -36,14 +38,19 @@ const testModules = {
   "./quotaUpgradeFixture.ts": async () => ({
     audit: internalQuery({ args: entryArgs, handler: async (ctx, args) =>
       await auditUserQuotaUpgradePageForRuntime(ctx, args, boundRuntime) }),
+    diagnose: internalQuery({ args: entryArgs, handler: async (ctx, args) =>
+      await diagnoseUserQuotaUpgradePageForRuntime(ctx, args, boundRuntime) }),
     upgrade: internalMutation({ args: entryArgs, handler: async (ctx, args) =>
       await upgradeUserQuotaPageForRuntime(ctx, args, boundRuntime) }),
   }),
 };
 type Args = Record<string, Value>;
 type Audit = Awaited<ReturnType<typeof auditUserQuotaUpgradePageForRuntime>>;
+type Diagnostic = Awaited<ReturnType<typeof diagnoseUserQuotaUpgradePageForRuntime>>;
 type Upgrade = Awaited<ReturnType<typeof upgradeUserQuotaPageForRuntime>>;
 const audit = makeFunctionReference<"query", Args, Audit>("quotaUpgradeFixture:audit");
+const diagnose = makeFunctionReference<"query", Args, Diagnostic>("quotaUpgradeFixture:diagnose");
+const productionDiagnose = makeFunctionReference<"query", Args, Diagnostic>("quota:diagnoseUserQuotaUpgradePage");
 const upgrade = makeFunctionReference<"mutation", Args, Upgrade>("quotaUpgradeFixture:upgrade");
 const productionAudit = makeFunctionReference<"query", Args, Audit>("quota:auditUserQuotaUpgradePage");
 const productionUpgrade = makeFunctionReference<"mutation", Args, Upgrade>("quota:upgradeUserQuotaPage");
@@ -157,12 +164,40 @@ async function addMemorySpace(world: World, charge = false) {
 }
 
 describe("predecessor hosted quota upgrade", () => {
+  test("diagnostic conserves all data and counts each disposition without identity output", async () => {
+    const world = await predecessorQuotaWorld();
+    await world.runtime.mutation(upgrade, pageArgs);
+    const unmarked = await world.addUser();
+    await addCurrentRows({ ...world, userId: unmarked });
+    await world.addUser();
+    const corrupt = await world.addUser();
+    await world.runtime.run(async (ctx) => {
+      const identity = await ctx.db.query("storageUsageByUser")
+        .withIndex("by_user_and_category", (query) => query.eq("userId", corrupt).eq("category", "identity")).unique();
+      if (identity === null) throw new Error("missing diagnostic fixture");
+      await ctx.db.patch(identity._id, { quotaSchemaVersion: 3 });
+    });
+    const before = await snapshot(world);
+    const result = await world.runtime.query(diagnose, pageArgs);
+    expect(result).toEqual({ schemaVersion: 1, continueCursor: expect.any(String), isDone: true,
+      scanned: 4, legacy: 1, unmarkedCurrent: 1, current: 1, corrupt: 1,
+      reasons: { ...emptyQuotaUpgradeCorruptionCounts(), category_authority: 1 } });
+    expect(await snapshot(world)).toEqual(before);
+    await expect(world.runtime.query(productionDiagnose, pageArgs)).rejects.toThrow("QUOTA_UPGRADE_RUNTIME_CHANGED");
+    await expect(world.runtime.query(diagnose, { ...pageArgs, expectedRuntimeAttestation: {
+      ...boundRuntime, runtimeSourceCommit: "c".repeat(40),
+    } })).rejects.toThrow("QUOTA_UPGRADE_RUNTIME_CHANGED");
+  });
+
   test("empty pages still require durable hard service authority", async () => {
     const runtime = convexTest(schema, testModules);
     await expect(runtime.query(audit, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+    await expect(runtime.query(diagnose, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
     await expect(runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
     await runtime.mutation(genesisHardAuthority, {});
     expect(await runtime.query(audit, pageArgs)).toMatchObject({ scanned: 0, corrupt: 0, current: 0, isDone: true });
+    expect(await runtime.query(diagnose, pageArgs)).toMatchObject({ scanned: 0, corrupt: 0,
+      reasons: emptyQuotaUpgradeCorruptionCounts(), isDone: true });
     expect(await runtime.mutation(upgrade, pageArgs)).toMatchObject({ scanned: 0, marked: 0, upgraded: 0, isDone: true });
   });
 
@@ -292,6 +327,7 @@ describe("predecessor hosted quota upgrade", () => {
       { ...boundRuntime, previousDeployDigest: "d".repeat(64) }]) {
       const args = { ...pageArgs, expectedRuntimeAttestation };
       await expect(world.runtime.query(audit, args)).rejects.toThrow("QUOTA_UPGRADE_RUNTIME_CHANGED");
+      await expect(world.runtime.query(diagnose, args)).rejects.toThrow("QUOTA_UPGRADE_RUNTIME_CHANGED");
       await expect(world.runtime.mutation(upgrade, args)).rejects.toThrow("QUOTA_UPGRADE_RUNTIME_CHANGED");
     }
     for (const expectedRuntimeAttestation of [unbound, boundRuntime]) {
@@ -303,6 +339,7 @@ describe("predecessor hosted quota upgrade", () => {
     for (const numItems of [0, 9, -1, 1.5]) {
       const args = { ...pageArgs, paginationOpts: { cursor: null, numItems } };
       await expect(world.runtime.query(audit, args)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+      await expect(world.runtime.query(diagnose, args)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
       await expect(world.runtime.mutation(upgrade, args)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
     }
     expect(await snapshot(world)).toEqual(before);
@@ -341,6 +378,9 @@ describe("predecessor hosted quota upgrade", () => {
       });
       const before = await snapshot(world);
       expect(await world.runtime.query(audit, pageArgs)).toMatchObject({ corrupt: 1, legacy: 0 });
+      expect(await world.runtime.query(diagnose, pageArgs)).toMatchObject({ corrupt: 1, legacy: 0,
+        reasons: { ...emptyQuotaUpgradeCorruptionCounts(),
+          [duplicate ? "duplicate_categories" : category === "identity" ? "identity_category_missing" : "schema_shape"]: 1 } });
       await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
       expect(await snapshot(world)).toEqual(before);
     }), { numRuns: 30 });
@@ -378,6 +418,8 @@ describe("predecessor hosted quota upgrade", () => {
       });
       const before = await snapshot(world);
       expect(await world.runtime.query(audit, pageArgs)).toMatchObject({ corrupt: 1, legacy: 0 });
+      expect(await world.runtime.query(diagnose, pageArgs)).toMatchObject({ corrupt: 1, legacy: 0,
+        reasons: { ...emptyQuotaUpgradeCorruptionCounts(), legacy_memory_present: 1 } });
       await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
       expect(await snapshot(world)).toEqual(before);
     }
@@ -458,8 +500,20 @@ describe("predecessor hosted quota upgrade", () => {
       const before = await snapshot(world);
       if (kind === "service_split_mismatch") {
         await expect(world.runtime.query(audit, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+        await expect(world.runtime.query(diagnose, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
       } else {
         expect(await world.runtime.query(audit, pageArgs)).toMatchObject({ corrupt: 1, legacy: 0 });
+        const expectedReasons = {
+          partial_category: "schema_shape", partial_resource: "schema_shape",
+          marked_category_missing: "schema_shape", marked_resource_missing: "schema_shape", marked_both_missing: "schema_shape",
+          missing_resource: "schema_shape", duplicate_resource: "duplicate_resources",
+          future_marker: "category_authority", old_marker: "category_authority", misplaced_marker: "category_authority",
+          negative_bytes: "category_authority", fractional_records: "resource_authority", incoherent_pair: "category_authority",
+          category_limit: "category_ceiling", resource_limit: "resource_ceiling", service_below_owner: "service_total",
+          invalid_timestamp: "category_authority", memory_resource_mismatch: "memory_counters",
+        } as const;
+        expect(await world.runtime.query(diagnose, pageArgs)).toMatchObject({ corrupt: 1, legacy: 0,
+          reasons: { ...emptyQuotaUpgradeCorruptionCounts(), [expectedReasons[kind]]: 1 } });
       }
       await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
       expect(await snapshot(world)).toEqual(before);
@@ -474,9 +528,15 @@ describe("predecessor hosted quota upgrade", () => {
       { maximumBytesRead: 1000000 }, { id: 1 }, { unknown: true }]) {
       const args = { ...pageArgs, paginationOpts: { ...pageArgs.paginationOpts, ...extra } };
       await expect(world.runtime.query(audit, args)).rejects.toThrow();
+      await expect(world.runtime.query(diagnose, args)).rejects.toThrow();
       await expect(world.runtime.mutation(upgrade, args)).rejects.toThrow();
     }
     expect(await snapshot(world)).toEqual(before);
+    const diagnosticFirst = await world.runtime.query(diagnose, pageArgs);
+    expect(diagnosticFirst).toMatchObject({ scanned: 8, legacy: 8, isDone: false });
+    expect(await world.runtime.query(diagnose, { ...pageArgs,
+      paginationOpts: { cursor: diagnosticFirst.continueCursor, numItems: 8 },
+    })).toMatchObject({ scanned: 2, legacy: 2, isDone: true });
     const first = await world.runtime.mutation(upgrade, pageArgs);
     expect(first).toMatchObject({ scanned: 8, upgraded: 8, isDone: false });
     const second = await world.runtime.mutation(upgrade, {
