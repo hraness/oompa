@@ -39,7 +39,7 @@ function inlineContent(content: readonly InlineContent[], styleLinks: boolean): 
 export function renderMarketingHeader(content: PublicContent, currentPath: string): string {
   return renderToStaticMarkup(
     <MarketingSiteHeader
-      className={`${mobileHeaderFlowClassName()}${currentPath === "/" ? " hraness-marketing-header-surface" : ""}`}
+      className={`${mobileHeaderFlowClassName()} hraness-material-chrome${currentPath === "/" ? " hraness-marketing-header-surface" : ""}`}
       trailing={<SiteAppearanceMenu />}
       action={{ emphasis: "primary", href: content.links.app, label: "Open Oompa" }}
       brand={content.productName}
@@ -65,7 +65,7 @@ export function renderMarketingPage(content: PublicContent): string {
         ]}
         align="start"
         boundary={content.hero.boundary}
-        className={productHeroClassName()}
+        className={`${productHeroClassName()} hraness-material-wall`}
         frame={<ProductPreview />}
         heading={content.hero.heading}
         headingId="oompa-title"

@@ -9,6 +9,7 @@ import {
   isAuthoritySupervisorArtifactRelativePath,
 } from "./authority-supervisor-artifact";
 import { snapshotMarketingPreset } from "./marketing-preset";
+import { checkLanternMaterialSnapshot } from "../site/vendor/lantern-material/check.mjs";
 
 const allowedPublicScopes = new Set([
   "agentclientprotocol",
@@ -147,7 +148,21 @@ const editorialWebp = /^site\/images\/editorial\/[a-z0-9]+(?:-[a-z0-9]+)*(?:-384
 const webpChunkTypes = new Set(["VP8 ", "VP8L", "VP8X"]);
 const marketingDirectory = "site/vendor/marketing-preset";
 const marketingDeclaration = `${marketingDirectory}/check.d.mts`;
+const materialDirectory = "site/vendor/lantern-material";
+const materialDeclaration = `${materialDirectory}/check.d.mts`;
 const marketingFont = "fonts/instrument-serif/instrument-serif-latin-400.woff2";
+
+/** One additional declaration path; all snapshot text still receives the public scan. */
+async function assertMaterialPublicSource(root: string, label: string): Promise<void> {
+  try {
+    const directory = join(await realpath(root), materialDirectory);
+    assert.equal(await realpath(directory), directory);
+    const manifest = await checkLanternMaterialSnapshot(directory);
+    assert.equal(manifest.source.commit, "eccb0341d8d0ba960a0f02248cf59888062afb0a");
+  } catch {
+    throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
+  }
+}
 
 /** One reviewed licensed binary, inside the complete canonical source inventory.
  * Neither its suffix nor caller-controlled provenance authorizes other bytes. */
@@ -201,8 +216,9 @@ async function scanPublicTree(root: string, skipCheckoutTmp: boolean): Promise<v
         await assertEditorialWebp(child, label);
       } else if (entry.isFile() && label === `${marketingDirectory}/${marketingFont}`) {
         await assertMarketingPublicSource(root, label);
-      } else if (entry.isFile() && (textFile.test(child) || label === releasedStateSql || label === marketingDeclaration)) {
+      } else if (entry.isFile() && (textFile.test(child) || label === releasedStateSql || label === marketingDeclaration || label === materialDeclaration)) {
         if (label === marketingDeclaration) await assertMarketingPublicSource(root, label);
+        if (label === materialDeclaration) await assertMaterialPublicSource(root, label);
         const value = await readFile(child, "utf8");
         if (entry.name === "bun.lock") assertPublicSensitiveText(value, label);
         else assertPublicText(value, label);

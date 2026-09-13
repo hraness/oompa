@@ -8,7 +8,7 @@ export function ProductPreview({ view = "overview", id = "product-preview" }: Re
   return <figure className={classes("figure")} data-product-preview={id} data-view={view} id={id}>
     <div className={classes("toolbar")}>
       <div aria-label="Example screen" className={classes("tabs")} role="group">
-        {Object.entries(productScenes).map(([key, value]) => <button aria-pressed={key === view} className={classes("button")} data-preview-view={key} disabled key={key} type="button">{value.label}</button>)}
+        {Object.entries(productScenes).map(([key, value]) => <button aria-pressed={key === view} className={`${classes("button")} hraness-material-control hraness-material-choice`} data-preview-view={key} disabled key={key} type="button">{value.label}</button>)}
       </div>
       <button className={classes("button")} data-preview-enlarge="" disabled type="button" aria-haspopup="dialog">Enlarge ↗</button>
     </div>

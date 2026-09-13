@@ -16,6 +16,7 @@ import {
 } from "./public-text-policy";
 import { authoritySupervisorArtifactManifest } from "./authority-supervisor-artifact";
 import { checkMarketingSnapshot } from "../site/vendor/marketing-preset/check.mjs";
+import { checkLanternMaterialSnapshot } from "../site/vendor/lantern-material/check.mjs";
 
 function fixtureGit(root: string, args: readonly string[]): void {
   const result = spawnSync("/usr/bin/git", [...args], {
@@ -478,6 +479,48 @@ describe("public text policy", () => {
             files: { ...manifest.files, [font]: { ...manifest.files[font], sha256: createHash("sha256").update(bytes).digest("hex") } } }));
           await expect(assertPublicTree(root)).rejects.toMatchObject({ code: "UNREVIEWED_FILE_TYPE" });
         }), { numRuns: 20, seed: 20_260_912 });
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  test("admits only the complete Lantern declaration and still scans its public text", async () => {
+    const source = join(import.meta.dir, "../site/vendor/lantern-material");
+    const manifest = await checkLanternMaterialSnapshot(source);
+    for (const mutation of ["none", "missing", "extra", "symlink", "source", "secret"] as const) {
+      const root = await realpath(await mkdtemp(join(tmpdir(), "oompa-public-lantern-")));
+      const directory = join(root, "site/vendor/lantern-material");
+      try {
+        await mkdir(dirname(directory), { recursive: true });
+        await cp(source, directory, { recursive: true });
+        if (mutation === "missing") await unlink(join(directory, "lantern-material.css"));
+        if (mutation === "extra") await writeFile(join(directory, "extra.d.mts"), "export {};\n");
+        if (mutation === "symlink") {
+          await unlink(join(directory, "lantern-material.css"));
+          await symlink(join(source, "lantern-material.css"), join(directory, "lantern-material.css"));
+        }
+        if (mutation === "source") await writeFile(join(directory, "provenance.json"), JSON.stringify({ ...manifest,
+          source: { ...manifest.source, commit: "a".repeat(40) } }));
+        if (mutation === "secret") {
+          const text = `// ${["github", "pat", "abcdefghijklmnopqrstuvwxyz123456"].join("_")}\n`;
+          await writeFile(join(directory, "check.d.mts"), text);
+          await writeFile(join(directory, "provenance.json"), JSON.stringify({ ...manifest,
+            files: { ...manifest.files, "check.d.mts": { ...manifest.files["check.d.mts"], sha256: createHash("sha256").update(text).digest("hex") } } }));
+        }
+        if (mutation === "none") await assertPublicTree(root);
+        else await expect(assertPublicTree(root)).rejects.toBeInstanceOf(PublicTextPolicyError);
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
+  });
+
+  test("Lantern admission never authorizes arbitrary declaration filenames", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "oompa-public-lantern-names-")));
+    try {
+      await fc.assert(fc.asyncProperty(fc.array(fc.constantFrom("a", "b", "c", "d", "e"), { minLength: 1, maxLength: 12 }), async (letters) => {
+        const path = join(root, `${letters.join("")}.d.mts`);
+        try {
+          await writeFile(path, "export {};\n");
+          await expect(assertPublicTree(root)).rejects.toMatchObject({ code: "UNREVIEWED_FILE_TYPE" });
+        } finally { await unlink(path); }
+      }), { seed: 20_260_912, numRuns: 20 });
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

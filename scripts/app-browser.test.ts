@@ -1,3 +1,4 @@
+import type { Page } from "playwright-core";
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -5,7 +6,7 @@ import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { assertAppColorScheme, assertSitePublicFontsUnchanged, assertDefaultButtonPresentation, assertDefaultPalette, assertKeyboardFocusStrip, assertNativeModalFocus, assertProductPreviewObservation, assetContentType, assetPath, boundedBrowserOperation, browserExecutableSha256, browserFailureDetails, captureBrowserResponseBody, installBrowserServiceWorkerRefusal, inventory, loadedStylesheetControl, productionCsp, settleBrowserResponseBodies, siteFoundationFontPaths, siteProductionCsp, siteStylesheetPaths, snapshotProductPreview, snapshotStaticSite, waitForClosedProductPreview, withBrowserResourceCapture } from "./app-browser";
+import { restoreSiteMaterialMedia, readSiteMaterial, assertSiteMaterialPaint, assertAppColorScheme, assertSitePublicFontsUnchanged, assertDefaultButtonPresentation, assertDefaultPalette, assertKeyboardFocusStrip, assertNativeModalFocus, assertProductPreviewObservation, assetContentType, assetPath, boundedBrowserOperation, browserExecutableSha256, browserFailureDetails, captureBrowserResponseBody, installBrowserServiceWorkerRefusal, inventory, loadedStylesheetControl, productionCsp, settleBrowserResponseBodies, siteFoundationFontPaths, siteProductionCsp, siteStylesheetPaths, snapshotProductPreview, snapshotStaticSite, waitForClosedProductPreview, withBrowserResourceCapture } from "./app-browser";
 import { browserIoModules } from "../app/fixtures/browser/config";
 
 describe("browser response lifetime", () => {
@@ -954,5 +955,96 @@ describe("browser acceptance boundaries", () => {
     expect(browserIoModules).toHaveLength(9);
     expect(browserIoModules.every((path) => /^app\/src\/(data|custody)\//u.test(path))).toBe(true);
     expect(browserIoModules.some((path) => /\/(components|screens|model)\/|\.stylex/u.test(path))).toBe(false);
+  });
+});
+
+
+describe("native website Lantern material acceptance", () => {
+  const paint = (background: string, ink = "rgb(28, 25, 23)", image = "none", backdrop = "none") => ({ background, ink, image, backdrop });
+  const fixture = (home: boolean, opaque: boolean) => {
+    const chrome = paint("rgb(255, 254, 250)", undefined, "none", opaque ? "none" : "blur(20px) saturate(1.1)");
+    const pane = paint("rgb(255, 254, 250)");
+    const choice = paint("rgb(250, 244, 228)");
+    const wall = paint("rgb(248, 247, 244)", undefined, opaque ? "none" : "repeating-linear-gradient(90deg, transparent, white), repeating-linear-gradient(0deg, transparent, white), radial-gradient(white, transparent)");
+    return { material: "lantern", preset: home ? "editorial" : null, walls: home ? 1 : 0, fields: 0, header: chrome,
+      panes: [pane], wall: home ? wall : null, selected: home ? [choice] : [], disclosures: home ? [choice] : [],
+      references: { chrome, pane, choice, wall } };
+  };
+  test("native material paint is read only after rendering settles", async () => {
+    const rendered = Promise.withResolvers<undefined>();
+    const sample = fixture(true, false);
+    let evaluations = 0;
+    const page = { evaluate: () => {
+      evaluations += 1;
+      return evaluations === 1 ? rendered.promise : Promise.resolve(sample);
+    } } as unknown as Page;
+    const observation = readSiteMaterial(page);
+    await Promise.resolve();
+    expect(evaluations).toBe(1);
+    rendered.resolve(undefined);
+    await expect(observation).resolves.toBe(sample);
+    expect(evaluations).toBe(2);
+  });
+  test("failed rendering settlement refuses the material sample", async () => {
+    const failure = new Error("Native rendering did not settle");
+    let evaluations = 0;
+    const page = { evaluate: () => { evaluations += 1; return Promise.reject(failure); } } as unknown as Page;
+    await expect(readSiteMaterial(page)).rejects.toBe(failure);
+    expect(evaluations).toBe(1);
+  });
+  test("temporary media session detaches before the complete original profile is restored and sampled", async () => {
+    for (const colorScheme of ["light", "dark"] as const) for (const reduced of [false, true]) for (const forced of [false, true]) {
+      const detached = Promise.withResolvers<undefined>();
+      const events: string[] = [];
+      const expected: Parameters<Page["emulateMedia"]>[0] = { colorScheme, reducedMotion: reduced ? "reduce" : "no-preference", forcedColors: forced ? "active" : "none" };
+      let media: Parameters<Page["emulateMedia"]>[0] = { colorScheme: colorScheme === "dark" ? "light" : "dark" };
+      const restored = restoreSiteMaterialMedia({ emulateMedia: async (options) => {
+        events.push("restore"); media = options;
+      } }, { detach: () => { events.push("detach"); return detached.promise; } }, { colorScheme, reduced, forced })
+        .then(() => { events.push("sample"); return media; });
+      await Promise.resolve();
+      expect(events).toEqual(["detach"]);
+      detached.resolve(undefined);
+      await expect(restored).resolves.toEqual(expected);
+      expect(events).toEqual(["detach", "restore", "sample"]);
+    }
+  });
+  test("media restoration failure refuses the restored paint observation", async () => {
+    for (const stage of ["detach", "restore"] as const) {
+      const failure = new Error(`Native media ${stage} failed`);
+      const events: string[] = [];
+      await expect(restoreSiteMaterialMedia({ emulateMedia: async () => {
+        events.push("restore"); throw failure;
+      } }, { detach: async () => {
+        events.push("detach"); if (stage === "detach") throw failure;
+      } }, { reduced: false, forced: false }).then(() => { events.push("sample"); }))
+        .rejects.toBe(failure);
+      expect(events).toEqual(stage === "detach" ? ["detach"] : ["detach", "restore"]);
+    }
+  });
+  test("retains exact canonical surfaces in normal and opaque modes without applying editorial type to guides", () => {
+    for (const home of [true, false]) for (const opaque of [true, false]) {
+      expect(() => assertSiteMaterialPaint(fixture(home, opaque), home, opaque)).not.toThrow();
+    }
+  });
+  test("rejects lost scopes, compiled paint overrides and missing native selected/disclosure observations", () => {
+    const sample = fixture(true, false);
+    const baseWall = sample.references.wall;
+    for (const patch of [
+      { material: null }, { preset: null }, { walls: 0 }, { fields: 1 },
+      { header: { ...sample.header, backdrop: "blur(14px) saturate(1.4)" } },
+      { header: { ...sample.header, background: "transparent" } },
+      { panes: [{ ...sample.references.pane, background: "transparent" }] },
+      { panes: [{ ...sample.references.pane, ink: "transparent" }] },
+      { selected: [] }, { selected: [sample.references.choice, sample.references.choice] }, { disclosures: [] },
+      { selected: [{ ...sample.references.choice, ink: "transparent" }] },
+      { disclosures: [{ ...sample.references.choice, background: "transparent" }] },
+      { wall: { ...baseWall, image: "none" } },
+    ]) expect(() => assertSiteMaterialPaint({ ...sample, ...patch }, true, false)).toThrow();
+    expect(() => assertSiteMaterialPaint({ ...fixture(false, false), preset: "editorial" }, false, false)).toThrow();
+    expect(() => assertSiteMaterialPaint({ ...fixture(false, false), wall: sample.wall }, false, false)).toThrow();
+    const opaque = fixture(true, true);
+    expect(() => assertSiteMaterialPaint({ ...opaque, header: sample.header }, true, true)).toThrow();
+    expect(() => assertSiteMaterialPaint({ ...opaque, wall: sample.wall }, true, true)).toThrow();
   });
 });

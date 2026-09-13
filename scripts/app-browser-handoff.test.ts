@@ -34,11 +34,13 @@ test("browser source capture binds every product fixture input without weakening
     "app/fixtures/browser/config.ts", "app/src/screens/settings-screen.tsx", "scripts/app-browser.ts", "bun.lock",
     "site/product-scenes.ts", "scripts/build-appearance.ts", "app/src/appearance.ts", "app/src/appearance-entry.ts",
     "scripts/site-css-resources.ts", "scripts/marketing-preset.ts", "site/vendor/marketing-preset/provenance.json",
+    "site/vendor/lantern-material/provenance.json", "site/vendor/lantern-material/lantern-material.css",
+    "site/vendor/lantern-material/check.mjs", "site/vendor/lantern-material/check.d.mts", "site/vendor/lantern-material/LICENSE",
   ]) expect(captured.find((row) => row.path === path)).toEqual(await browserFile(root, path));
   expect(new Set(captured.map(({ path }) => path)).size).toBe(captured.length);
 });
 
-test.each(["site/product-scenes.ts", "scripts/build-appearance.ts", "app/src/appearance.ts", "app/src/appearance-entry.ts", "scripts/site-css-resources.ts", "scripts/marketing-preset.ts", "site/vendor/marketing-preset/provenance.json", "site/vendor/marketing-preset/marketing-assets/grain.svg"])("shared preview or appearance source %s mutation invalidates the original browser request", async (sharedPath) => {
+test.each(["site/product-scenes.ts", "scripts/build-appearance.ts", "app/src/appearance.ts", "app/src/appearance-entry.ts", "scripts/site-css-resources.ts", "scripts/marketing-preset.ts", "site/vendor/marketing-preset/provenance.json", "site/vendor/marketing-preset/marketing-assets/grain.svg", "site/vendor/lantern-material/provenance.json", "site/vendor/lantern-material/lantern-material.css", "site/vendor/lantern-material/check.mjs"])("shared preview or appearance source %s mutation invalidates the original browser request", async (sharedPath) => {
   const repository = await realpath(resolve(import.meta.dirname, ".."));
   const sourcePaths = new Set([...(await browserSources(repository)).map(({ path }) => path), sharedPath]);
   const root = await realpath(await mkdtemp(join(tmpdir(), "browser-shared-source-test-")));

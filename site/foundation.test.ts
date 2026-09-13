@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { transform, type StyleRule } from "lightningcss";
+import { checkLanternMaterialSnapshot } from "./vendor/lantern-material/check.mjs";
+import { fileURLToPath } from "node:url";
 
 // These sealed 0.6.4 descendants cannot receive public class overrides. Admit
-// only the reviewed preset bindings, in addition to the six original rules.
+// only the reviewed preset/material bindings, in addition to the six original rules.
 const compatibilityCss = `
 :root[data-hraness-marketing-preset] .hraness-marketing-header {
   --hraness-marketing-measure: var(--hraness-marketing-header-measure);
@@ -30,17 +32,35 @@ const compatibilityCss = `
 :root[data-hraness-marketing-preset] .hraness-marketing-header .hraness-marketing-action {
   min-block-size: var(--hraness-marketing-header-action-height, var(--hraness-marketing-action-height, 2.625rem));
 }
-:root[data-hraness-marketing-preset] .hraness-marketing-header-surface {
-  background-color: var(--hraness-marketing-header-background, var(--background));
-  -webkit-backdrop-filter: var(--hraness-marketing-header-backdrop, none);
-  backdrop-filter: var(--hraness-marketing-header-backdrop, none);
+:root[data-hraness-material="lantern"] .hraness-material-chrome {
+  background-color: var(--hraness-material-chrome-paint);
+  -webkit-backdrop-filter: var(--hraness-material-chrome-blur);
+  backdrop-filter: var(--hraness-material-chrome-blur);
 }
 :root[data-hraness-marketing-preset] .hraness-marketing-header .hraness-marketing-action {
   min-block-size: 3rem;
 }
+
+:root[data-hraness-material="lantern"] :is([data-product-preview], [data-preview-dialog], [data-oompa-appearance] > div) {
+  background-color: var(--hraness-material-plane);
+  border-color: var(--hraness-material-seam);
+  color: var(--hraness-material-ink);
+}
+:root[data-hraness-material="lantern"] .hraness-material-choice[aria-pressed="true"] {
+  background-color: var(--hraness-material-warm-plane);
+  color: var(--hraness-material-ink);
+}
+:root[data-hraness-material="lantern"] .hraness-marketing-question[open] > summary {
+  background-color: var(--hraness-material-warm-plane);
+  color: var(--hraness-material-ink);
+}
+:root[data-hraness-material="lantern"] :is(.hraness-material-choice[aria-pressed="true"], .hraness-marketing-question[open] > summary) {
+  background-color: Highlight;
+  color: HighlightText;
+}
 `;
 
-test("the stylesheet keeps six foundations and only nine exact preset compatibility rules", async () => {
+test("the stylesheet keeps six foundations and thirteen exact preset/material compatibility rules", async () => {
   const css = await readFile(new URL("styles.css", import.meta.url));
   const compatibilitySelectors: StyleRule["selectors"][] = [];
   const compatibilityDeclarations: StyleRule["declarations"][] = [];
@@ -50,7 +70,7 @@ test("the stylesheet keeps six foundations and only nine exact preset compatibil
       compatibilityDeclarations.push(rule.value.declarations);
     },
   } } });
-  expect(compatibilitySelectors).toHaveLength(9);
+  expect(compatibilitySelectors).toHaveLength(13);
   const selectors: unknown[] = [];
   const declarations: unknown[] = [];
   const media: unknown[] = [];
@@ -90,13 +110,14 @@ test("the stylesheet keeps six foundations and only nine exact preset compatibil
     root, [[{ type: "universal" }]], html, [[{ type: "type", name: "body" }]],
     [[{ type: "pseudo-class", kind: "where", selectors: [
       [{ type: "class", name: "hraness-marketing-page" }], [{ type: "class", name: "hraness-marketing-header" }],
-    ] }]], ...compatibilitySelectors, html,
+    ] }]], ...compatibilitySelectors.slice(0, 9), html, ...compatibilitySelectors.slice(9),
   ]);
-  expect(declarations.slice(5, -1)).toEqual(compatibilityDeclarations);
+  expect([...declarations.slice(5, 14), ...declarations.slice(15)]).toEqual(compatibilityDeclarations);
   expect(tokenBindings).toBe(1);
   expect(media).toEqual([
     ["pointer", "coarse"],
     ["prefers-reduced-motion", "reduce"],
+    ["forced-colors", "active"],
   ].map(([name, value]) => ({ mediaQueries: [{ qualifier: null, mediaType: "all", condition: {
     type: "feature", value: { type: "plain", name, value: { type: "ident", value } },
   } }] })));
@@ -112,6 +133,14 @@ test("the static entry joins compiler foundations and local fonts without legacy
     '@import "@hraness/design-kit/paper-theme.css";',
     '@import "./styles.css";',
     '@import "./vendor/marketing-preset/product-marketing-preset.css";',
+    '@import "./vendor/lantern-material/lantern-material.css";',
   ]);
   expect(imports).not.toMatch(/tailwind|components\.css|palettes\.css|@hraness\/[^"\n]+\/styles\.css|https?:/u);
+});
+
+
+test("the ordinary site gate admits the complete asset-free Lantern snapshot", async () => {
+  const snapshot = await checkLanternMaterialSnapshot(fileURLToPath(new URL("vendor/lantern-material", import.meta.url)));
+  expect(snapshot.source.commit).toBe("eccb0341d8d0ba960a0f02248cf59888062afb0a");
+  expect(Object.keys(snapshot.files).sort()).toEqual(["LICENSE", "check.d.mts", "check.mjs", "lantern-material.css"]);
 });

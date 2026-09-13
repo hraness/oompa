@@ -216,7 +216,7 @@ export default tseslint.config(
   {
     // The immutable checker is plain JavaScript with an adjacent declaration;
     // retain syntax/rule lint while its canonical admission validates its bytes.
-    files: ["scripts/**/*.mjs", "site/vendor/marketing-preset/check.mjs"],
+    files: ["scripts/**/*.mjs", "site/vendor/marketing-preset/check.mjs", "site/vendor/lantern-material/check.mjs"],
     ...tseslint.configs.disableTypeChecked,
   },
 );

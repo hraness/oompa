@@ -253,7 +253,7 @@ export const renderSiteHtml = (
   environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
 ): string => {
   return `<!doctype html>
-<html ${paletteAttributes} data-hraness-marketing-preset="editorial" lang="en">
+<html ${paletteAttributes} data-hraness-marketing-preset="editorial" data-hraness-material="lantern" lang="en">
 <head>
 ${renderHead(content, {
   canonicalPath: "/",
@@ -264,7 +264,7 @@ ${renderHead(content, {
 <body>
 <a class="${classes("skip-link", "skipLink", "focusable")}" href="#content">Skip to content</a>
 ${renderMarketingHeader(content, "/")}
-<main class="hraness-marketing-field" id="content">
+<main id="content">
 ${renderMarketingPage(content)}
 <details class="${docsClasses("legacyLinks")}" id="reference"><summary>Looking for the former reference?</summary><p>The same command and safety reference now lives in the documentation.</p><nav aria-label="Moved reference sections">${content.sections.map((section) => `<p id="${escapeHtml(section.id)}"><a data-moved-section="${escapeHtml(section.id)}" href="${escapeHtml(docsPathForSection(section.id))}">${escapeHtml(section.heading)} →</a></p>`).join("")}</nav></details>
 </main>
@@ -314,7 +314,7 @@ export const renderPrivacyHtml = (
 ): string => {
   const privacy = findSection(content, "privacy");
   return `<!doctype html>
-<html ${paletteAttributes} lang="en">
+<html ${paletteAttributes} data-hraness-material="lantern" lang="en">
 <head>
 ${renderHead(content, {
   canonicalPath: "/privacy/",
@@ -354,7 +354,7 @@ export const renderDocsHtml = (
   const nav = docsPages.map((item) => `<a class="${docsClasses("navLink")}" data-doc-search="${escapeHtml([item.title, item.description, ...item.keywords, ...item.sections.map(({ heading }) => heading)].join(" "))}" href="${item.path}"${item.path === page.path ? ' aria-current="page"' : ""}>${escapeHtml(docsLabel(item))}</a>`).join("");
   const sections = [...page.sections, ...reference];
   return `<!doctype html>
-<html ${paletteAttributes} lang="en"><head>
+<html ${paletteAttributes} data-hraness-material="lantern" lang="en"><head>
 ${renderHead(content, { canonicalPath: page.path, description: page.description, title: `${page.title} | Oompa`, jsonLd: { "@context": "https://schema.org", "@type": "TechArticle", headline: page.title, description: page.description, url: `${content.siteUrl}${page.path}`, dateModified: page.reviewDate, author: { "@type": "Organization", name: "Hraness", url: content.links.hraness }, isPartOf: { "@type": "WebSite", name: "Oompa", url: content.siteUrl } } })}
 <link rel="alternate" type="text/markdown" href="${page.path}index.md" title="Markdown">
 </head><body>

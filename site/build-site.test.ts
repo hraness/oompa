@@ -489,7 +489,11 @@ describe("static-site build", () => {
       expect(await readFile(join(root, "dist/site/fonts", path))).toEqual(await readFile(join(presetRoot, "fonts", path)));
     }
     expect(document.documentElement.getAttribute("data-hraness-marketing-preset")).toBe("editorial");
-    expect(document.querySelector("main.hraness-marketing-field")).not.toBeNull();
+    expect(document.documentElement.getAttribute("data-hraness-material")).toBe("lantern");
+    expect(document.querySelector("main.hraness-marketing-field")).toBeNull();
+    expect(document.querySelectorAll(".hraness-material-wall")).toHaveLength(1);
+    expect(document.querySelector(".hraness-marketing-hero.hraness-material-wall")).not.toBeNull();
+    expect(document.querySelector(".hraness-marketing-header.hraness-material-chrome")).not.toBeNull();
     for (const path of expectedAttributionPaths) {
       expect(await readFile(join(root, "dist/site/fonts", path)))
         .toEqual(await readFile(join(installedFontRoot, "fonts", path)));

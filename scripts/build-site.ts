@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import { copyFile, cp, lstat, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -26,6 +27,7 @@ import { buildProductPreview } from "./build-product-preview.ts";
 import { OOMPA_RELEASE_VERSION } from "./release-evidence";
 import { buildOompaAppearance } from "./build-appearance";
 import { snapshotMarketingPreset } from "./marketing-preset";
+import { checkLanternMaterialSnapshot } from "../site/vendor/lantern-material/check.mjs";
 
 interface BuildOptions {
   readonly check: boolean;
@@ -379,6 +381,13 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
   const fonts = await snapshotSiteFonts(dirname(designKitFontsStylesPath));
   const sourceRoot = await realpath(options.sourceRoot ?? options.repositoryRoot);
   const marketingPreset = await snapshotMarketingPreset(join(sourceRoot, "site/vendor/marketing-preset"));
+  const materialRoot = join(sourceRoot, "site/vendor/lantern-material");
+  const material = await checkLanternMaterialSnapshot(materialRoot);
+  // Both portable layers retain the same MIT attribution. Keep the existing
+  // exact public inventory rather than emitting an identical second license.
+  const sharedLicense = marketingPreset.files.get("LICENSE");
+  assert.ok(sharedLicense !== undefined);
+  assert.equal(createHash("sha256").update(sharedLicense).digest("hex"), material.files.LICENSE.sha256);
   const presetFonts = [...marketingPreset.files].filter(([path]) => path.startsWith("fonts/"))
     .map(([path, bytes]) => ({ path: path.slice("fonts/".length), bytes }));
   const allFonts = [...fonts.inputs, ...presetFonts];
@@ -388,6 +397,7 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
     sourceRoot,
     environment, fonts: allFonts, images: presetImages,
   });
+  assert.deepEqual(await checkLanternMaterialSnapshot(materialRoot), material, "Lantern source changed during static compilation");
   // Retain failed/completed private receipts under the same ignored build root
   // as the static compiler. Only the builder's verified public projection moves.
   const previewRun = await mkdtemp(join(sourceRoot, "tmp/site-product-preview-"));

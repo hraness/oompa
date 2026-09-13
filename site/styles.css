@@ -43,8 +43,8 @@ body {
 
 /* Marketing grammar reads the same shared palette as the rest of Oompa. */
 :where(.hraness-marketing-page, .hraness-marketing-header) {
-  --hraness-marketing-ink: var(--hraness-marketing-field-ink, var(--foreground));
-  --hraness-marketing-muted: var(--hraness-marketing-field-muted, var(--muted));
+  --hraness-marketing-ink: var(--hraness-material-ink, var(--foreground));
+  --hraness-marketing-muted: var(--hraness-material-muted, var(--muted));
   --hraness-marketing-background: var(--background);
   --hraness-marketing-surface: var(--surface);
   --hraness-marketing-inverse: var(--inverse-background);
@@ -59,7 +59,7 @@ body {
   --hraness-marketing-measure: var(--hraness-marketing-header-measure);
 }
 
-/* Keep the continuous shared field behind the compiled page's reset. */
+/* Keep the quiet document visible behind the compiled page's reset. */
 :root[data-hraness-marketing-preset] .hraness-marketing-page {
   --hraness-marketing-background: transparent;
 }
@@ -91,10 +91,10 @@ body {
   min-block-size: var(--hraness-marketing-header-action-height, var(--hraness-marketing-action-height, 2.625rem));
 }
 
-:root[data-hraness-marketing-preset] .hraness-marketing-header-surface {
-  background-color: var(--hraness-marketing-header-background, var(--background));
-  -webkit-backdrop-filter: var(--hraness-marketing-header-backdrop, none);
-  backdrop-filter: var(--hraness-marketing-header-backdrop, none);
+:root[data-hraness-material="lantern"] .hraness-material-chrome {
+  background-color: var(--hraness-material-chrome-paint);
+  -webkit-backdrop-filter: var(--hraness-material-chrome-blur);
+  backdrop-filter: var(--hraness-material-chrome-blur);
 }
 
 @media (pointer: coarse) {
@@ -107,5 +107,27 @@ body {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+}
+
+/* The installed compiled controls keep their dimensions, focus and behavior.
+ * Bind only native surface and selected-state paint to the shared material. */
+:root[data-hraness-material="lantern"] :is([data-product-preview], [data-preview-dialog], [data-oompa-appearance] > div) {
+  background-color: var(--hraness-material-plane);
+  border-color: var(--hraness-material-seam);
+  color: var(--hraness-material-ink);
+}
+:root[data-hraness-material="lantern"] .hraness-material-choice[aria-pressed="true"] {
+  background-color: var(--hraness-material-warm-plane);
+  color: var(--hraness-material-ink);
+}
+:root[data-hraness-material="lantern"] .hraness-marketing-question[open] > summary {
+  background-color: var(--hraness-material-warm-plane);
+  color: var(--hraness-material-ink);
+}
+@media (forced-colors: active) {
+  :root[data-hraness-material="lantern"] :is(.hraness-material-choice[aria-pressed="true"], .hraness-marketing-question[open] > summary) {
+    background-color: Highlight;
+    color: HighlightText;
   }
 }
