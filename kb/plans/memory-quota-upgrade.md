@@ -11,6 +11,22 @@ relations:
 
 # Hosted memory quota authority upgrade
 
+## Current diagnostic work
+
+A live source-bound diagnostic reported one `schema_shape` failure. The existing
+reason cannot distinguish a partially added memory ledger, lost marked memory
+rows, or a missing older counter. A read-only shape histogram now projects the
+marker, fixed ordered missing categories/resources, and absent/zero/nonzero
+retained memory counters at that exact classifier failure. The operator rejects
+noncanonical, duplicate, inconsistent or impossible groups and binds their total
+to the shape-failure count. No second database read changes the observation.
+
+Focused conservation and parser tests pass (44 tests, 4,647 assertions), as do
+strict TypeScript, scoped lint and independent source review. Current-base
+Required CI, deployment and live readback remain pending for this extension. This
+diagnostic does not change the approved transition below: no missing counter is
+inferred, written or reset, and diagnosis grants no repair or activation authority.
+
 The memory schema adds a quota category and a user resource. Existing identities
 with the complete predecessor ledger have eleven categories and six resources;
 ordinary current quota mutations require twelve and seven. A credential-free

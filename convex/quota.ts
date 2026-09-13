@@ -1853,6 +1853,14 @@ export const quotaUpgradeCorruptionReasons = [
 ] as const;
 type QuotaUpgradeCorruptionReason = typeof quotaUpgradeCorruptionReasons[number];
 
+export type QuotaUpgradeMissingShape = Readonly<{
+  marker: "current" | "unmarked";
+  missingCategories: readonly QuotaCategory[];
+  missingResources: readonly (typeof USER_QUOTA_RESOURCES[number])[];
+  memoryCategory: "absent" | "zero" | "nonzero";
+  memoryResource: "absent" | "zero" | "nonzero";
+}>;
+
 export const emptyQuotaUpgradeCorruptionCounts = (): Record<QuotaUpgradeCorruptionReason, number> => ({
   identity_missing: 0, service_authority: 0, duplicate_categories: 0, duplicate_resources: 0,
   category_authority: 0, category_ceiling: 0, user_total: 0, service_total: 0,
@@ -1861,7 +1869,7 @@ export const emptyQuotaUpgradeCorruptionCounts = (): Record<QuotaUpgradeCorrupti
 });
 
 class QuotaUpgradeClassificationError extends Error {
-  constructor(readonly reason: QuotaUpgradeCorruptionReason) {
+  constructor(readonly reason: QuotaUpgradeCorruptionReason, readonly shape?: QuotaUpgradeMissingShape) {
     // Preserve the existing audit and mutation refusal contract. Only the
     // separate read-only diagnostic projects the closed reason count.
     super("QUOTA_AUTHORITY_CORRUPT");
@@ -1973,7 +1981,19 @@ async function classifyUserQuotaUpgrade(
     || resources.length !== predecessorQuotaResources.length
     || !predecessorQuotaCategories.every((category) => byCategory.has(category))
     || !predecessorQuotaResources.every((resource) => byResource.has(resource))
-  ) return quotaUpgradeCorrupt("schema_shape");
+  ) {
+    // Project the already validated rows at the exact failure. No second read
+    // can describe a different ledger or turn missing authority into zero.
+    const memory = byCategory.get("memory");
+    const memorySpace = byResource.get("memory_space");
+    throw new QuotaUpgradeClassificationError("schema_shape", {
+      marker: identity.quotaSchemaVersion === undefined ? "unmarked" : "current",
+      missingCategories: QUOTA_CATEGORIES.filter((category) => !byCategory.has(category)),
+      missingResources: USER_QUOTA_RESOURCES.filter((resource) => !byResource.has(resource)),
+      memoryCategory: memory === undefined ? "absent" : memory.records === 0 && memory.logicalBytes === 0 ? "zero" : "nonzero",
+      memoryResource: memorySpace === undefined ? "absent" : memorySpace.records === 0 ? "zero" : "nonzero",
+    });
+  }
   const [space, operation] = await Promise.all([
     ctx.db.query("memorySpaces")
       .withIndex("by_user_and_public_id", (query) => query.eq("userId", userId)).take(1),
@@ -2044,6 +2064,7 @@ export async function diagnoseUserQuotaUpgradePageForRuntime(
   });
   if (page.page.length > maximumUserQuotaUpgradeBatch) return corrupt();
   const reasons = emptyQuotaUpgradeCorruptionCounts();
+  const shapes = new Map<string, { shape: QuotaUpgradeMissingShape; count: number }>();
   const counts = { legacy: 0, unmarkedCurrent: 0, current: 0, corrupt: 0 };
   for (const user of page.page) {
     try {
@@ -2057,9 +2078,15 @@ export async function diagnoseUserQuotaUpgradePageForRuntime(
       if (!(error instanceof Error) || error.message !== "QUOTA_AUTHORITY_CORRUPT") throw error;
       counts.corrupt += 1;
       reasons[error instanceof QuotaUpgradeClassificationError ? error.reason : "unknown_authority"] += 1;
+      if (error instanceof QuotaUpgradeClassificationError && error.shape !== undefined) {
+        const key = JSON.stringify(error.shape);
+        const previous = shapes.get(key);
+        shapes.set(key, { shape: error.shape, count: (previous?.count ?? 0) + 1 });
+      }
     }
   }
-  return { ...counts, reasons, continueCursor: page.continueCursor, isDone: page.isDone,
+  return { ...counts, reasons, missingShapes: [...shapes.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+    .map(([, value]) => value), continueCursor: page.continueCursor, isDone: page.isDone,
     scanned: page.page.length, schemaVersion: 1 as const };
 }
 

@@ -164,6 +164,50 @@ async function addMemorySpace(world: World, charge = false) {
 }
 
 describe("predecessor hosted quota upgrade", () => {
+  test("missing-shape diagnosis groups only matching ledgers and preserves all stored data", async () => {
+    const world = await predecessorQuotaWorld();
+    await world.runtime.mutation(upgrade, pageArgs);
+    const second = { ...world, userId: await world.addUser() };
+    await world.runtime.mutation(upgrade, pageArgs);
+    const partial = { ...world, userId: await world.addUser() };
+    await addCurrentRows(partial);
+    await addMemorySpace(partial, true);
+    const older = { ...world, userId: await world.addUser() };
+    await addCurrentRows(older);
+    await world.runtime.run(async (ctx) => {
+      for (const owner of [world, second]) {
+        const category = await ctx.db.query("storageUsageByUser")
+          .withIndex("by_user_and_category", (q) => q.eq("userId", owner.userId).eq("category", "memory")).unique();
+        const resource = await ctx.db.query("storageResourceUsageByUser")
+          .withIndex("by_user_and_resource", (q) => q.eq("userId", owner.userId).eq("resource", "memory_space")).unique();
+        if (category === null || resource === null) throw new Error("missing current fixture");
+        await ctx.db.delete(category._id); await ctx.db.delete(resource._id);
+      }
+      const resource = await ctx.db.query("storageResourceUsageByUser")
+        .withIndex("by_user_and_resource", (q) => q.eq("userId", partial.userId).eq("resource", "memory_space")).unique();
+      const category = await ctx.db.query("storageUsageByUser")
+        .withIndex("by_user_and_category", (q) => q.eq("userId", older.userId).eq("category", "device")).unique();
+      const identity = await ctx.db.query("storageUsageByUser")
+        .withIndex("by_user_and_category", (q) => q.eq("userId", older.userId).eq("category", "identity")).unique();
+      if (resource === null || category === null || identity === null) throw new Error("missing partial fixture");
+      await ctx.db.delete(resource._id); await ctx.db.delete(category._id);
+      await ctx.db.patch(identity._id, { quotaSchemaVersion: 2 });
+    });
+    const before = await snapshot(world);
+    const result = await world.runtime.query(diagnose, pageArgs);
+    expect(result).toEqual({ schemaVersion: 1, continueCursor: expect.any(String), isDone: true,
+      scanned: 4, legacy: 0, unmarkedCurrent: 0, current: 0, corrupt: 4,
+      reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 4 },
+      missingShapes: [
+        { count: 1, shape: { marker: "current", missingCategories: ["device"], missingResources: [], memoryCategory: "zero", memoryResource: "zero" } },
+        { count: 2, shape: { marker: "current", missingCategories: ["memory"], missingResources: ["memory_space"], memoryCategory: "absent", memoryResource: "absent" } },
+        { count: 1, shape: { marker: "unmarked", missingCategories: [], missingResources: ["memory_space"], memoryCategory: "nonzero", memoryResource: "absent" } },
+      ] });
+    expect(await snapshot(world)).toEqual(before);
+    await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+    expect(await snapshot(world)).toEqual(before);
+  });
+
   test("diagnostic conserves all data and counts each disposition without identity output", async () => {
     const world = await predecessorQuotaWorld();
     await world.runtime.mutation(upgrade, pageArgs);
@@ -181,7 +225,7 @@ describe("predecessor hosted quota upgrade", () => {
     const result = await world.runtime.query(diagnose, pageArgs);
     expect(result).toEqual({ schemaVersion: 1, continueCursor: expect.any(String), isDone: true,
       scanned: 4, legacy: 1, unmarkedCurrent: 1, current: 1, corrupt: 1,
-      reasons: { ...emptyQuotaUpgradeCorruptionCounts(), category_authority: 1 } });
+      reasons: { ...emptyQuotaUpgradeCorruptionCounts(), category_authority: 1 }, missingShapes: [] });
     expect(await snapshot(world)).toEqual(before);
     await expect(world.runtime.query(productionDiagnose, pageArgs)).rejects.toThrow("QUOTA_UPGRADE_RUNTIME_CHANGED");
     await expect(world.runtime.query(diagnose, { ...pageArgs, expectedRuntimeAttestation: {

@@ -193,6 +193,12 @@ closed reason counts. It uses the same source, candidate, predecessor, target
 and runtime checks. It reports the first classification failure per identity:
 missing or duplicate authority, invalid counters or markers, exceeded ceilings,
 inconsistent totals, incomplete schema shape, or unexpected legacy memory data.
+For an incomplete shape, `missingShapes` groups identical marked or unmarked
+ledgers by their missing categories and resources. It also distinguishes absent,
+zero and nonzero retained memory counters, without exposing their values. Each
+group comes from the same validated rows as its failure; there are at most eight
+groups per page. The groups account for exactly the `schema_shape` count. A
+missing counter remains unknown, even when the remaining memory counter is zero.
 It emits no identity, raw counter, cursor or content. Global service-authority
 corruption still refuses the scan. Counts are consistent within each bounded
 page; a multi-page scan is not a single snapshot. Diagnosis publishes no repair

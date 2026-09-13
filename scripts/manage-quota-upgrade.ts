@@ -4,7 +4,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { z } from "zod";
 
-import { emptyQuotaUpgradeCorruptionCounts, quotaUpgradeCorruptionReasons, SERVICE_TOTAL_QUOTA } from "../convex/quota";
+import { emptyQuotaUpgradeCorruptionCounts, quotaUpgradeCorruptionReasons, QUOTA_CATEGORIES, USER_QUOTA_RESOURCES, SERVICE_TOTAL_QUOTA } from "../convex/quota";
 import { createBoundedAuthorityFetch } from "./bounded-authority-fetch";
 import {
   BoundedProcessInvocationGuard,
@@ -37,12 +37,36 @@ export const quotaUpgradeAuditPageSchema = page.extend({
   }
 });
 
+const missingShapeSchema = z.strictObject({
+  marker: z.enum(["current", "unmarked"]),
+  missingCategories: z.array(z.enum(QUOTA_CATEGORIES)).max(QUOTA_CATEGORIES.length),
+  missingResources: z.array(z.enum(USER_QUOTA_RESOURCES)).max(USER_QUOTA_RESOURCES.length),
+  memoryCategory: z.enum(["absent", "zero", "nonzero"]),
+  memoryResource: z.enum(["absent", "zero", "nonzero"]),
+}).superRefine((value, context) => {
+  const orderedCategories = QUOTA_CATEGORIES.filter((category) => value.missingCategories.includes(category));
+  const orderedResources = USER_QUOTA_RESOURCES.filter((resource) => value.missingResources.includes(resource));
+  if (JSON.stringify(value.missingCategories) !== JSON.stringify(orderedCategories)
+    || JSON.stringify(value.missingResources) !== JSON.stringify(orderedResources)
+    || value.missingCategories.length + value.missingResources.length === 0
+    || value.missingCategories.includes("identity")
+    || (value.marker === "unmarked" && JSON.stringify(value.missingCategories) === '["memory"]'
+      && JSON.stringify(value.missingResources) === '["memory_space"]')
+    || value.missingCategories.includes("memory") !== (value.memoryCategory === "absent")
+    || value.missingResources.includes("memory_space") !== (value.memoryResource === "absent")) {
+    context.addIssue({ code: "custom", message: "quota_upgrade_shape_invalid" });
+  }
+});
 export const quotaUpgradeDiagnosticPageSchema = page.extend({
   legacy: count, unmarkedCurrent: count, current: count, corrupt: count,
   reasons: z.record(z.enum(quotaUpgradeCorruptionReasons), count),
+  missingShapes: z.array(z.strictObject({ shape: missingShapeSchema, count: count.min(1) })).max(pageSize),
 }).strict().superRefine((value, context) => {
   if (value.legacy + value.unmarkedCurrent + value.current + value.corrupt !== value.scanned
-    || Object.values(value.reasons).reduce((total, amount) => total + amount, 0) !== value.corrupt) {
+    || Object.values(value.reasons).reduce((total, amount) => total + amount, 0) !== value.corrupt
+    || value.missingShapes.reduce((total, entry) => total + entry.count, 0) !== value.reasons.schema_shape
+    || value.missingShapes.some((entry, index) => index > 0
+      && JSON.stringify(value.missingShapes[index - 1]?.shape) >= JSON.stringify(entry.shape))) {
     context.addIssue({ code: "custom", message: "quota_upgrade_diagnostic_counts_invalid" });
   }
 });
@@ -170,6 +194,7 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
   if (options.action === "diagnose") {
     let total: Audit = { scanned: 0, legacy: 0, unmarkedCurrent: 0, current: 0, corrupt: 0 };
     const reasons = emptyQuotaUpgradeCorruptionCounts();
+    const shapes = new Map<string, z.infer<typeof quotaUpgradeDiagnosticPageSchema>["missingShapes"][number]>();
     let cursor: string | null = null;
     const seen = new Set<string>();
     for (let index = 0; index < maximumPages; index += 1) {
@@ -185,8 +210,13 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
         corrupt: total.corrupt + value.corrupt };
       if (total.scanned > SERVICE_TOTAL_QUOTA.identities) return refuse("pagination_invalid");
       for (const reason of quotaUpgradeCorruptionReasons) reasons[reason] += value.reasons[reason];
+      for (const entry of value.missingShapes) {
+        const key = JSON.stringify(entry.shape);
+        shapes.set(key, { shape: entry.shape, count: (shapes.get(key)?.count ?? 0) + entry.count });
+      }
       if (value.isDone) return { schemaVersion: 1 as const, kind: "quota_upgrade_diagnostic" as const,
-        state: "diagnostic_complete" as const, ...total, reasons, pages: index + 1,
+        state: "diagnostic_complete" as const, ...total, reasons,
+        missingShapes: [...shapes.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, entry]) => entry), pages: index + 1,
         consistency: "per_page_only" as const, reasonSelection: "first_failure_per_identity" as const,
         repairAuthorized: false as const, activationAuthorized: false as const };
       if (value.scanned === 0 || value.continueCursor === "" || seen.has(value.continueCursor)) return refuse("pagination_invalid");

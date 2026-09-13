@@ -66,9 +66,11 @@ function world() {
 describe("quota upgrade operator", () => {
   const diagnosticOptions = { action: "diagnose" as const, sourceCommit, target,
     deployEvidencePath: options.deployEvidencePath, previousDeployEvidencePath: options.previousDeployEvidencePath };
+  const shape = { marker: "current" as const, missingCategories: ["memory" as const],
+    missingResources: ["memory_space" as const], memoryCategory: "absent" as const, memoryResource: "absent" as const };
   const diagnosticPage = { schemaVersion: 1 as const, continueCursor: "", isDone: true, scanned: 2,
     legacy: 1, unmarkedCurrent: 0, current: 0, corrupt: 1,
-    reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 1 } };
+    reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 1 }, missingShapes: [{ shape, count: 1 }] };
 
   test("diagnose rejects mutation flags and evidence paths before effects", async () => {
     const readArguments = ["diagnose", ...arguments_.slice(1).filter((value, index, values) =>
@@ -101,7 +103,7 @@ describe("quota upgrade operator", () => {
     });
     expect(result).toEqual({ schemaVersion: 1, kind: "quota_upgrade_diagnostic", state: "diagnostic_complete",
       scanned: 4, legacy: 2, unmarkedCurrent: 0, current: 0, corrupt: 2,
-      reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 2 }, pages: 2,
+      reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 2 }, missingShapes: [{ shape, count: 2 }], pages: 2,
       consistency: "per_page_only", reasonSelection: "first_failure_per_identity", repairAuthorized: false, activationAuthorized: false });
   });
 
@@ -122,13 +124,37 @@ describe("quota upgrade operator", () => {
   test("diagnostic parser preserves bounded partition counts through JSON round trips", () => {
     fc.assert(fc.property(fc.integer({ min: 0, max: 8 }), fc.integer({ min: 0, max: 8 }), (legacy, corrupt) => {
       const value = { ...diagnosticPage, scanned: legacy + corrupt, legacy, corrupt,
-        reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: corrupt } };
+        reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: corrupt },
+        missingShapes: corrupt === 0 ? [] : [{ shape, count: corrupt }] };
       const parsed = quotaUpgradeDiagnosticPageSchema.safeParse(JSON.parse(JSON.stringify(value)) as unknown);
       expect(parsed.success).toBe(legacy + corrupt <= 8);
       if (parsed.success) expect(parsed.data).toEqual(value);
       expect(quotaUpgradeDiagnosticPageSchema.safeParse({ ...value,
         reasons: { ...value.reasons, schema_shape: corrupt + 1 } }).success).toBe(false);
     }), { numRuns: 40 });
+  });
+
+  test("diagnostic rejects ambiguous, noncanonical and impossible missing shapes", () => {
+    const malformed = [
+      { ...shape, marker: "unknown" }, { ...shape, marker: "unmarked" },
+      { ...shape, missingCategories: [] }, { ...shape, missingResources: [] },
+      { ...shape, missingCategories: ["memory", "memory"] },
+      { ...shape, missingCategories: ["memory", "device"] },
+      { ...shape, missingCategories: ["identity", "memory"] },
+      { ...shape, missingResources: ["unknown"] },
+      { ...shape, memoryCategory: "zero" }, { ...shape, memoryResource: "nonzero" },
+      { ...shape, rawCounter: 100 },
+      { ...shape, missingCategories: [], missingResources: [], memoryCategory: "zero", memoryResource: "zero" },
+    ];
+    for (const invalid of malformed) expect(quotaUpgradeDiagnosticPageSchema.safeParse({ ...diagnosticPage,
+      missingShapes: [{ shape: invalid, count: 1 }] }).success).toBe(false);
+    for (const missingShapes of [[], [{ shape, count: 0 }], [{ shape, count: 2 }],
+      [{ shape, count: 1 }, { shape, count: 1 }]]) {
+      expect(quotaUpgradeDiagnosticPageSchema.safeParse({ ...diagnosticPage, missingShapes }).success).toBe(false);
+    }
+    const valid = { ...shape, missingCategories: ["device", "memory"] };
+    expect(quotaUpgradeDiagnosticPageSchema.safeParse({ ...diagnosticPage,
+      missingShapes: [{ shape: valid, count: 1 }] }).success).toBe(true);
   });
 
   test("diagnostic refuses stalled cursors and bounded scan overflow", async () => {
@@ -138,7 +164,7 @@ describe("quota upgrade operator", () => {
         calls += 1;
         return { ...diagnosticPage, isDone: false, continueCursor: mode === "overflow" ? `page-${calls}` : "same",
           scanned: mode === "empty" ? 0 : 8, legacy: mode === "empty" ? 0 : 8, corrupt: 0,
-          reasons: emptyQuotaUpgradeCorruptionCounts() };
+          reasons: emptyQuotaUpgradeCorruptionCounts(), missingShapes: [] };
       } })).rejects.toMatchObject({ code: "pagination_invalid" });
       expect(calls).toBeLessThanOrEqual(mode === "overflow" ? 626 : 2);
     }
