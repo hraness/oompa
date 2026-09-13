@@ -335,6 +335,8 @@ for (const kind of ["session.stop", "session.rename"] as const) {
 // bytes. The one negative deliberately changes an original unresolved row BEFORE
 // migration; only that change is synthetic. No current database is restamped,
 // no generator executes, and neither case claims combined49 or native acceptance.
+// In full macOS CI, these migration and four-reopen cases reached 5.3s.
+// Keep a finite 10s budget for these two cases without reducing their checks.
 for (const corrupt of [false, true]) {
   test(`canonical41 original timestamp effects migrate and reopen ${corrupt ? "with one explicitly corrupted opaque row" : "without rewriting their six preimages"}`, async () => {
     const fixture = canonical41TimestampsFixture;
@@ -418,5 +420,5 @@ for (const corrupt of [false, true]) {
       database?.close(false);
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 10_000);
 }

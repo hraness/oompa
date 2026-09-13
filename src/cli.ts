@@ -107,6 +107,7 @@ import {
   createClaudeLoginSignalCustody,
   resolvePinnedClaudeRuntime,
   runClaudeForegroundLogin,
+  spawnBunClaudeProcess,
   type ClaudeHostToolPublicResult,
   type ClaudeHostToolResponseWritten,
   type ClaudeForegroundLoginResult,
@@ -180,6 +181,12 @@ import {
   claudeHostToolCallbackSocketPath,
 } from "./daemon/claude-host-tool-transport";
 import { PinnedClaudeRuntimeManager } from "./daemon/claude-runtime-adapter";
+import {
+  observePersonalClaudeAcceptanceProcess,
+  personalClaudeAcceptanceStatus,
+  type LiveAcceptancePersonalClaudeProofPort,
+  type PersonalClaudeAcceptanceLaunch,
+} from "./daemon/live-acceptance-personal-claude";
 import { PinnedCodexRuntimeManager } from "./daemon/codex-runtime-adapter";
 import {
   BoundedPersonalSessionDiscovery,
@@ -3319,6 +3326,7 @@ export type RunDaemonOptions = Readonly<{
     transport: CanonicalMemoryTransport,
   ) => CanonicalMemoryTransport;
   liveAcceptanceClaudeProof?: LiveAcceptanceClaudeProofPort;
+  liveAcceptancePersonalClaudeProof?: LiveAcceptancePersonalClaudeProofPort;
   stopSignal?: AbortSignal;
 }>;
 
@@ -3346,6 +3354,7 @@ async function runDaemonLifecycle(
     transport: CanonicalMemoryTransport,
   ) => CanonicalMemoryTransport,
   liveAcceptanceClaudeProof?: LiveAcceptanceClaudeProofPort,
+  liveAcceptancePersonalClaudeProof?: LiveAcceptancePersonalClaudeProofPort,
 ): Promise<number> {
   assertInstallationHome(installation);
   const paths = installation.paths;
@@ -3379,6 +3388,12 @@ async function runDaemonLifecycle(
   let resolveStop!: () => void;
   const stopped = new Promise<void>((resolve) => { resolveStop = resolve; });
   let stopRequested = false;
+  let personalClaudeProofFailure: unknown;
+  const closePersonalClaudeProofAdmission = () => {
+    try { liveAcceptancePersonalClaudeProof?.closeAdmission(); } catch (error: unknown) {
+      personalClaudeProofFailure ??= error;
+    }
+  };
   const closeCloudLifecycle = (): Promise<void> => {
     if (cloudLifecycle === undefined) return Promise.resolve();
     cloudLifecycleShutdown ??= cloudLifecycle.close();
@@ -3387,6 +3402,7 @@ async function runDaemonLifecycle(
   const requestStop = () => {
     if (stopRequested) return;
     stopRequested = true;
+    closePersonalClaudeProofAdmission();
     if (usagePoller !== undefined) usagePollerShutdown ??= usagePoller.close();
     if (adoptionPoller !== undefined) adoptionPollerShutdown ??= adoptionPoller.close();
     void closeCloudLifecycle().catch(() => undefined);
@@ -3447,6 +3463,7 @@ async function runDaemonLifecycle(
     daemonAuthority = new DaemonAuthorityFence(daemonLock, { generation, bootId });
     const activeDaemonAuthority = daemonAuthority;
     checkpointBoot();
+    liveAcceptancePersonalClaudeProof?.beginDaemonGeneration(generation);
     const serviceReference: { current?: OompaService } = {};
     claudeHostToolAuthority = new ClaudeHostToolBindingAuthority();
     const activeClaudeHostToolAuthority = claudeHostToolAuthority;
@@ -3616,6 +3633,35 @@ async function runDaemonLifecycle(
       },
     });
     personalClaude = new PinnedClaudeRuntimeManager({
+      ...(liveAcceptancePersonalClaudeProof === undefined ? {} : {
+        resolveRuntime: async (input: ResolvePinnedClaudeRuntimeOptions) => {
+          liveAcceptancePersonalClaudeProof.assertRuntimeRequest(input);
+          let runtime: PinnedClaudeRuntime;
+          try {
+            runtime = await resolvePinnedClaudeRuntime({
+              ...input,
+              executablePath: liveAcceptancePersonalClaudeProof.executablePath,
+              environment: liveAcceptancePersonalClaudeProof.environment,
+            });
+          } catch (error: unknown) {
+            liveAcceptancePersonalClaudeProof.runtimeFailed();
+            throw error;
+          }
+          liveAcceptancePersonalClaudeProof.runtimeAdmitted(runtime);
+          return runtime;
+        },
+        processFactory: (launch: PersonalClaudeAcceptanceLaunch) => {
+          const observation = liveAcceptancePersonalClaudeProof.prepareLaunch(launch);
+          const child = spawnBunClaudeProcess({
+            argv: launch.argv,
+            configDir: launch.configDir,
+            configHome: launch.configHome,
+            projectRoot: launch.projectRoot,
+            environment: liveAcceptancePersonalClaudeProof.environment,
+          });
+          return observePersonalClaudeAcceptanceProcess(child, observation);
+        },
+      }),
       configHome: personalClaudeConfigHomeForInstallation(installation),
       configDirFor: () => personalHomes.claudeConfigDir,
       isCurrent: (authority) =>
@@ -4032,6 +4078,7 @@ async function runDaemonLifecycle(
           ...(typeof data === "object" && data !== null ? data : {}),
           running: true,
           daemon,
+          ...personalClaudeAcceptanceStatus(liveAcceptancePersonalClaudeProof),
         };
       },
     });
@@ -4046,7 +4093,8 @@ async function runDaemonLifecycle(
     if (!(error instanceof DaemonBootInterruptedError)) runError = error;
   } finally {
     if (stopLatch.deliver === requestStop) stopLatch.deliver = undefined;
-    runError ??= unhandledRejectionError;
+    closePersonalClaudeProofAdmission();
+    runError ??= unhandledRejectionError ?? personalClaudeProofFailure;
     if (usagePoller !== undefined) usagePollerShutdown ??= usagePoller.close();
     if (adoptionPoller !== undefined) adoptionPollerShutdown ??= adoptionPoller.close();
     if (service !== undefined) serviceShutdown ??= service.close();
@@ -4154,6 +4202,22 @@ async function runDaemonLifecycle(
       }
     }
 
+    if (liveAcceptancePersonalClaudeProof !== undefined) {
+      try {
+        await joinBeforeDeadline(
+          "Personal Claude acceptance process collection",
+          liveAcceptancePersonalClaudeProof.closeDaemonGeneration(generation ?? null),
+        );
+      } catch (error: unknown) {
+        // This collector must prove every observed child and both actual native
+        // streams joined. A rejection is custody uncertainty, not a benign
+        // operation error; preserve the ordinary forced-recovery boundary.
+        const failure = new DaemonJoinDeadlineError("Personal Claude acceptance process collection", 5_000);
+        failure.cause = error;
+        runError = failure;
+      }
+    }
+
     if (runError instanceof DaemonJoinDeadlineError || runError instanceof LocalDaemonShutdownTimeoutError) {
       const diagnostic = safeDaemonFailure(runError);
       await daemonLock.publish({
@@ -4200,6 +4264,7 @@ export async function runDaemon(
     (
       options.liveAcceptanceCanonicalMemoryTransportDecorator !== undefined
       || options.liveAcceptanceClaudeProof !== undefined
+      || options.liveAcceptancePersonalClaudeProof !== undefined
     )
     && installation.kind !== "live_acceptance"
   ) {
@@ -4224,6 +4289,7 @@ export async function runDaemon(
       stopLatch,
       options.liveAcceptanceCanonicalMemoryTransportDecorator,
       options.liveAcceptanceClaudeProof,
+      options.liveAcceptancePersonalClaudeProof,
     );
   } finally {
     stopLatch.deliver = undefined;

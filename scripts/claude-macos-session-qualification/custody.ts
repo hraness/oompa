@@ -8,12 +8,13 @@ import type { ClaudeProcessIdentity } from "../../src/claude/process.ts";
 import { resolveStatePaths } from "../../src/storage/paths.ts";
 import type { QualificationCustodySource } from "../claude-macos-auth-qualification/custody.ts";
 import { qualificationBindingSchema } from "../claude-macos-auth-qualification/state.ts";
-import { acquireClaudeMacosSessionQualificationOwner, type ClaudeLiveAcceptanceOwner } from "../claude-live-acceptance-owner.ts";
+import { acquireClaudeMacosDaemonQualificationOwner, acquireClaudeMacosSessionQualificationOwner, type ClaudeLiveAcceptanceOwner } from "../claude-live-acceptance-owner.ts";
 import { AtomicPrivateJsonReceipt, createPrivateTemporaryDirectory, observePrivateDirectory, privatePathsOverlap,
   syncPrivateDirectory, type AtomicPrivateJsonPolicy, type PrivateDirectoryIdentity } from "../live-acceptance-private-custody.ts";
 
 export const JOURNAL_OPERATIONS = ["version", "login_help", "logout_help", "initial_status", "login", "signed_in", "start", "stream_turn", "approve_turn", "deny_turn", "interrupt_turn", "close", "resume", "resumed_turn", "close_final", "logout", "signed_out"] as const;
 export type JournalOperation = typeof JOURNAL_OPERATIONS[number];
+export const DAEMON_SEED_OPERATIONS = ["version", "login_help", "logout_help", "initial_status", "login", "signed_in", "start", "stream_turn", "close"] as const;
 const uuid = z.string().refine((value) => value.length === 36 && z.uuid().safeParse(value).success);
 const tag = z.string().refine((s) => s.length === 64 && /^[0-9a-f]{64}$/u.test(s));
 const sourceSchema = qualificationBindingSchema.pick({ sourceSha: true, sourceTree: true, executable: true });
@@ -45,9 +46,12 @@ export type JournalAttempt = Readonly<z.infer<typeof attemptSchema>>;
 const dispatchSchema = z.strictObject({ dispatchId: uuid, kind: z.enum(["process", "frame"]), frameTag: tag.nullable(), frameBytes: z.number().int().min(0).max(65536), acknowledged: z.boolean() });
 const entrySchema = z.strictObject({ attempt: attemptSchema, phase: z.enum(["intent", "dispatched", "settled"]),
   dispatches: z.array(dispatchSchema).max(16), child: identitySchema.nullable(), summary: summarySchema.nullable() });
-const stateSchema = z.strictObject({ version: z.literal(1), source: z.enum(["native_session_qualification", "credential_free_fixture"]), runId: uuid,
+const stateSchema = z.strictObject({ version: z.literal(1), source: z.enum(["native_session_qualification", "credential_free_fixture", "native_daemon_seed_qualification", "credential_free_daemon_seed_fixture"]), runId: uuid,
   revision: z.number().int().min(0).max(512), attempts: z.array(entrySchema).max(17), failure: reasonSchema.nullable() });
 type JournalState = z.infer<typeof stateSchema>;
+const operationsFor = (state: JournalState): readonly JournalOperation[] =>
+  state.source === "native_daemon_seed_qualification" || state.source === "credential_free_daemon_seed_fixture"
+    ? DAEMON_SEED_OPERATIONS : JOURNAL_OPERATIONS;
 const eventSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("intent"), operation: z.enum(JOURNAL_OPERATIONS), attemptId: uuid }),
   z.strictObject({ kind: z.literal("dispatched"), attemptId: uuid }),
@@ -79,7 +83,7 @@ function reduce(input: JournalState, eventInput: unknown): JournalState {
   const current = state.attempts.at(-1);
   if (event.kind === "failure") state.failure = event.reason;
   else if (event.kind === "intent") {
-    requireThat((current === undefined || current.phase === "settled") && JOURNAL_OPERATIONS[state.attempts.length] === event.operation
+    requireThat((current === undefined || current.phase === "settled") && operationsFor(state)[state.attempts.length] === event.operation
       && !state.attempts.some((entry) => entry.attempt.attemptId === event.attemptId));
     state.attempts.push({ attempt: { runId: state.runId, attemptId: event.attemptId, operation: event.operation, ordinal: state.attempts.length }, phase: "intent", dispatches: [], child: null, summary: null });
   } else {
@@ -133,6 +137,14 @@ export function observeCredentialFreeSessionJournal(state: unknown, event: unkno
   const parsed = parseState(state); requireThat(parsed.source === "credential_free_fixture"); return reduce(parsed, event);
 }
 
+/** Separate fixture provenance cannot be promoted into a daemon owner. */
+export function createCredentialFreeDaemonSeedJournal(runId: unknown): JournalState {
+  return { version: 1, source: "credential_free_daemon_seed_fixture", runId: uuid.parse(runId), revision: 0, attempts: [], failure: null };
+}
+export function observeCredentialFreeDaemonSeedJournal(state: unknown, event: unknown): JournalState {
+  const parsed = parseState(state); requireThat(parsed.source === "credential_free_daemon_seed_fixture"); return reduce(parsed, event);
+}
+
 export type DarwinSessionScope = Readonly<{ runId: string; ownerEpoch: string; receiptPath: string; runRoot: string; profileRoot: string;
   temporaryRoot: string; projectRoot: string; runtimeRoot: string; profileId: string; providerAccountId: string; providerThreadId: string; generation: 1 }>;
 export type SessionDispatchTicket = Readonly<{ dispatchId: string; assertCurrent(): void }>;
@@ -147,6 +159,7 @@ export class DarwinSessionCustody {
   readonly scope: DarwinSessionScope;
   readonly #owner: ClaudeLiveAcceptanceOwner;
   readonly #source: QualificationCustodySource;
+  readonly #purpose: "session" | "daemon_seed";
   readonly #directories: readonly PrivateDirectoryIdentity[];
   readonly #key: Buffer;
   readonly #keyIdentity: Stats;
@@ -160,30 +173,38 @@ export class DarwinSessionCustody {
   #generation = 0;
   readonly #consumed = new Set<string>();
 
-  private constructor(scope: DarwinSessionScope, source: QualificationCustodySource, owner: ClaudeLiveAcceptanceOwner, directories: readonly PrivateDirectoryIdentity[], key: Buffer, keyIdentity: Stats) {
+  private constructor(scope: DarwinSessionScope, source: QualificationCustodySource, owner: ClaudeLiveAcceptanceOwner, directories: readonly PrivateDirectoryIdentity[], key: Buffer, keyIdentity: Stats, purpose: "session" | "daemon_seed") {
     this.scope = Object.freeze(scope); this.#source = source; this.#owner = owner; this.#directories = directories;
-    this.#key = key; this.#keyIdentity = keyIdentity;
-    this.#state = { version: 1, source: "native_session_qualification", runId: scope.runId, revision: 0, attempts: [], failure: null };
+    this.#key = key; this.#keyIdentity = keyIdentity; this.#purpose = purpose;
+    this.#state = { version: 1, source: purpose === "session" ? "native_session_qualification" : "native_daemon_seed_qualification", runId: scope.runId, revision: 0, attempts: [], failure: null };
   }
   get state() {
     const state = structuredClone(this.#state); const last = state.attempts.at(-1);
-    return Object.freeze({ operation: last !== undefined && last.phase !== "settled" ? last.attempt.operation : JOURNAL_OPERATIONS[state.attempts.length] ?? null,
+    return Object.freeze({ operation: last !== undefined && last.phase !== "settled" ? last.attempt.operation : operationsFor(state)[state.attempts.length] ?? null,
       pending: last?.phase === "settled" ? null : last ?? null, failure: this.#failure ?? state.failure,
-      complete: this.#failure === null && state.failure === null && state.attempts.length === 17 && last?.phase === "settled", journal: state });
+      complete: this.#failure === null && state.failure === null && state.attempts.length === operationsFor(state).length && last?.phase === "settled", journal: state });
   }
   static async createNative(sourceInput: unknown): Promise<DarwinSessionCustody> {
+    return await DarwinSessionCustody.#create(sourceInput, "session");
+  }
+  /** Internal fixed seed ceremony; the owner remains held through daemon phases. */
+  static async createDaemonSeedNative(sourceInput: unknown): Promise<DarwinSessionCustody> {
+    return await DarwinSessionCustody.#create(sourceInput, "daemon_seed");
+  }
+  static async #create(sourceInput: unknown, purpose: "session" | "daemon_seed"): Promise<DarwinSessionCustody> {
     const source = sourceSchema.parse(sourceInput);
     if (process.platform !== "darwin") throw invalid();
     const parent = await realpath("/private/tmp");
     if (parent !== "/private/tmp" || privatePathsOverlap(parent, homedir()) || privatePathsOverlap(parent, resolveStatePaths().root)) throw invalid();
     const runId = randomUUID();
-    const root = await createPrivateTemporaryDirectory(join(parent, "oompa-ms-"), invalid);
+    const root = await createPrivateTemporaryDirectory(join(parent, purpose === "session" ? "oompa-ms-" : "oompa-md-"), invalid);
     let owner: ClaudeLiveAcceptanceOwner | undefined; let key: Buffer | undefined;
     let ownerRelease: "not_attempted" | "released" | "uncertain" = "not_attempted";
     try {
-      const receiptPath = join(root.path, `.oompa-macos-session-qualification-${runId}.recovery.json`);
+      const family = purpose === "session" ? "session" : "daemon";
+      const receiptPath = join(root.path, `.oompa-macos-${family}-qualification-${runId}.recovery.json`);
       ownerRelease = "uncertain";
-      owner = await acquireClaudeMacosSessionQualificationOwner({ runId, receiptPath }); owner.assertCurrent();
+      owner = await (purpose === "session" ? acquireClaudeMacosSessionQualificationOwner : acquireClaudeMacosDaemonQualificationOwner)({ runId, receiptPath }); owner.assertCurrent();
       const directories = [root]; const paths = {} as Record<typeof rootNames[number], string>;
       for (const name of rootNames) {
         const path = join(root.path, rootBasenames[name]); await mkdir(path, { mode: 0o700 });
@@ -196,7 +217,7 @@ export class DarwinSessionCustody {
       const keyIdentity = lstatSync(keyPath);
       const scope = { runId, ownerEpoch: randomUUID(), receiptPath, runRoot: root.path, ...paths, profileId: `acct_${randomBytes(16).toString("hex")}`,
         providerAccountId: `pact_${randomBytes(16).toString("hex")}`, providerThreadId: randomUUID(), generation: 1 as const };
-      const value = new DarwinSessionCustody(scope, source, owner, directories, key, keyIdentity);
+      const value = new DarwinSessionCustody(scope, source, owner, directories, key, keyIdentity, purpose);
       value.#assertLayout();
       value.#receipt = await AtomicPrivateJsonReceipt.create(value.#record(value.#state), value.#policy());
       value.#receiptIdentity = value.#captureReceipt(); value.#assertCurrent();
@@ -244,7 +265,12 @@ export class DarwinSessionCustody {
     catch { this.#failure = "custody_refused"; throw new DarwinSessionCustodyError("custody_refused", this.scope.runRoot); }
   }
   async assertCurrent(): Promise<void> { this.#assertCurrent(); }
-  #mac(value: string | Uint8Array): string { return createHmac("sha256", this.#key).update("oompa-darwin-session-journal-v1\0").update(value).digest("hex"); }
+  /** Synchronous final fence for the fixed daemon continuation after its seed. */
+  assertDaemonOwnerCurrent(): void {
+    if (this.#purpose !== "daemon_seed" || !this.state.complete) throw invalid();
+    this.#assertCurrent();
+  }
+  #mac(value: string | Uint8Array): string { return createHmac("sha256", this.#key).update(this.#purpose === "session" ? "oompa-darwin-session-journal-v1\0" : "oompa-darwin-daemon-seed-journal-v1\0").update(value).digest("hex"); }
   #record(state: JournalState): RecordValue {
     const payload = JSON.stringify({ scope: this.scope, source: this.#source, directories: this.#directories, state });
     if (Buffer.byteLength(payload) > 60000) throw invalid(); return { version: 1, payload, mac: this.#mac(payload) };
@@ -256,7 +282,7 @@ export class DarwinSessionCustody {
     if (typeof parsed !== "object" || parsed === null || !("scope" in parsed) || !("source" in parsed) || !("directories" in parsed) || !("state" in parsed)
       || Object.keys(parsed).length !== 4 || !same(parsed.scope, this.scope) || !same(parsed.source, this.#source) || !same(parsed.directories, this.#directories)) throw invalid();
     const state = parseState(parsed.state);
-    if (state.source !== "native_session_qualification" || state.runId !== this.scope.runId) throw invalid();
+    if (state.source !== (this.#purpose === "session" ? "native_session_qualification" : "native_daemon_seed_qualification") || state.runId !== this.scope.runId) throw invalid();
     return record;
   }
   #policy(): AtomicPrivateJsonPolicy<RecordValue> {
@@ -297,7 +323,7 @@ export class DarwinSessionCustody {
     const frame = parsed.frame === undefined ? undefined : Uint8Array.from(parsed.frame);
     try { return await this.#mutate(async () => {
       this.#checkAttempt(attempt); const dispatchId = randomUUID();
-      const frameTag = frame === undefined ? null : createHmac("sha256", this.#key).update(JSON.stringify(["darwin-session-frame-v1", this.scope.runId, this.scope.ownerEpoch, attempt.attemptId, dispatchId])).update(frame).digest("hex");
+      const frameTag = frame === undefined ? null : createHmac("sha256", this.#key).update(JSON.stringify([this.#purpose === "session" ? "darwin-session-frame-v1" : "darwin-daemon-seed-frame-v1", this.scope.runId, this.scope.ownerEpoch, attempt.attemptId, dispatchId])).update(frame).digest("hex");
       await this.#persist({ kind: "dispatch", attemptId: attempt.attemptId, dispatchId, dispatchKind: parsed.kind, frameTag, frameBytes: frame?.byteLength ?? 0 });
       this.#assertCurrent(); const generation = this.#generation; const receipt = this.#receiptIdentity; let used = false;
       return Object.freeze({ dispatchId, assertCurrent: (): void => {

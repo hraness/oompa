@@ -6503,6 +6503,27 @@ describe("CLI entry point", () => {
     expect(invoked).toBeFalse();
   });
 
+  test("rejects the personal Claude restart proof outside live acceptance before effects", async () => {
+    const installation = createProductionInstallation();
+    let invoked = false;
+    const touched = () => { invoked = true; };
+    await expect(runDaemon(installation, {
+      liveAcceptancePersonalClaudeProof: {
+        executablePath: "/fixture/never-executed-claude",
+        environment: {},
+        beginDaemonGeneration: touched,
+        assertRuntimeRequest: touched,
+        runtimeAdmitted: touched,
+        runtimeFailed: touched,
+        prepareLaunch: () => { touched(); throw new Error("No process launch is admitted."); },
+        observeWrites: () => { touched(); return { userWriteAttempts: 0, acceptedUserWrites: 0, acknowledgmentWithheld: false }; },
+        closeAdmission: touched,
+        closeDaemonGeneration: async () => { touched(); },
+      },
+    })).rejects.toThrow("Daemon acceptance hooks are restricted to live acceptance.");
+    expect(invoked).toBeFalse();
+  });
+
   test("delivers an abort during early daemon boot before transport exists", async () => {
     const { installation: baseInstallation, runRoot } = await upgradeFixture("daemon-stop-during-early-boot");
     try {

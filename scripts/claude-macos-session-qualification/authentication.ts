@@ -9,7 +9,8 @@ import { bindDarwinDetachedAuthProcess } from "../claude-macos-auth-process/proc
 import type { captureNativeClaudeMacosAdmission } from "../claude-macos-auth-qualification/admission";
 import { observeNativePrivateClaudeIdentity } from "../claude-macos-auth-qualification/native-observer";
 import { OwnerTerminalError, readOwnerTerminalResponse, type createQualificationTerminalSignals } from "../claude-macos-auth-qualification/owner-terminal";
-import type { DarwinSessionCustody, JournalAttempt } from "./custody";
+import type { JournalAttempt } from "./custody";
+import type { QualificationSessionCustody } from "./custody-port";
 import { DarwinSessionQualificationError } from "./turn";
 
 export type SessionAdmission = ReturnType<typeof captureNativeClaudeMacosAdmission>;
@@ -32,13 +33,13 @@ async function collect(source: AsyncIterable<Uint8Array>, maximum: number): Prom
 /** Internal native composition; the sole public runner constructs all of these authorities. */
 export class SessionAuthentication {
   readonly binding: ClaudeQualificationBindingInput;
-  readonly #custody: DarwinSessionCustody;
+  readonly #custody: QualificationSessionCustody;
   readonly #admission: SessionAdmission;
   readonly #signals: SessionSignals;
   #uncertain = false;
   #loginStarted = false;
   #loginJoined = false;
-  constructor(custody: DarwinSessionCustody, admission: SessionAdmission, signals: SessionSignals,
+  constructor(custody: QualificationSessionCustody, admission: SessionAdmission, signals: SessionSignals,
     environment: Readonly<Record<string, string | undefined>>) {
     this.#custody = custody; this.#admission = admission; this.#signals = signals;
     this.binding = Object.freeze({ executablePath: admission.source.executable.path,

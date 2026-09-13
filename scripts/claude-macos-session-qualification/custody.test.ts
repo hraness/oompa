@@ -5,7 +5,7 @@ import { chmod, lstat, mkdir, readFile, readdir, rename, writeFile } from "node:
 import { basename, join } from "node:path";
 import { AtomicPrivateJsonReceipt } from "../live-acceptance-private-custody.ts";
 import { createCredentialFreeSessionJournal, observeCredentialFreeSessionJournal, DarwinSessionCustody,
-  JOURNAL_OPERATIONS, type JournalOperation, type SessionSummary } from "./custody.ts";
+  JOURNAL_OPERATIONS, DAEMON_SEED_OPERATIONS, createCredentialFreeDaemonSeedJournal, observeCredentialFreeDaemonSeedJournal, type JournalOperation, type SessionSummary } from "./custody.ts";
 
 const id = (n: number): string => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 const digest = "a".repeat(64);
@@ -22,9 +22,9 @@ function summary(operation: JournalOperation): SessionSummary {
   if (operation === "close" || operation === "close_final") return { kind: "close", processIdentity: operation === "close" ? firstChild : resumedChild, childJoined: true, stdoutEof: true, stderrEof: true };
   return { kind: "turn", deltaCount: 2, deltaBytes: 12, completed: true, decision: operation === "approve_turn" ? "once" : operation === "deny_turn" ? "decline" : null, interrupted: operation === "interrupt_turn" };
 }
-function history() {
-  let state = createCredentialFreeSessionJournal(id(1)); let next = 2;
-  const event = (input: unknown) => { state = observeCredentialFreeSessionJournal(state, input); };
+function history(family: "session" | "daemon" = "session") {
+  let state = family === "session" ? createCredentialFreeSessionJournal(id(1)) : createCredentialFreeDaemonSeedJournal(id(1)); let next = 2;
+  const event = (input: unknown) => { state = (family === "session" ? observeCredentialFreeSessionJournal : observeCredentialFreeDaemonSeedJournal)(state, input); };
   const attempt = () => { const current = state.attempts.at(-1)?.attempt; if (current === undefined) throw new Error("fixture_attempt_missing"); return current; };
   const begin = (operation: JournalOperation) => { const attemptId = id(next++); event({ kind: "intent", operation, attemptId }); event({ kind: "dispatched", attemptId }); return attempt(); };
   const dispatch = (kind: "process" | "frame", acknowledge = true) => {
@@ -41,7 +41,7 @@ function history() {
     return current;
   };
   const settle = (value: unknown = summary(attempt().operation)) => event({ kind: "settled", attemptId: attempt().attemptId, summary: value });
-  const advance = (count: number) => { for (const operation of JOURNAL_OPERATIONS.slice(state.attempts.length, count)) { prepare(operation); settle(); } };
+  const advance = (count: number) => { for (const operation of (family === "session" ? JOURNAL_OPERATIONS : DAEMON_SEED_OPERATIONS).slice(state.attempts.length, count)) { prepare(operation); settle(); } };
   return { get state() { return state; }, event, begin, dispatch, prepare, settle, advance, attempt };
 }
 
@@ -301,4 +301,25 @@ nativeTest("concurrent mutation poisons both paths and retains ownership until t
   } finally { resume.resolve(undefined); await joined; spy.mockRestore(); }
   expect((await joined)[0].status).toBe("rejected"); expect(value.state.failure).toBe("concurrent_operation");
   await release(value); expect((await lstat(value.scope.receiptPath)).isFile()).toBe(true);
+});
+
+test("daemon seed custody has a fixed nine-operation family and cannot reuse session fixture provenance", () => {
+  const h = history("daemon"); h.advance(9);
+  expect(h.state.attempts.map((entry) => entry.attempt.operation)).toEqual([...DAEMON_SEED_OPERATIONS]);
+  expect(h.state.attempts.at(-1)?.summary).toEqual(summary("close"));
+  expect(h.state.source).toBe("credential_free_daemon_seed_fixture");
+  expect(() => h.begin("logout")).toThrow();
+  expect(() => h.begin("resume")).toThrow();
+  expect(() => observeCredentialFreeSessionJournal(h.state, { kind: "failure", reason: "aborted" })).toThrow();
+  const original = history(); original.advance(8);
+  expect(() => observeCredentialFreeDaemonSeedJournal(original.state, { kind: "failure", reason: "aborted" })).toThrow();
+  expect(() => observeCredentialFreeDaemonSeedJournal({ ...h.state, source: "native_daemon_seed_qualification" }, { kind: "failure", reason: "aborted" })).toThrow();
+});
+
+test("daemon seed custody retains the original close and uncertain-dispatch barriers", () => {
+  const h = history("daemon"); h.advance(8); h.prepare("close");
+  expect(() => h.settle({ ...summary("close"), stdoutEof: false })).toThrow();
+  const initial = history("daemon"); initial.begin("version"); initial.dispatch("process", false);
+  expect(() => initial.settle()).toThrow();
+  expect(initial.state.attempts.at(-1)?.phase).toBe("dispatched");
 });
