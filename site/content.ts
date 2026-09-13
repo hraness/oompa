@@ -204,7 +204,7 @@ const {
 } = hostedSignupCopy(hostedSignup);
 
 const links = {
-  admittedInstall: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact",
+  admittedInstall: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact",
   app: "https://app.oompa.app",
   contributing: "https://github.com/hraness/oompa/blob/main/CONTRIBUTING.md",
   documentation: "https://oompa.app/docs/",
@@ -300,10 +300,10 @@ const productName = "Oompa";
 const tagline = "Workspace for Codex and Claude Code";
 const providerRoadmap = "Codex and Claude Code, side by side.";
 const releaseVersion = "0.8.2";
-export const admittedReleaseVersion = "0.8.0";
-const admittedReleaseRun = "34560340100";
+export const admittedReleaseVersion = "0.8.1";
+const admittedReleaseRun = "34781400584";
 export const isAdmittedRelease = (version: string): boolean => version === admittedReleaseVersion;
-const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its verified installation notes for the existing artifact. The v0.8.0 npm mirror is not admitted.`;
+const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its verified installation notes for the existing artifact. The v0.8.1 npm mirror is not admitted.`;
 const daemonRolloutNotice = `Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v${admittedReleaseVersion} daemon or the v${releaseVersion} candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.`;
 
 /** The existing exact release evidence also belongs in the new status guide. */
