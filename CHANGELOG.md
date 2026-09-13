@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.8.1 candidate (unreleased)
+## v0.8.2 candidate (unreleased)
 
 - Interactive root help shows a compact ASCII orange-circle introduction on a capable terminal. Redirected help, JSON, version, nested help and errors retain their existing output. No daemon, provider, store or command authority changes.
 - This patch needs its own exact immutable artifact admission. The v0.8.0 canonical GitHub artifact is admitted; its optional npm mirror failed before publication and is not admitted. Its historical entry below retains the candidate wording from that source. Capacity activation, daemon startup and intended-target gates remain unchanged.
