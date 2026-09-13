@@ -2,7 +2,7 @@
 
 `@hraness/oompa` supplies the `oompa` command and local daemon. It manages isolated Codex and Claude Code profiles, durable sessions and command records, and optional encrypted sync. Provider tools own authentication and execution; Oompa does not broker model access.
 
-Local CLI v0.8.1 is a release candidate, not an admitted artifact; v0.7.1 remains the fully admitted public artifact. Current daemon and hosted command-writer rollout remains blocked on capacity.
+Local CLI v0.8.1 is a release candidate, not an admitted artifact; v0.8.0 remains the admitted canonical GitHub artifact. Current daemon and hosted command-writer rollout remains blocked on capacity.
 
 [CLI reference](https://oompa.app/docs/reference/) · [Availability](https://oompa.app/docs/status/)
 
@@ -14,9 +14,9 @@ Use Bun 1.3.14. Codex execution supports macOS and Linux; Claude Code execution 
 
 Use the exact tagged installer for the artifact you intend to install. It checks the release identity and source digests before installation. Do not replace its command with a moving package tag.
 
-> This release candidate is not yet admitted. The v0.8.1 install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v0.7.1; use its immutable installation notes for the existing artifact. [Admitted release installation notes](https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install).
+> This release candidate is not yet admitted. The v0.8.1 install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v0.8.0; use its immutable GitHub release assets for the existing artifact. The v0.8.0 npm mirror is not admitted. [Admitted GitHub release assets](https://github.com/hraness/oompa/releases/tag/v0.8.0).
 
-The v0.8.1 candidate is not yet admitted. For the admitted v0.7.1 artifact, use its [immutable README](https://github.com/hraness/oompa/tree/v0.7.1#get-started).
+The v0.8.1 candidate is not yet admitted. For the admitted v0.8.0 artifact, use its [verified installation notes](https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact).
 
 Only after immutable GitHub release admission, install and verify the v0.8.1 candidate CLI artifact. This does not start the daemon:
 
@@ -28,7 +28,7 @@ test "$(unset BUN_OPTIONS NODE_OPTIONS LD_AUDIT LD_LIBRARY_PATH LD_ORIGIN_PATH L
 oompa doctor --offline
 ```
 
-> **Before initialization:** Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v0.7.1 daemon or the v0.8.1 candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.
+> **Before initialization:** Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v0.8.0 daemon or the v0.8.1 candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.
 
 Continue with the [setup guide](https://oompa.app/docs/start/). For an existing installation, use the [ordered update runbook](https://oompa.app/docs/status/#install-and-update).
 
