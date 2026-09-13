@@ -144,20 +144,20 @@ export function prepareSiteDocument(html: string, foundationPath: string): strin
 }
 
 /** Admit only the closed captured renderer surface, never an arbitrary path map. */
-export function captureSiteDocuments(value: unknown, environment: Readonly<Record<string, string | undefined>>): ReadonlyMap<string, string> {
+export function captureSiteDocuments(value: unknown): ReadonlyMap<string, string> {
   const renderers = record(value);
   const documents = new Map<string, string>();
   for (const [index, name] of ["renderSiteHtml", "renderPrivacyHtml", "renderPreviewHtml"].entries()) {
     const render: unknown = Object.getOwnPropertyDescriptor(renderers, name)?.value;
     const path = routes[index];
     assert.ok(typeof render === "function" && path !== undefined, "Captured renderer export changed");
-    const html = (render as (content: undefined, environment: Readonly<Record<string, string | undefined>>) => unknown)(undefined, environment);
+    const html = (render as (content: undefined) => unknown)(undefined);
     assert.equal(typeof html, "string", "Static renderer must return an HTML string");
     documents.set(path, html as string);
   }
   const renderDocs: unknown = Object.getOwnPropertyDescriptor(renderers, "renderDocsPages")?.value;
   assert.ok(typeof renderDocs === "function", "Captured documentation renderer export changed");
-  const docs = record((renderDocs as (environment: Readonly<Record<string, string | undefined>>) => unknown)(environment));
+  const docs = record((renderDocs as () => unknown)());
   assert.equal(Object.getPrototypeOf(docs), Object.prototype, "Documentation renderer must return an ordinary route map");
   const descriptors = Object.getOwnPropertyDescriptors(docs);
   assert.deepEqual(Reflect.ownKeys(descriptors).sort(), [...docsRoutes].sort(), "Documentation renderer routes changed");
@@ -181,7 +181,6 @@ export type SiteStylexOutput = Readonly<{
  * in the task's ignored build directory for diagnosis. */
 export async function buildSiteStylex(options: Readonly<{
   sourceRoot: string;
-  environment: Readonly<Record<string, string | undefined>>;
   fonts: readonly Readonly<{ path: string; bytes: Uint8Array }>[];
   images: readonly Readonly<{ path: string; bytes: Uint8Array }>[];
 }>): Promise<SiteStylexOutput> {
@@ -222,7 +221,7 @@ export async function buildSiteStylex(options: Readonly<{
   const rendererRoot = join(generation.directory, renderer.outputRoot);
   assert.deepEqual(await artifactForFile(rendererRoot, entry.path), entry);
   const module: unknown = await import(pathToFileURL(join(rendererRoot, entry.path)).href);
-  for (const [path, html] of captureSiteDocuments(module, options.environment)) {
+  for (const [path, html] of captureSiteDocuments(module)) {
     const prepared = await prepareStylexProducedTemplate(generation, path);
     await writeFile(prepared.sourcePath, prepareSiteDocument(html, foundationPath), { flag: "wx", mode: 0o644 });
     await sealStylexProducedTemplate(generation, path);

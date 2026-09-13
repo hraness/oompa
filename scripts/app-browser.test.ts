@@ -243,7 +243,7 @@ describe("static site graph acceptance", () => {
   });
 
   test("keeps inert preview and opaque product policies distinct with exact credential-free CORS", () => {
-    const siteCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'self'; frame-src 'self' https://challenges.cloudflare.com";
+    const siteCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'self'; frame-src 'self'";
     const previewCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'none'";
     const productPreviewCsp = `${exampleCsp}; frame-ancestors 'self'`;
     const config = (site: string, preview: string) => ({ headers: [

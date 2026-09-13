@@ -395,7 +395,7 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
     .map(([path, bytes]) => ({ path, bytes }));
   const compiled = await buildSiteStylex({
     sourceRoot,
-    environment, fonts: allFonts, images: presetImages,
+    fonts: allFonts, images: presetImages,
   });
   assert.deepEqual(await checkLanternMaterialSnapshot(materialRoot), material, "Lantern source changed during static compilation");
   // Retain failed/completed private receipts under the same ignored build root

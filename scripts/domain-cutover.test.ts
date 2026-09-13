@@ -397,8 +397,8 @@ describe("domain cutover runbook", () => {
       join(import.meta.dir, "..", "docs", "domain-cutover.md"),
       "utf8",
     );
-    expect(runbook).toContain("unconfigured local build omits the mailing footer's Turnstile script");
-    expect(runbook).toContain("Validate exactly the script emitted by the pinned `@hraness/site-footer`");
+    expect(runbook).toContain("without a client challenge script");
+    expect(runbook).toContain("Validate exactly the markup emitted by the pinned `@hraness/site-footer`");
     expect(runbook).toContain("one occurrence on each navigable page and none on `/preview/`");
     expect(runbook).toContain("do not exempt arbitrary third-party scripts");
     expect(runbook).toContain("Preserve exact owned stylesheet and script references");

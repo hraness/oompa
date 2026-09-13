@@ -694,7 +694,7 @@ describe("release workflow", () => {
     expect(thirdPartyNotices).toContain("This candidate is not yet admitted");
     expect(thirdPartyNotices).not.toContain("The admitted `v0.8.1` release records its build graph");
     expect(thirdPartyNotices).toContain("bound the immutable source tag");
-    expect(thirdPartyNotices).toContain("`@hraness/site-footer` v0.6.1");
+    expect(thirdPartyNotices).toContain("`@hraness/site-footer` v0.9.0");
     expect(thirdPartyNotices).toContain("`@hraness/design-kit` v0.6.2");
     expect(thirdPartyNotices).toContain("`@hraness/ui` v0.5.6");
     expect(thirdPartyNotices).toContain("`@hraness/direct` v0.7.0");
