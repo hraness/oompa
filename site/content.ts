@@ -303,7 +303,7 @@ const releaseVersion = "0.8.1";
 export const admittedReleaseVersion = "0.8.0";
 const admittedReleaseRun = "34560340100";
 export const isAdmittedRelease = (version: string): boolean => version === admittedReleaseVersion;
-const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its immutable release assets for the existing artifact. The v0.8.0 npm mirror is not admitted.`;
+const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its verified installation notes for the existing artifact. The v0.8.0 npm mirror is not admitted.`;
 const daemonRolloutNotice = `Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v${admittedReleaseVersion} daemon or the v${releaseVersion} candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.`;
 
 /** The existing exact release evidence also belongs in the new status guide. */
@@ -316,7 +316,7 @@ export const releaseAdmissionNotice: ContentBlock = {
     text(" passed immutable GitHub release admission in "),
     link(`release run ${admittedReleaseRun}`, `https://github.com/hraness/oompa/actions/runs/${admittedReleaseRun}`),
     text(`, attempt 1. Its optional npm mirror failed before publication and is not admitted. That evidence does not admit v${releaseVersion}. Use the predecessor's `),
-    link("immutable release assets", links.admittedInstall),
+    link("verified installation notes", links.admittedInstall),
     text(". The candidate command below remains unavailable until its own admission. The website and optional hosted sync are live; artifact admission does not authorize current-daemon startup or hosted command writers."),
   ],
 };
@@ -503,7 +503,7 @@ export const publicContent: PublicContent = {
     },
     {
       question: "Can I start using it now?",
-      answer: [text(`The website, web app, and hosted sync are available in ${hostedBetaLabel}. The admitted v${admittedReleaseVersion} CLI has its own `), link("verified installation instructions", links.admittedInstall), text(" and "), link("immutable release assets", links.admittedInstall), text(`.${isAdmittedRelease(releaseVersion) ? "" : ` The v${releaseVersion} candidate is not yet admitted.`} Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass. `), link("Check the setup status", "/docs/status/"), text(" before initialization or daemon startup.")],
+      answer: [text(`The website, web app, and hosted sync are available in ${hostedBetaLabel}. The admitted v${admittedReleaseVersion} CLI has its own `), link("verified installation notes", links.admittedInstall), text(`.${isAdmittedRelease(releaseVersion) ? "" : ` The v${releaseVersion} candidate is not yet admitted.`} Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass. `), link("Check the setup status", "/docs/status/"), text(" before initialization or daemon startup.")],
     },
     {
       question: "Does Oompa use my API keys or provider subscription?",
