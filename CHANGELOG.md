@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.1 candidate (unreleased)
+
+- Interactive root help shows a compact ASCII orange-circle introduction on a capable terminal. Redirected help, JSON, version, nested help and errors retain their existing output. No daemon, provider, store or command authority changes.
+- This patch needs its own exact immutable artifact admission. Published v0.8.0 is not established as admitted here; its record below retains the candidate wording from that source. v0.7.1 remains the admitted predecessor. Capacity activation, daemon startup and intended-target gates remain unchanged.
+
 Every entry names the release or the plan wave it belongs to. Unreleased work sits under the wave that produced it until a version ships.
 
 ## Desktop switching removed (unreleased)

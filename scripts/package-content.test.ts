@@ -30,12 +30,12 @@ describe("independently authored package content", () => {
   });
 
   test("retains candidate, predecessor, startup, privacy, and command-order contracts", () => {
-    expect(readme).toContain("The v0.8.0 candidate is not yet admitted.");
+    expect(readme).toContain("The v0.8.1 candidate is not yet admitted.");
     expect(readme).toContain("For the admitted v0.7.1 artifact, use its [immutable README](https://github.com/hraness/oompa/tree/v0.7.1#get-started).");
     expect(readme).toContain("https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install");
     expect(readme).toContain(packageCandidateNotice);
     expect(readme.indexOf(packageCandidateNotice)).toBeLessThan(readme.indexOf(packageInstallCommand));
-    expect(readme.indexOf("The v0.8.0 candidate is not yet admitted.")).toBeLessThan(readme.indexOf(packageInstallCommand));
+    expect(readme.indexOf("The v0.8.1 candidate is not yet admitted.")).toBeLessThan(readme.indexOf(packageInstallCommand));
     expect(readme.indexOf(packageInstallPrerequisite)).toBeLessThan(readme.indexOf(packageInstallCommand));
     expect(readme.indexOf(packageInstallCommand)).toBeLessThan(readme.indexOf("\noompa doctor --offline\n"));
     expect(readme).toContain(packageDaemonNotice);
@@ -50,7 +50,7 @@ describe("independently authored package content", () => {
     expect(readme).not.toContain("\u2014");
     expect(manifest.description).not.toContain("\u2014");
     for (const excluded of [
-      "v0.7.1 candidate", "v0.8.0 artifacts admitted", "## Command reference\n",
+      "v0.7.1 candidate", "v0.8.1 artifacts admitted", "## Command reference\n",
       "### Update runbook\n", "## First account\n", "## Privacy\n", "\nhra init --yes\n",
       "/reading/deepseek-harness/", "/reading/hax/", "/reading/headlong-microharness/", "/reading/oracle-and-firm/",
     ]) expect(readme).not.toContain(excluded);
@@ -66,12 +66,14 @@ describe("independently authored package content", () => {
     for (const claim of [
       "Install and verify the admitted v0.8.0 CLI artifact",
       "v0.8.0 artifacts admitted", "v0.8.0 is the fully admitted public artifact",
+      "Install and verify the admitted v0.8.1 CLI artifact",
+      "v0.8.1 artifacts admitted", "v0.8.1 is the fully admitted public artifact",
       "The v0.7.1 candidate is not yet admitted",
     ]) expect(() => assertPackageContent(manifest, readme + claim + "\n")).toThrow("conflicting release claim");
   });
 
   test("never transfers the exact package content contract to another version or identity", () => {
-    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.1", "v0.8.0", "0.8.0-beta.1", ""]) {
+    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.0", "0.8.2", "v0.8.1", "0.8.1-beta.1", ""]) {
       expect(() => assertPackageContent({ ...manifest, version }, readme)).toThrow();
     }
     for (const name of ["oompa", ["@", "other", "/oompa"].join(""), ""]) {

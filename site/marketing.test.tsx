@@ -25,7 +25,7 @@ describe("public server marketing composition", () => {
       const { document } = parseHTML(renderMarketingHeader(publicContent, currentPath));
       const header = document.querySelector("header");
       expect(header?.getAttribute("data-hraness-marketing")).toBe("header");
-      expect(header?.querySelector(".hraness-marketing-header__brand")?.textContent).toBe(publicContent.productName);
+      expect(header?.querySelector(".hraness-marketing-header__brand")?.textContent).toBe(`🟠 ${publicContent.productName}`);
       expect(header?.querySelector(".hraness-marketing-header__brand")?.getAttribute("href")).toBe("/");
       const links = [...document.querySelectorAll('nav[aria-label="Site"] > a')];
       expect(links.map((link) => [link.getAttribute("href"), link.textContent])).toEqual([

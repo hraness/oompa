@@ -158,7 +158,7 @@ async function assertMaterialPublicSource(root: string, label: string): Promise<
     const directory = join(await realpath(root), materialDirectory);
     assert.equal(await realpath(directory), directory);
     const manifest = await checkLanternMaterialSnapshot(directory);
-    assert.equal(manifest.source.commit, "eccb0341d8d0ba960a0f02248cf59888062afb0a");
+    assert.equal(manifest.source.commit, "0e089bc18f9a0409f0e74b1fb7192f468956e386");
   } catch {
     throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
   }
@@ -171,7 +171,7 @@ async function assertMarketingPublicSource(root: string, label: string): Promise
     const directory = join(await realpath(root), marketingDirectory);
     assert.equal(await realpath(directory), directory);
     const snapshot = await snapshotMarketingPreset(directory);
-    assert.equal(snapshot.sourceCommit, "898d80364085a41c858350f1b492ac28b5a0384b");
+    assert.equal(snapshot.sourceCommit, "0e089bc18f9a0409f0e74b1fb7192f468956e386");
     const bytes = snapshot.files.get(marketingFont);
     assert.ok(bytes !== undefined && bytes.byteLength >= 48 && bytes.byteLength <= 50_000);
     assert.equal(bytes.toString("ascii", 0, 4), "wOF2");
