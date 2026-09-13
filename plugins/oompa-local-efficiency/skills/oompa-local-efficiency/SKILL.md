@@ -36,6 +36,19 @@ preserving sandbox, provider, repository, and release gates.
 - **Measure local throughput:** run `oompa-throughput-report` for the bounded,
   privacy-safe scheduler history. Treat repeat command digests and silent tasks
   as review heuristics, never as proof of waste or abandonment.
+- **Inspect a browser wait:** run `oompa-host-queue --lane=browser-auth --json`.
+  It reports cooperating wrappers, safe labels, elapsed waits and owner-reported
+  capability stages. Missing, stale and older-wrapper information is unknown;
+  the snapshot never establishes free capacity or FIFO position. Add an explicit
+  `--task-id=UUID` to `oompa-host-run` only when sharing that task identity is
+  appropriate. It never reads task identities from the environment.
+- **Request a cooperative handoff:** address the exact observed run with
+  `oompa-host-queue --request-handoff=RUN_ID --request-id=REQUEST_ID --label=LABEL --json`.
+  Use a fresh safe ASCII request ID for each intent and the identical ID and label
+  when reconciling an uncertain delivery. A recorded receipt acknowledges a notice,
+  not release. The holder finishes and collects its current browser session before
+  returning the lane; do source editing and external waits after that return.
+  Never signal another holder or change its lease to obtain a slot.
 - **Run heavyweight local work:** resolve `oompa-host-run` to its installed
   absolute path and use `ABSOLUTE-Oompa-HOST-RUN
   --mode=shared|heavy|exclusive
@@ -188,6 +201,22 @@ The browser and Mac lanes each serialize their scarce capability while still
 sharing the weighted compute capacity. A nested wrapper must be covered by the
 outer lane; choose the top-level lane correctly instead of escalating it inside
 an existing lease.
+
+Plugin 0.4.6 adds bounded wait updates after 15 seconds and then every 30 seconds,
+plus a private local status and handoff channel. `waiting-compute` can already
+hold the browser capability, so finish that bounded command before releasing it.
+Do not keep a browser wrapper open for unrelated work between settled sessions.
+The status command is the supported projection for Slopcamera and other local
+callers; they must not inspect scheduler files. The projection is advisory and
+partial, with availability and custody always unknown. A crashed wrapper can
+leave descendants holding the real lease. Only the unchanged scheduler decides
+admission and release. `OOMPA_LOCAL_EFFICIENCY_QUEUE=off` disables this wrapper's
+observation channel and progress updates without changing its lease or telemetry.
+If dead observation sockets accumulate, `oompa-host-queue --prune-stale --json`
+removes only old, private, unchanged socket endpoints with unreachable connections.
+Registration performs the same bounded cleanup near its endpoint limit. Status
+reads never repair state, and observation cleanup never touches scheduler leases
+or establishes free capacity.
 
 For an indivisible aggregate that requires macOS, such as Slopcamera `bun run check`,
 use `exclusive` mode on `mac-native` when its Chromium work is an owned fixture

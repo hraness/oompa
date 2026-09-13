@@ -55,6 +55,99 @@ Oompa's [final validation policy](../CONTRIBUTING.md#final-validation) assigns c
 
 The browser capability is serialized separately before weighted CPU admission, so it does not consume a compute permit while waiting. The Mac lane fails before child execution on another operating system. Nested wrappers may use only a mode and capability already covered by the outer lease.
 
+### Browser wait visibility and cooperative handoff
+
+Plugin 0.4.6 reports elapsed waits after 15 seconds and then every 30 seconds.
+Each update includes up to four cooperating holders' safe labels, stages, held
+durations and exact run IDs. Inspect the current reports separately with:
+
+```sh
+oompa-host-queue --lane=browser-auth --json
+```
+
+The version-1 JSON snapshot is the supported read-only projection for Slopcamera
+and other local consumers. It includes `coverage: "cooperating-wrappers-only"`,
+`availability: "unknown"`, `custody: "unknown"`, registry availability,
+unresponsive-owner count, and an `owners` array. Each owner has a random run ID,
+safe label, optional explicitly supplied task UUID, lane, mode, stage, elapsed
+and queued milliseconds, capability duration, and handoff-request count.
+The stages are `waiting-capability`, `waiting-compute`, `running` and `settling`.
+`waiting-compute` can already have the capability, reported as `reported-held`.
+These reports neither establish capacity nor assign FIFO positions. Older
+wrappers and dead observation sockets remain unknown; descendants may still hold
+their kernel lease. Consumers must preserve these limits when displaying results.
+
+To expose an appropriate task identity, supply `--task-id=UUID` explicitly on
+the wrapper. It never infers identities from sessions or environment values.
+The projection excludes command arguments, working directories, PIDs,
+environment values, task titles and child output. It does not read scheduler
+files or invoke lease assertions, which can mutate stale-marker state.
+
+Request that a specific reported holder finish its current bounded session:
+
+```sh
+oompa-host-queue --request-handoff=RUN_ID --request-id=preview-1 --label=music-preview --json
+```
+
+Replace `RUN_ID` with the exact 32-character run ID from status. The safe ASCII
+request ID identifies this intent; retry an uncertain request only with its
+original ID and label. `recorded` means the owner recorded the request and
+attempted one notice. `already-recorded` reconciles a retry without another
+notice; a changed label with that ID returns `conflict`. Owners still waiting for
+the capability, or already settling, refuse new notices with `not-holder`.
+At most 32 notices are retained
+per run; further new intents return `limit-reached`. Exit 0 acknowledges a
+status snapshot or recorded request. Exit 2 means an invalid/unavailable request,
+unavailable registry, or refused handoff. The receipt never promises release or
+completion time. There is no interrupt, cancellation, queue-jump or lease-edit
+operation in this channel.
+
+The holder finishes and collects its browser session before returning the lane.
+Do source editing and external waits after that return, and acquire a fresh
+ordinary FIFO claim for the next bounded browser session. Do not detach servers
+or leave a wrapper open across unrelated work.
+
+Observation uses owner-private POSIX sockets in an ephemeral directory under
+`/tmp`, addressed by a digest of the explicit scheduler root. Reads never create
+that directory. A snapshot considers at most 64 endpoints with eight concurrent
+requests, 2 KiB messages, and 400 ms absolute connection deadlines. Responses
+are live reports, not a persistent cache. Normal exit removes the wrapper's own
+socket. Stale sockets count as unresponsive; unsafe or overfull registries report
+unavailable. Status reads never delete or repair them. Registration attempts a
+bounded observation-only cleanup when at least 32 endpoints have accumulated;
+`oompa-host-queue --prune-stale --json` runs that same cleanup explicitly.
+It removes only an owner-private socket at least 60 seconds old whose registered
+owner is absent, connection is unreachable, and device, inode and modification
+time remain unchanged. The private socket filename binds the random run ID to
+its owner PID; public status and notices never include that PID. Signal-zero
+existence checks must return `ESRCH` before and after probing. A live or reused
+PID, permission refusal, or unknown result retains the endpoint.
+Ordinarily this requires `ECONNREFUSED`. Bun 1.3.14 maps synchronous Unix
+connection failures to `ENOENT`; on Darwin and Linux that pinned runtime also
+accepts this error only with those owner and socket checks. A busy listener can
+produce the same error, so it cannot authorize cleanup by itself. Missing
+or replaced paths do not qualify. Reachable, young, timed-out and otherwise
+uncertain endpoints are retained. Endpoint unreachability never proves owner
+death. Removing an unreachable observation socket says nothing about an inherited scheduler
+lease and cannot release it. Observation failures preserve
+the child exit code and existing scheduler behavior. Set
+`OOMPA_LOCAL_EFFICIENCY_QUEUE=off` to disable an invocation's observation channel
+and automatic progress updates independently of telemetry.
+
+The explicit local native acceptance uses the installed, checksum-verified
+runtime in isolated ledgers. Run it through the absolute installed host wrapper:
+
+```sh
+OOMPA_HOST_QUEUE_NATIVE=1 /absolute/oompa-host-run --mode=shared --lane=compute --label=queue-native -- bun test plugins/oompa-local-efficiency/skills/oompa-local-efficiency/scripts/host-queue.native.test.ts
+```
+
+It proves FIFO after canceled waiters, exact-owner idempotent handoff, unchanged
+child exit under observation failure, and continued exclusion after wrapper
+death while a descendant retains the inherited descriptor. Ordinary plugin
+tests cover protocol bounds and socket behavior without loading that runtime.
+
+### Admission and process custody
+
 The weighted coordinator is strict FIFO for overlapping claims. Queue `exclusive` only for a converged command that is ready to run. If a never-admitted exclusive claim strands spare permits ahead of a known finite shared/heavy backlog, only its owner may cancel that waiting wrapper and requeue the identical command after the backlog drains. Do not interrupt admitted work or bypass the scheduler to reorder it.
 
 For non-interactive macOS and Linux runs, the wrapper gives the command its own process group, forwards `HUP`, `INT`, `QUIT`, and `TERM` to that complete group, and terminates residual descendants when the command leader exits. Residual processes receive a bounded graceful interval before forced cleanup. An interactive TTY keeps its controlling terminal and receives best-effort leader signaling. This keeps interrupted package runners and browser suites from continuing outside their scheduler lease without breaking an intentional 2FA prompt; an uncatchable host-level kill still requires operating-system recovery and diagnosis.
