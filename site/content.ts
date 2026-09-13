@@ -1561,7 +1561,7 @@ export const publicContent: PublicContent = {
             "oompa device approve <device-id-or-prefix> --fingerprint <value> [--idempotency-key <uuidv7>] [--json]",
             "oompa device revoke <device-id-or-prefix> [--idempotency-key <uuidv7>] [--json]",
             "oompa account add <label>",
-            "oompa account login <profile> [--provider <codex|claude>] [--device-code] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]",
+            "oompa account login <profile> [--provider <codex|claude>] [--device-code] [--manual-browser] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]",
             "oompa account login-cancel <profile> [--provider codex]",
             "oompa account login-cancel <profile> --provider claude --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited",
             "oompa account login-cancel <profile> --provider devin --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited",
