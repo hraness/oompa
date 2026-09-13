@@ -1,6 +1,6 @@
 # Darwin personal daemon restart acceptance
 
-Status: source implementation, focused validation and independent review are complete; required integration CI and live acceptance remain pending. No native daemon, SQLite, provider, or authentication acceptance has run for this plan.
+Status: the original focused implementation passed review and checks, but integration CI found the acceptance helper in the install artifact. The artifact-boundary repair passed independent source review and focused checks; final package and integration gates remain pending. No native daemon, SQLite, provider, or authentication acceptance has run for this plan.
 
 The existing personal Claude continuation path can run under a fresh live-acceptance installation while the managed Mac policy remains guarded. This plan proves a bounded authenticated continuation across joined daemon generations, then preserves one deliberately ambiguous local input without replay. It does not activate production or qualify managed Mac execution.
 
@@ -14,4 +14,19 @@ The private journal records the exact descriptor before each child starts, then 
 
 The parent retains each child stdin writer. EOF or extra descriptor input withdraws daemon lifetime. Parent withdrawal synchronously aborts every captured ordinary transport signal, including a request still awaiting capability or socket validation. The fixed Bun child disables automatic package installation. Unknown effects, missing joins and uncertain receipt writes retain the attempt; there is no retry, cleanup-by-PID, new provider writer or opportunistic logout.
 
-Pure evidence: the observational adapter, descriptor and command contracts, attempted-replay ledger and cancellation tests passed 16 cases with 95 assertions. The original session plus new daemon-seed journal passed 12 cases with 368 assertions, with all seven native fixture names excluded. The production-hook rejection passed one case with two assertions and 187 other CLI cases excluded. The independently authored restart reducer passed ten cases with 429 assertions plus strict TypeScript and lint. Focused source types and lint passed, including exact-source checks after the final closed-error refinement. The unchanged CI coverage and workflow contracts passed 33 cases with 1,222 assertions. The two canonical41 migration cases retained all 4,656 assertions and passed with their finite ten-second budgets. Independent review covered the CLI hook, actual observer, no-replay counter, exact child lifecycle, descriptor and durable command journal. These checks execute no provider or SQLite operation. The native driver remains unexecuted; final integration and owner acceptance remain pending.
+Pure evidence: the observational adapter, descriptor and command contracts, attempted-replay ledger and cancellation tests passed 16 cases with 95 assertions. The original session plus new daemon-seed journal passed 12 cases with 368 assertions, with all seven native fixture names excluded. The production-hook rejection passed one case with two assertions and 187 other CLI cases excluded. The independently authored restart reducer passed ten cases with 429 assertions plus strict TypeScript and lint. Focused source types and lint passed, including exact-source checks after the final closed-error refinement. The unchanged CI coverage and workflow contracts passed 33 cases with 1,222 assertions. The two canonical41 migration cases retained all 4,656 assertions and passed with their finite ten-second budgets against synthetic SQLite state. Independent review covered the CLI hook, actual observer, no-replay counter, exact child lifecycle, descriptor and durable command journal. The restart checks execute no provider or SQLite operation. The native driver remains unexecuted; final integration and owner acceptance remain pending.
+
+The packaging repair removes the repository-only acceptance module from `src/`.
+The reusable Claude process adapter retains original identity, exit, streams,
+bytes, direct termination and separate post-write failure semantics. Acceptance
+nonce policy, counters, bounded status validation and acknowledgment loss remain
+under `scripts/`. The CLI retains only the existing installation-guarded structural
+hook and copies three named status fields. The package policy remains unchanged;
+the actual archive and installed closure must pass after the final source join.
+
+The repair's focused contracts passed 26 cases with 284 assertions, including
+the unchanged package-policy fixtures. The production-hook rejection passed one
+case with two assertions and 187 other CLI cases excluded. Focused strict
+TypeScript and lint passed on the repaired source. These checks exercise no
+provider or native process and do not replace inspection of the actual archive,
+its refreshed reviewed inventory, the installed closure or final Required CI.

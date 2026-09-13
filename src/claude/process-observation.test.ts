@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ClaudeProcess, ClaudeProcessIdentity } from "../claude/process";
+import type { ClaudeProcess, ClaudeProcessIdentity } from "./process";
 import {
-  observePersonalClaudeAcceptanceProcess,
-  personalClaudeAcceptanceStatus,
-  type PersonalClaudeAcceptanceProcessObservation,
-} from "./live-acceptance-personal-claude";
+  observeClaudeProcess,
+  type ClaudeProcessObservation,
+} from "./process-observation";
 
 const IDENTITY: ClaudeProcessIdentity = Object.freeze({
   pid: 1234, pidDomain: "darwin", procStart: "Sun Sep 13 10:00:00 2026",
@@ -22,7 +21,7 @@ function fixture() {
     terminate() { events.push("term"); },
     forceTerminate() { events.push("kill"); },
   };
-  const observation: PersonalClaudeAcceptanceProcessObservation = {
+  const observation: ClaudeProcessObservation = {
     identity() { events.push("identity"); }, identityFailed() { events.push("identity-failed"); },
     rootExited() { events.push("root-exit"); },
     streamEnded(channel) { events.push(`${channel}-eof`); },
@@ -37,9 +36,9 @@ async function drain(source: AsyncIterable<Uint8Array>): Promise<number[]> {
   return values;
 }
 
-describe("personal Claude acceptance observation adapter", () => {
+describe("Claude process observation adapter", () => {
   test("root exit is independent from real stream EOF and preserves actual child identity", async () => {
-    const f = fixture(); const process = observePersonalClaudeAcceptanceProcess(f.child, f.observation);
+    const f = fixture(); const process = observeClaudeProcess(f.child, f.observation);
     expect(await process.identity).toBe(IDENTITY);
     f.exit(17); expect(await process.exited).toBe(17);
     expect(f.events).toEqual(["identity", "root-exit"]);
@@ -50,10 +49,10 @@ describe("personal Claude acceptance observation adapter", () => {
   });
 
   test("a stopped consumer or stream failure never synthesizes EOF", async () => {
-    const f = fixture(); const process = observePersonalClaudeAcceptanceProcess(f.child, f.observation);
+    const f = fixture(); const process = observeClaudeProcess(f.child, f.observation);
     for await (const bytes of process.stdout) { expect(bytes.byteLength).toBeGreaterThan(0); break; }
     expect(f.events).not.toContain("stdout-eof");
-    const failed = observePersonalClaudeAcceptanceProcess({ ...f.child,
+    const failed = observeClaudeProcess({ ...f.child,
       stderr: { async *[Symbol.asyncIterator]() { yield new Uint8Array([4]); throw new Error("stream failed"); } },
     }, f.observation);
     await expect(drain(failed.stderr)).rejects.toThrow("stream failed");
@@ -62,7 +61,7 @@ describe("personal Claude acceptance observation adapter", () => {
 
   test("fresh synchronous write admission precedes the original child write", async () => {
     const f = fixture(); let closed = false;
-    const process = observePersonalClaudeAcceptanceProcess(f.child, {
+    const process = observeClaudeProcess(f.child, {
       ...f.observation,
       assertWrite(bytes) { expect(bytes).toEqual(new Uint8Array([6, 7])); if (closed) throw new Error("closed"); f.events.push("admit-write"); },
     });
@@ -75,15 +74,15 @@ describe("personal Claude acceptance observation adapter", () => {
     expect(f.writes).toHaveLength(1);
   });
 
-  test("only a fulfilled local write can produce the deliberately lost acknowledgment", async () => {
+  test("a failed post-write observer preserves the possible effect and independent physical joins", async () => {
     const f = fixture(); let acknowledgments = 0; let acceptedSnapshot: Uint8Array | undefined;
-    const observation: PersonalClaudeAcceptanceProcessObservation = { ...f.observation,
+    const observation: ClaudeProcessObservation = { ...f.observation,
       writeAccepted(bytes) { acceptedSnapshot = bytes; acknowledgments++; throw new Error("indeterminate accepted write"); },
     };
-    const failedWrite = observePersonalClaudeAcceptanceProcess({ ...f.child, async write() { throw new Error("write failed"); } }, observation);
+    const failedWrite = observeClaudeProcess({ ...f.child, async write() { throw new Error("write failed"); } }, observation);
     await expect(failedWrite.write(new Uint8Array([9]))).rejects.toThrow("write failed");
     expect(acknowledgments).toBe(0);
-    const accepted = observePersonalClaudeAcceptanceProcess(f.child, observation);
+    const accepted = observeClaudeProcess(f.child, observation);
     await expect(accepted.write(new Uint8Array([9]))).rejects.toThrow("indeterminate accepted write");
     expect(f.writes).toEqual([new Uint8Array([9])]); expect(acknowledgments).toBe(1);
     expect(acceptedSnapshot).toEqual(new Uint8Array([0]));
@@ -95,7 +94,7 @@ describe("personal Claude acceptance observation adapter", () => {
 
   test("an observer cannot transform the actual outbound frame", async () => {
     const f = fixture();
-    const process = observePersonalClaudeAcceptanceProcess(f.child, { ...f.observation,
+    const process = observeClaudeProcess(f.child, { ...f.observation,
       assertWrite(bytes) { bytes.fill(99); },
       writeAccepted(bytes) { expect(bytes).toEqual(new Uint8Array([4, 5])); bytes.fill(99); },
     });
@@ -106,7 +105,7 @@ describe("personal Claude acceptance observation adapter", () => {
   });
 
   test("identity failure remains failure and both exact termination methods are delegated", async () => {
-    const f = fixture(); const process = observePersonalClaudeAcceptanceProcess({
+    const f = fixture(); const process = observeClaudeProcess({
       ...f.child, identity: Promise.reject(new Error("identity unknown")),
     }, f.observation);
     await expect(process.identity).rejects.toThrow("identity unknown");
@@ -114,16 +113,4 @@ describe("personal Claude acceptance observation adapter", () => {
     process.terminate(); process.forceTerminate();
     expect(f.events).toEqual(["identity-failed", "term", "kill"]);
   });
-});
-
-test("the live status field is absent by default and only copies bounded observations", () => {
-  expect(personalClaudeAcceptanceStatus(undefined)).toEqual({});
-  const value = { userWriteAttempts: 2, acceptedUserWrites: 2, acknowledgmentWithheld: true };
-  const status = personalClaudeAcceptanceStatus({ observeWrites: () => value });
-  value.userWriteAttempts = 3;
-  expect(status).toEqual({ liveAcceptancePersonalClaude: { userWriteAttempts: 2, acceptedUserWrites: 2, acknowledgmentWithheld: true } });
-  for (const invalid of [{ ...value, userWriteAttempts: 4 }, { ...value, acceptedUserWrites: 3 },
-    { ...value, userWriteAttempts: 1 }, { ...value, userWriteAttempts: NaN }, { ...value, extra: "private" }]) {
-    expect(() => personalClaudeAcceptanceStatus({ observeWrites: () => invalid })).toThrow("status was refused");
-  }
 });

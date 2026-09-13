@@ -6,10 +6,11 @@ import { z } from "zod";
 import { IndeterminateClaudeEffectError } from "../../src/claude/errors";
 import { claudeInterruptLine, claudeUserLine } from "../../src/claude/protocol";
 import type { ClaudeProcessIdentity } from "../../src/claude/process";
-import type { LiveAcceptancePersonalClaudeProofPort } from "../../src/daemon/live-acceptance-personal-claude";
+import type { LiveAcceptancePersonalClaudeProofPort } from "../../src/cli";
 import { captureNativeClaudeMacosAdmission } from "../claude-macos-auth-qualification/admission";
 import { bindDarwinQualificationEnvironment } from "../claude-macos-auth-process/binding";
 import { AtomicPrivateJsonReceipt } from "../live-acceptance-private-custody";
+import { personalClaudeAcceptanceStatus } from "./process-status";
 import {
   daemonQualificationDescriptorSchema, daemonQualificationPaths, daemonQualificationProcessSummarySchema,
   daemonQualificationPrompt, type DaemonQualificationProcessSummary,
@@ -175,7 +176,7 @@ export async function createPersonalClaudeDaemonProof(input: unknown): Promise<R
         },
       });
     },
-    observeWrites() { assertScope(); return Object.freeze({ userWriteAttempts, acceptedUserWrites, acknowledgmentWithheld }); },
+    observeWrites() { assertScope(); return personalClaudeAcceptanceStatus({ userWriteAttempts, acceptedUserWrites, acknowledgmentWithheld }); },
     closeAdmission() { closed = true; },
     async closeDaemonGeneration(value) {
       closed = true;

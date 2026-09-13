@@ -180,13 +180,8 @@ import {
   ClaudeHostToolCallbackServer,
   claudeHostToolCallbackSocketPath,
 } from "./daemon/claude-host-tool-transport";
-import { PinnedClaudeRuntimeManager } from "./daemon/claude-runtime-adapter";
-import {
-  observePersonalClaudeAcceptanceProcess,
-  personalClaudeAcceptanceStatus,
-  type LiveAcceptancePersonalClaudeProofPort,
-  type PersonalClaudeAcceptanceLaunch,
-} from "./daemon/live-acceptance-personal-claude";
+import { PinnedClaudeRuntimeManager, type ClaudeProcessFactory } from "./daemon/claude-runtime-adapter";
+import { observeClaudeProcess, type ClaudeProcessObservation } from "./claude/process-observation";
 import { PinnedCodexRuntimeManager } from "./daemon/codex-runtime-adapter";
 import {
   BoundedPersonalSessionDiscovery,
@@ -3347,6 +3342,24 @@ export type LiveAcceptanceClaudeProofPort = Readonly<{
   closeDaemonGeneration(generation: number | null): void;
 }>;
 
+/**
+ * Structural observation only for the explicit live-acceptance installation.
+ * The repository-only caller owns its status policy and effect observations;
+ * the daemon retains runtime resolution, spawn, identity, bytes and collection.
+ */
+export type LiveAcceptancePersonalClaudeProofPort = Readonly<{
+  executablePath: string;
+  environment: Readonly<Record<string, string>>;
+  beginDaemonGeneration(generation: number): void;
+  assertRuntimeRequest(input: ResolvePinnedClaudeRuntimeOptions): void;
+  runtimeAdmitted(runtime: PinnedClaudeRuntime): void;
+  runtimeFailed(): void;
+  prepareLaunch(launch: Parameters<ClaudeProcessFactory>[0]): ClaudeProcessObservation;
+  observeWrites(): Readonly<{ userWriteAttempts: number; acceptedUserWrites: number; acknowledgmentWithheld: boolean }>;
+  closeAdmission(): void;
+  closeDaemonGeneration(generation: number | null): Promise<void>;
+}>;
+
 async function runDaemonLifecycle(
   installation: OompaInstallation,
   stopLatch: DaemonStopLatch,
@@ -3650,7 +3663,7 @@ async function runDaemonLifecycle(
           liveAcceptancePersonalClaudeProof.runtimeAdmitted(runtime);
           return runtime;
         },
-        processFactory: (launch: PersonalClaudeAcceptanceLaunch) => {
+        processFactory: (launch: Parameters<ClaudeProcessFactory>[0]) => {
           const observation = liveAcceptancePersonalClaudeProof.prepareLaunch(launch);
           const child = spawnBunClaudeProcess({
             argv: launch.argv,
@@ -3659,7 +3672,7 @@ async function runDaemonLifecycle(
             projectRoot: launch.projectRoot,
             environment: liveAcceptancePersonalClaudeProof.environment,
           });
-          return observePersonalClaudeAcceptanceProcess(child, observation);
+          return observeClaudeProcess(child, observation);
         },
       }),
       configHome: personalClaudeConfigHomeForInstallation(installation),
@@ -4074,11 +4087,16 @@ async function runDaemonLifecycle(
         if (command.kind !== "daemon.status") return data;
         const daemon = identityFromReceipt(daemonLock.receipt);
         if (daemon === null) throw new Error("Daemon authority identity is not published.");
+        const acceptance = liveAcceptancePersonalClaudeProof?.observeWrites();
         return {
           ...(typeof data === "object" && data !== null ? data : {}),
           running: true,
           daemon,
-          ...personalClaudeAcceptanceStatus(liveAcceptancePersonalClaudeProof),
+          ...(acceptance === undefined ? {} : { liveAcceptancePersonalClaude: Object.freeze({
+            userWriteAttempts: acceptance.userWriteAttempts,
+            acceptedUserWrites: acceptance.acceptedUserWrites,
+            acknowledgmentWithheld: acceptance.acknowledgmentWithheld,
+          }) }),
         };
       },
     });
