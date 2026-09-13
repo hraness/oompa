@@ -913,7 +913,7 @@ export function assertSiteMaterialPaint(value: unknown, home: boolean, opaque: b
       assert.equal(parsedOrigin.origin, origin);
       assert.ok(parsedOrigin.protocol === "http:" || parsedOrigin.protocol === "https:");
       assert.ok(typeof sample.viewportWidth === "number" && Number.isSafeInteger(sample.viewportWidth) && sample.viewportWidth > 0);
-      const urls = [...image.matchAll(/url\("([^"\\]+)"\)/gu)].map((match) => new URL(match[1]!));
+      const urls = [...image.matchAll(/url\("([^"\\]+)"\)/gu)].map((match) => new URL(string(match[1])));
       assert.equal(urls.length, 2, "Native wall must name grain then cells");
       assert.equal(image.split("url(").length - 1, urls.length, "Every native wall URL must be parsed");
       for (const [index, url] of urls.entries()) {
