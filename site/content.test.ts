@@ -100,14 +100,14 @@ describe("public content contract", () => {
 
   test("keeps the unadmitted candidate separate from the exact admitted predecessor", () => {
     expect(publicContent.releaseVersion).toBe("0.8.2");
-    expect(admittedReleaseVersion).toBe("0.8.0");
+    expect(admittedReleaseVersion).toBe("0.8.1");
     expect(publicReleaseState).toBe("staged");
     expect(publicContent.endpoints.betaTag).toBe("beta-not-yet-live");
     const llms = renderLlmsText();
     expect(llms).toContain(publicContent.statusLine);
     expect(llms).toContain("Local CLI v0.8.2 is a release candidate");
     expect(llms).toContain("v0.8.1 remains the admitted canonical GitHub artifact");
-    expect(publicContent.links.admittedInstall).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact");
+    expect(publicContent.links.admittedInstall).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
     const visibleSite = htmlVisibleText(renderSiteHtml());
     expect(visibleSite).toContain("The v0.8.2 candidate is not yet admitted.");
     expect(visibleSite).toContain("The admitted v0.8.1 CLI has its own");
@@ -129,8 +129,8 @@ describe("public content contract", () => {
       expect(surface).not.toContain("v0.8.2 artifacts admitted");
     }
     const historicalAdmission = renderMarkdownBlocks(publicContent.introduction, 2);
-    expect(historicalAdmission).toContain("https://github.com/hraness/oompa/actions/runs/34560340100");
-    expect(historicalAdmission).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.0");
+    expect(historicalAdmission).toContain("https://github.com/hraness/oompa/actions/runs/34781400584");
+    expect(historicalAdmission).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.1");
     expect(historicalAdmission).toContain("attempt 1");
     expect(historicalAdmission).toContain("optional npm mirror failed before publication and is not admitted");
     expect(historicalAdmission).not.toContain("passed immutable GitHub and npm");
@@ -139,7 +139,7 @@ describe("public content contract", () => {
   });
 
   test("never transfers current admission to another version", () => {
-    expect(isAdmittedRelease("0.8.0")).toBe(true);
+    expect(isAdmittedRelease("0.8.1")).toBe(true);
     const admittedContent = { ...publicContent, releaseVersion: admittedReleaseVersion };
     expect(renderLlmsText(admittedContent)).toContain("Install the admitted v0.8.1 local CLI artifact");
     for (const surface of [renderLlmsText(admittedContent)]) {
@@ -153,7 +153,7 @@ describe("public content contract", () => {
       const content = { ...publicContent, releaseVersion: version };
       const llms = renderLlmsText(content);
       expect(llms).toContain("This release candidate is not yet admitted.");
-      expect(llms).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact");
+      expect(llms).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
       expect(llms.indexOf("This release candidate is not yet admitted."))
         .toBeLessThan(llms.indexOf(content.installCommand));
       expect(llms).not.toContain(`Install the admitted v${version} local CLI artifact`);
@@ -408,7 +408,7 @@ describe("public content contract", () => {
     const html = renderDocumentationHtml("/docs/reference/");
     const document = parseHTML(html).document;
     const commands = [...document.querySelectorAll("pre.command-list")];
-    for (const version of ["v0.8.0", "v0.8.2"]) {
+    for (const version of ["v0.8.1", "v0.8.2"]) {
       const versionCodes = [...document.querySelectorAll("code.oompa-inline-code")].filter((code) => code.textContent === version);
       expect(versionCodes.length).toBeGreaterThan(0);
       for (const code of versionCodes) expectCompiledClasses(code);
@@ -441,7 +441,7 @@ describe("public content contract", () => {
     const markdown = renderDocsMarkdown("/docs/status/");
     const html = htmlVisibleText(renderDocumentationHtml("/docs/status/"));
     for (const surface of [markdown, html]) {
-      expect(surface).toContain("v0.8.0");
+      expect(surface).toContain("v0.8.1");
       expect(surface).toContain("passed immutable GitHub artifact admission");
       expect(surface).toContain("The v0.8.2 candidate is not yet admitted");
       expect(surface).not.toContain("The v0.8.0 candidate is not yet admitted");
@@ -467,16 +467,16 @@ describe("public content contract", () => {
       expect(noticePosition).toBeLessThan(commandPosition);
     }
     for (const surface of [renderLlmsText()]) {
-      expect(surface).toContain("admitted v0.8.0");
+      expect(surface).toContain("admitted v0.8.1");
       expect(surface).toContain(publicContent.daemonRolloutNotice);
       expect(surface).toContain("/docs/status/");
     }
-    expect(markdown).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.0");
-    expect(markdown).toContain("https://github.com/hraness/oompa/actions/runs/34560340100");
+    expect(markdown).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.1");
+    expect(markdown).toContain("https://github.com/hraness/oompa/actions/runs/34781400584");
     expect(markdown).toContain("Local v0.8.2 candidate; hosted sync live as an open beta");
     const reference = renderDocsMarkdown("/docs/reference/");
     expect(reference).toContain("Local release boundary");
-    expect(reference).toContain("v0.8.0");
+    expect(reference).toContain("v0.8.1");
     expect(reference).toContain("admitted local CLI release and are retained in the `v0.8.2` candidate");
     expect(renderLlmsText()).toContain("Only after immutable GitHub release admission, install the v0.8.2 local CLI artifact");
     for (const path of ["/docs/start/", "/docs/status/"] as const) {
