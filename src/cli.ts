@@ -49,6 +49,7 @@ import {
 import { InvalidCommandResponseError, renderFailure, renderProtectedInteractionDetail, renderRootStatus, renderSuccess, safeDiagnostic, safeJson, terminalSafe, type Output } from "./cli/render";
 import { redactCompleteSensitiveText } from "./cli/sensitive-text";
 import { compileShellLine, formatShellPrompt, shellHelp, type ShellSelection } from "./cli/shell";
+import { terminalIntro } from "./cli-intro";
 import {
   enumerateUnsettledSessionInteractions,
   pendingInteractionStateKey,
@@ -6288,6 +6289,9 @@ async function executeUsageRefreshAll(
 
 function renderHelp(invocation: Extract<CliInvocation, { kind: "help" }>, output: Output): number {
   const resolved = resolveUsage(invocation.group, invocation.leaf);
+  if (!invocation.json && invocation.group === undefined && invocation.leaf === undefined && output === processOutput) {
+    output.writeStdout(terminalIntro({ isTTY: process.stdout.isTTY, columns: process.stdout.columns, term: process.env.TERM }));
+  }
   output.writeStdout(invocation.json
     ? `${safeJson({ ok: true, version: 1, command: "help", data: resolved })}\n`
     : `${resolved.usage}\n`);

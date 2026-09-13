@@ -483,8 +483,12 @@ export function siteFoundationResourcePaths(path: string, bytes: Buffer): Readon
   assert.equal(faces.length, 14, "Static foundation must declare all fourteen public font faces");
   assert.equal(new Set(faces).size, 14, "Static foundation duplicates a font URL");
   const textures = urls.filter((url) => !faces.includes(url));
-  assert.equal(textures.length, 2, "Static foundation must contain exactly two non-font texture URLs");
-  assert.equal(new Set(textures).size, 2, "Static foundation duplicates a texture URL");
+  assert.equal(textures.length, 4, "Static foundation must contain exactly four non-font texture URLs");
+  const uniqueTextures = [...new Set(textures)];
+  assert.equal(uniqueTextures.length, 2, "Static foundation must reuse exactly two texture assets");
+  for (const texture of uniqueTextures) {
+    assert.equal(textures.filter((url) => url === texture).length, 2, "Each canonical texture must occur in exactly two material roles");
+  }
   assert.deepEqual([...urls].sort(), [...faces, ...textures].sort(), "Static foundation repeats a font outside its face");
   const resolveAsset = (url: string, kind: "woff2" | "svg") => {
     // Vite may preserve or sanitize brackets. Both must come from captured CSS,
@@ -497,7 +501,7 @@ export function siteFoundationResourcePaths(path: string, bytes: Buffer): Readon
     assert.equal(resolved.search + resolved.hash, "");
     return resolved.pathname.slice(1);
   };
-  return { fonts: faces.map((url) => resolveAsset(url, "woff2")).sort(), textures: textures.map((url) => resolveAsset(url, "svg")).sort() };
+  return { fonts: faces.map((url) => resolveAsset(url, "woff2")).sort(), textures: uniqueTextures.map((url) => resolveAsset(url, "svg")).sort() };
 }
 export function siteFoundationFontPaths(path: string, bytes: Buffer): readonly string[] {
   return siteFoundationResourcePaths(path, bytes).fonts;
@@ -902,11 +906,29 @@ export function assertSiteMaterialPaint(value: unknown, home: boolean, opaque: b
     assert.ok(array(sample.panes).length >= 1);
     const wall = record(sample.wall), reference = record(expected.wall);
     assert.deepEqual(wall, reference, "Compiled hero differs from the canonical wall");
-    assert.equal(string(wall.image).includes("url("), false, "Lantern wall must not request texture assets");
     if (opaque) assert.equal(wall.image, "none");
     else {
-      assert.equal(string(wall.image).split("repeating-linear-gradient(").length - 1, 2);
-      assert.ok(string(wall.image).includes("radial-gradient("));
+      const image = string(wall.image), origin = string(sample.origin);
+      const parsedOrigin = new URL(origin);
+      assert.equal(parsedOrigin.origin, origin);
+      assert.ok(parsedOrigin.protocol === "http:" || parsedOrigin.protocol === "https:");
+      assert.ok(typeof sample.viewportWidth === "number" && Number.isSafeInteger(sample.viewportWidth) && sample.viewportWidth > 0);
+      const urls = [...image.matchAll(/url\("([^"\\]+)"\)/gu)].map((match) => new URL(string(match[1])));
+      assert.equal(urls.length, 2, "Native wall must name grain then cells");
+      assert.equal(image.split("url(").length - 1, urls.length, "Every native wall URL must be parsed");
+      for (const [index, url] of urls.entries()) {
+        assert.equal(url.origin, origin, "Native texture escaped the owned site origin");
+        assert.equal(url.username + url.password + url.search + url.hash, "");
+        assert.match(url.pathname, index === 0
+          ? /^\/graphs\/foundation\/assets\/grain-[A-Za-z0-9_-]+\.svg$/u
+          : /^\/graphs\/foundation\/assets\/cells-[A-Za-z0-9_-]+\.svg$/u);
+      }
+      assert.equal(image.includes("repeating-"), false, "The retired line grid must remain absent");
+      assert.equal(image.split("gradient(").length - 1, 2);
+      assert.equal(image.split("radial-gradient(").length - 1, 1);
+      assert.equal(image.split("linear-gradient(").length - 1, 1);
+      const cells = sample.viewportWidth <= 760 ? 576 : 768;
+      assert.equal(wall.size, `64px 64px, ${cells}px ${cells}px, 100% 100%, 100% 100%`, "Native grain and cell frequency must match the responsive material");
     }
     assert.equal(array(sample.selected).length, 1);
     for (const [index, actual] of [...array(sample.selected), ...array(sample.disclosures)].entries()) {
@@ -933,7 +955,7 @@ export async function readSiteMaterial(page: Page): Promise<unknown> {
     const paint = (element: Element | null) => {
       if (element === null) throw new Error("Material surface is missing");
       const css = getComputedStyle(element);
-      return { background: css.backgroundColor, ink: css.color, image: css.backgroundImage, backdrop: css.backdropFilter };
+      return { background: css.backgroundColor, ink: css.color, image: css.backgroundImage, size: css.backgroundSize, backdrop: css.backdropFilter };
     };
     const reference = (role: string, selected = false) => {
       const element = document.createElement("div"); element.hidden = true; element.className = role;
@@ -947,6 +969,7 @@ export async function readSiteMaterial(page: Page): Promise<unknown> {
       const actual = (selector: string) => [...document.querySelectorAll(selector)].filter((element) => !nodes.includes(element as HTMLElement));
       const walls = actual(".hraness-material-wall");
       return { material: document.documentElement.getAttribute("data-hraness-material"), preset: document.documentElement.getAttribute("data-hraness-marketing-preset"),
+        origin: location.origin, viewportWidth: innerWidth,
         walls: walls.length, fields: actual(".hraness-marketing-field").length,
         header: paint(document.querySelector("header.hraness-material-chrome")),
         // The appearance disclosure panel is closed during static-route checks;
@@ -2082,9 +2105,11 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
               assert.deepEqual(bytes, siteFiles.get(key), "Native resource differs from its retained output identity");
               return { path: key, bytes: bytes.length, sha256: digest(bytes) };
             }));
-            // The finite artifact graph still admits both editorial SVGs, but
-            // no document mounts their replaced field. Lantern has no URL assets.
-            assert.deepEqual(delivered.map(({ path }) => path).sort(), [...siteGraph.stylesheets, ...siteGraph.fonts].sort(), "Native CSS/font linkage was incomplete or a replaced texture was requested");
+            // Only the normal homepage mounts the two immutable textures. The
+            // desktop transparency probe restores the original material before
+            // this census; guides, inert preview and forced colors stay plain.
+            const expectedTextures = route.pathname === "/" && !profile.forced ? siteGraph.textures : [];
+            assert.deepEqual(delivered.map(({ path }) => path).sort(), [...siteGraph.stylesheets, ...siteGraph.fonts, ...expectedTextures].sort(), "Native CSS/font/texture linkage differs from the exact route and media inventory");
             for (const request of productRequests) {
               const url = new URL(request.url()), key = url.pathname.slice(1);
               assert.equal(url.origin, site.origin, "A product frame requested an external resource");

@@ -25,7 +25,7 @@ describe("public server marketing composition", () => {
       const { document } = parseHTML(renderMarketingHeader(publicContent, currentPath));
       const header = document.querySelector("header");
       expect(header?.getAttribute("data-hraness-marketing")).toBe("header");
-      expect(header?.querySelector(".hraness-marketing-header__brand")?.textContent).toBe(publicContent.productName);
+      expect(header?.querySelector(".hraness-marketing-header__brand")?.textContent).toBe(`🟠 ${publicContent.productName}`);
       expect(header?.querySelector(".hraness-marketing-header__brand")?.getAttribute("href")).toBe("/");
       const links = [...document.querySelectorAll('nav[aria-label="Site"] > a')];
       expect(links.map((link) => [link.getAttribute("href"), link.textContent])).toEqual([
@@ -87,7 +87,7 @@ describe("public server marketing composition", () => {
     expect(admissionNotice).not.toBeNull();
     expect(admissionNotice?.textContent).toContain("Only after immutable GitHub release admission");
     expect(admissionNotice?.textContent).toContain("Neither artifact admission nor installation authorizes daemon startup.");
-    expect(admissionNotice?.querySelector('a[href="https://github.com/hraness/oompa/tree/v0.7.1#get-started"]')?.getAttribute("href")).toBe("https://github.com/hraness/oompa/tree/v0.7.1#get-started");
+    expect(admissionNotice?.querySelector('a[href="https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact"]')?.getAttribute("href")).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact");
     expect(admissionNotice?.nextElementSibling).toBe(commandBlocks[0]);
     for (const command of [publicContent.installCommand, publicContent.doctorCommand, publicContent.initCommand]) {
       expect(commandBlocks.some((block) => block.textContent.split("\n").includes(command))).toBe(true);

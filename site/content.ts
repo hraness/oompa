@@ -204,7 +204,7 @@ const {
 } = hostedSignupCopy(hostedSignup);
 
 const links = {
-  admittedInstall: "https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install",
+  admittedInstall: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v080-canonical-artifact",
   app: "https://app.oompa.app",
   contributing: "https://github.com/hraness/oompa/blob/main/CONTRIBUTING.md",
   documentation: "https://oompa.app/docs/",
@@ -293,17 +293,17 @@ export const siteDocumentPaths: readonly string[] = [
 export const publicReleaseState: "live" | "release-ready" | "staged" = "staged";
 
 const betaInstallCommand = buildOompaGlobalInstallCommand(
-  "https://github.com/hraness/oompa/releases/download/v0.8.0/hraness-oompa-0.8.0.tgz",
+  "https://github.com/hraness/oompa/releases/download/v0.8.1/hraness-oompa-0.8.1.tgz",
 );
 
 const productName = "Oompa";
 const tagline = "Workspace for Codex and Claude Code";
 const providerRoadmap = "Codex and Claude Code, side by side.";
-const releaseVersion = "0.8.0";
-export const admittedReleaseVersion = "0.7.1";
-const admittedReleaseRun = "34367591503";
+const releaseVersion = "0.8.1";
+export const admittedReleaseVersion = "0.8.0";
+const admittedReleaseRun = "34560340100";
 export const isAdmittedRelease = (version: string): boolean => version === admittedReleaseVersion;
-const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its immutable installation notes for the existing artifact.`;
+const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its verified installation notes for the existing artifact. The v0.8.0 npm mirror is not admitted.`;
 const daemonRolloutNotice = `Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v${admittedReleaseVersion} daemon or the v${releaseVersion} candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.`;
 
 /** The existing exact release evidence also belongs in the new status guide. */
@@ -313,10 +313,10 @@ export const releaseAdmissionNotice: ContentBlock = {
   content: [
     text("The "),
     link(`v${admittedReleaseVersion} artifacts`, `https://github.com/hraness/oompa/releases/tag/v${admittedReleaseVersion}`),
-    text(" passed immutable GitHub and npm release admission in "),
+    text(" passed immutable GitHub release admission in "),
     link(`release run ${admittedReleaseRun}`, `https://github.com/hraness/oompa/actions/runs/${admittedReleaseRun}`),
-    text(`, attempt 2. That evidence does not admit v${releaseVersion}. Use the predecessor's `),
-    link("immutable installation notes", links.admittedInstall),
+    text(`, attempt 1. Its optional npm mirror failed before publication and is not admitted. That evidence does not admit v${releaseVersion}. Use the predecessor's `),
+    link("verified installation notes", links.admittedInstall),
     text(". The candidate command below remains unavailable until its own admission. The website and optional hosted sync are live; artifact admission does not authorize current-daemon startup or hosted command writers."),
   ],
 };
@@ -379,7 +379,7 @@ export const publicContent: PublicContent = {
   thesis: `${productName} brings your Codex and Claude Code sessions into one workspace. Follow the work in your browser, direct it from your terminal, and keep execution on your own machines.`,
   description: `A workspace for Codex and Claude Code, in your browser or terminal. Local CLI v${releaseVersion} is a release candidate; v${admittedReleaseVersion} remains admitted; daemon and hosted command-writer rollout remains blocked on capacity.`,
   daemonRolloutNotice,
-  statusLine: `Status: public beta. ${isAdmittedRelease(releaseVersion) ? `Local CLI v${releaseVersion} is the fully admitted public artifact.` : `Local CLI v${releaseVersion} is a release candidate, not an admitted artifact; v${admittedReleaseVersion} remains the fully admitted public artifact.`} Codex runs on macOS and Linux, Claude Code on Linux; hosted sync is live as an ${hostedBetaLabel}. Current daemon and hosted command-writer rollout remains blocked on capacity.`,
+  statusLine: `Status: public beta. ${isAdmittedRelease(releaseVersion) ? `Local CLI v${releaseVersion} is the fully admitted public artifact.` : `Local CLI v${releaseVersion} is a release candidate, not an admitted artifact; v${admittedReleaseVersion} remains the admitted canonical GitHub artifact.`} Codex runs on macOS and Linux, Claude Code on Linux; hosted sync is live as an ${hostedBetaLabel}. Current daemon and hosted command-writer rollout remains blocked on capacity.`,
   badges,
   maintainer: {
     name: "Hraness",
@@ -503,7 +503,7 @@ export const publicContent: PublicContent = {
     },
     {
       question: "Can I start using it now?",
-      answer: [text(`The website, web app, and hosted sync are available in ${hostedBetaLabel}. The admitted v${admittedReleaseVersion} CLI has its own `), link("immutable install instructions", `https://github.com/hraness/oompa/tree/v${admittedReleaseVersion}#get-started`), text(" and "), link("admitted release's immutable installation notes", links.admittedInstall), text(`.${isAdmittedRelease(releaseVersion) ? "" : ` The v${releaseVersion} candidate is not yet admitted.`} Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass. `), link("Check the setup status", "/docs/status/"), text(" before initialization or daemon startup.")],
+      answer: [text(`The website, web app, and hosted sync are available in ${hostedBetaLabel}. The admitted v${admittedReleaseVersion} CLI has its own `), link("verified installation notes", links.admittedInstall), text(`.${isAdmittedRelease(releaseVersion) ? "" : ` The v${releaseVersion} candidate is not yet admitted.`} Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass. `), link("Check the setup status", "/docs/status/"), text(" before initialization or daemon startup.")],
     },
     {
       question: "Does Oompa use my API keys or provider subscription?",
@@ -576,7 +576,7 @@ export const publicContent: PublicContent = {
           ],
         },
         paragraph(
-          text("The single install command removes ambient Bun, Node, and native-library injection variables before either download or Bun startup, disables Bun dotenv loading, and selects /dev/null as the only Bun configuration. Curl and the loader independently cap the streamed preflight at 512 KiB, and the loader refuses an overrun before transpilation or installation. It then verifies and executes the exact v0.8.0 preflight from Oompa's protected source tag and passes it the exact release archive URL. The preflight requires GitHub repository ID 1343008607, a published immutable v0.8.0 release, and one uploaded archive whose byte length and SHA-256 match GitHub's immutable release metadata. It creates a fresh random private staging root, downloads the archive into a private file there, and gives Bun only a verified in-memory snapshot of those exact bytes. The reviewed normalizer verifies the private archive again, derives its bounded package-file manifest, and compares every extracted Oompa package path and SHA-256 while measuring the completion receipt. Local archives and official archives use separate full-digest version namespaces, so a local package cannot populate or replace the official cache entry. Oompa then verifies the tagged preflight and normalizer, exact package identity, zero-lifecycle manifest, CLI SHA-256, and complete staged tree under protected descriptor and ACL custody. Bun 1.3.14 resolves the package's exact dependency versions from the configured package registry trust boundary with lifecycle scripts disabled; the release archive does not claim to contain that dependency closure. The detached staging worker and its Bun package-install child repeat the runtime neutralization while retaining the configured registry, proxy, and certificate trust inputs needed for dependency resolution. The prior verified command remains active throughout staging. Publication atomically replaces only the $BUN_INSTALL/bin/oompa symlink after every check succeeds and fsyncs its directory. If installation is interrupted, the next invocation of that exact release's installer recovers or removes only the proven private stage; another release's installer refuses the durable intent. The invoking shell, PATH-selected pinned Bun binary, configured package registry and transport trust, operating system, and same-UID account remain trust boundaries. Existing trustedDependencies remain unchanged."),
+          text("The single install command removes ambient Bun, Node, and native-library injection variables before either download or Bun startup, disables Bun dotenv loading, and selects /dev/null as the only Bun configuration. Curl and the loader independently cap the streamed preflight at 512 KiB, and the loader refuses an overrun before transpilation or installation. It then verifies and executes the exact v0.8.1 preflight from Oompa's protected source tag and passes it the exact release archive URL. The preflight requires GitHub repository ID 1343008607, a published immutable v0.8.1 release, and one uploaded archive whose byte length and SHA-256 match GitHub's immutable release metadata. It creates a fresh random private staging root, downloads the archive into a private file there, and gives Bun only a verified in-memory snapshot of those exact bytes. The reviewed normalizer verifies the private archive again, derives its bounded package-file manifest, and compares every extracted Oompa package path and SHA-256 while measuring the completion receipt. Local archives and official archives use separate full-digest version namespaces, so a local package cannot populate or replace the official cache entry. Oompa then verifies the tagged preflight and normalizer, exact package identity, zero-lifecycle manifest, CLI SHA-256, and complete staged tree under protected descriptor and ACL custody. Bun 1.3.14 resolves the package's exact dependency versions from the configured package registry trust boundary with lifecycle scripts disabled; the release archive does not claim to contain that dependency closure. The detached staging worker and its Bun package-install child repeat the runtime neutralization while retaining the configured registry, proxy, and certificate trust inputs needed for dependency resolution. The prior verified command remains active throughout staging. Publication atomically replaces only the $BUN_INSTALL/bin/oompa symlink after every check succeeds and fsyncs its directory. If installation is interrupted, the next invocation of that exact release's installer recovers or removes only the proven private stage; another release's installer refuses the durable intent. The invoking shell, PATH-selected pinned Bun binary, configured package registry and transport trust, operating system, and same-UID account remain trust boundaries. Existing trustedDependencies remain unchanged."),
         ),
         { kind: "subheading", text: "Update runbook" },
         paragraph(
@@ -958,11 +958,11 @@ export const publicContent: PublicContent = {
             text("These commands are part of the "),
             code(`v${admittedReleaseVersion}`),
             ...(isAdmittedRelease(releaseVersion) ? [
-              text(" admitted local CLI release. Its immutable artifacts passed GitHub and npm release admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
+              text(" admitted local CLI release. Its immutable GitHub artifact passed admission; the optional npm mirror is not admitted. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
             ] : [
               text(" admitted local CLI release and are retained in the "),
               code(`v${releaseVersion}`),
-              text(" candidate. The predecessor's immutable artifacts passed GitHub and npm release admission; the candidate requires its own admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
+              text(" candidate. The predecessor's immutable GitHub artifact passed admission; its optional npm mirror is not admitted and the candidate requires its own admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
             ]),
           ],
         },

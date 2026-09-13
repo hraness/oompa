@@ -62,7 +62,7 @@ const candidateInstallNotice: ContentBlock = {
     text(isAdmittedRelease(publicContent.releaseVersion)
       ? ` for v${admittedReleaseVersion}, or use its `
       : ` for v${admittedReleaseVersion}. Only after immutable GitHub release admission may you run the candidate install command below. For the admitted v${admittedReleaseVersion} artifact, you can also use its `),
-    link("immutable README", `https://github.com/hraness/oompa/tree/v${admittedReleaseVersion}#get-started`),
+    link("verified installation notes", publicContent.links.admittedInstall),
     text(". Neither artifact admission nor installation authorizes daemon startup."),
   ],
 };
@@ -387,7 +387,7 @@ export const docsPages: readonly DocsPage[] = [
   {
     path: "/docs/status/",
     title: "Availability and release status",
-    description: "Distinguish the v0.8.0 candidate from the admitted v0.7.1 CLI, check provider support, and understand the runtime rollout prerequisites.",
+    description: "Distinguish the v0.8.1 candidate from the admitted v0.8.0 CLI, check provider support, and understand the runtime rollout prerequisites.",
     keywords: ["release", "availability", "platforms", "Codex", "Claude", "upgrade"],
     reviewDate: "2026-09-09",
     admission: {
@@ -409,7 +409,7 @@ export const docsPages: readonly DocsPage[] = [
           : `v${publicContent.releaseVersion} is a candidate. v${admittedReleaseVersion} remains admitted.`,
         blocks: [
           candidateInstallNotice,
-          paragraph(text(`The v${admittedReleaseVersion} CLI passed immutable GitHub and npm artifact admission. ${isAdmittedRelease(publicContent.releaseVersion) ? "For its exact installation instructions, use the " : `The v${publicContent.releaseVersion} candidate is not yet admitted and requires its own immutable GitHub proof. For the admitted predecessor, use its `}`), link("immutable README", `https://github.com/hraness/oompa/tree/v${admittedReleaseVersion}#get-started`), text(" to install and run "), code("oompa doctor --offline"), text(". The public website, browser app, and open-beta sync service are available; their availability does not authorize starting the current daemon or sending new hosted commands.")),
+          paragraph(text(`The v${admittedReleaseVersion} CLI passed immutable GitHub artifact admission. Its optional npm mirror is not admitted. ${isAdmittedRelease(publicContent.releaseVersion) ? "For its exact installation instructions, use the " : `The v${publicContent.releaseVersion} candidate is not yet admitted and requires its own immutable GitHub proof. For the admitted predecessor, use its `}`), link("verified installation notes", publicContent.links.admittedInstall), text(" to install and run "), code("oompa doctor --offline"), text(". The public website, browser app, and open-beta sync service are available; their availability does not authorize starting the current daemon or sending new hosted commands.")),
           paragraph(text(`The v${publicContent.releaseVersion} ${isAdmittedRelease(publicContent.releaseVersion) ? "release" : "candidate"} retains the read-only exact Codex default-profile observation admitted in v0.7.1. The display remains unavailable until the intended daemon publishes a matching fresh companion after its rollout gates pass. This does not change Ultra defaults, admit models, choose a route, or authorize a command.`)),
           releaseAdmissionNotice,
           { kind: "notice", label: "Current runtime hold", content: [text(publicContent.daemonRolloutNotice)] },

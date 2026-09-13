@@ -60,7 +60,7 @@ describe("Oompa public release package policy", () => {
     expect(inspectReleasePackage(manifest)).toEqual({
       blockers: [],
       name: "@hraness/oompa",
-      version: "0.8.0",
+      version: "0.8.1",
     });
     expect(assertReleasePackageReady(manifest).blockers).toEqual([]);
   });

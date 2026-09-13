@@ -141,6 +141,6 @@ test("the static entry joins compiler foundations and local fonts without legacy
 
 test("the ordinary site gate admits the complete asset-free Lantern snapshot", async () => {
   const snapshot = await checkLanternMaterialSnapshot(fileURLToPath(new URL("vendor/lantern-material", import.meta.url)));
-  expect(snapshot.source.commit).toBe("eccb0341d8d0ba960a0f02248cf59888062afb0a");
+  expect(snapshot.source.commit).toBe("0e089bc18f9a0409f0e74b1fb7192f468956e386");
   expect(Object.keys(snapshot.files).sort()).toEqual(["LICENSE", "check.d.mts", "check.mjs", "lantern-material.css"]);
 });
