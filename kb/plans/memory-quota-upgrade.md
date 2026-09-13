@@ -22,13 +22,12 @@ noncanonical, duplicate, inconsistent or impossible groups and binds their total
 to the shape-failure count. No second database read changes the observation.
 
 Focused conservation and parser tests pass (44 tests, 4,647 assertions), as do
-strict TypeScript, scoped lint and independent source review. That is the earlier schema-1 diagnostic evidence. Its current-base Required CI,
-deployment and live missing-shape readback remain separate from the repair below.
+strict TypeScript, scoped lint and independent source review. That is the earlier
+schema-1 diagnostic evidence; it does not qualify the schema-2 repair below.
 The observed `schema_shape` reason alone does not establish repair eligibility.
 Diagnosis grants no repair or activation authority.
 
-A separate follow-up prepares schema-2 empty-memory completion. It remains
-unmerged and unexecuted pending the exact live missing-shape evidence. The
+The same source candidate includes schema-2 empty-memory completion. The
 classifier checks the two owner indexes before counting a ledger as
 `incompleteEmptyMemory`; the earlier histogram did not perform that check.
 Initial focused tests pass across quota, memory sync, upgrade and operator
@@ -36,8 +35,11 @@ contracts (110 tests, 6,469 assertions). The final upgrade/operator checks pass
 53 tests with 6,357 assertions after adding partial-page lost-response recovery
 and an audit-to-mutation data-change refusal. Focused TypeScript, scoped lint
 and baseline adoption pass. Independent source review passes the complete
-change. Integration remains held on the precise live diagnostic; no hosted data
-was read or modified for this preparation.
+change. Independent caller review confirms that publication and deployment do
+not invoke the repair: it has no product, startup, cron or deployment hook.
+Source admission therefore proceeds through the combined candidate's required
+checks. Live diagnosis and repair remain separate, explicit operations; no
+hosted data was read or modified for this preparation.
 
 The memory schema adds a quota category and a user resource. Existing identities
 with the complete predecessor ledger have eleven categories and six resources;
@@ -90,11 +92,13 @@ no missing old authority or nonzero retained memory counter is reconstructed,
 reset or removed. Each page reclassifies current state, so a prior eligible
 audit does not authorize a later changed ledger.
 
-Before integration, obtain the exact deployed diagnostic shape and independently
-review this bounded transition. After source admission and deployment, require
-a fresh schema-2 audit against the exact candidate, predecessor, numeric target
-and compiled runtime. It must establish the empty owner indexes and no other
-corruption before the operator creates an intent. Preserve previous intents and
+After source admission and deployment, run the read-only schema-2 diagnostic
+and audit against the exact candidate, predecessor, numeric target and compiled
+runtime. The audit must establish a supported ledger shape, empty owner indexes
+and no other corruption before the explicit repair operator creates an intent.
+The server reclassifies each page in its mutation transaction; the supported
+operator separately enforces its protected intent. Older schema-1 operators and
+receipts cannot authorize this transition. Preserve previous intents and
 recovery roots; changing the source or evidence path is not a recovery bypass.
 Completion still grants no capacity headroom or writer activation.
 
