@@ -125,7 +125,12 @@ export class QualificationCustody {
     return await QualificationCustody.#create(sourceInput, true);
   }
 
-  static async #create(sourceInput: unknown, native: boolean): Promise<QualificationCustody> {
+  /** Fresh 22-step ceremony policy; other native receipt families remain unchanged. */
+  static async createNativeManualBrowser(sourceInput: unknown): Promise<QualificationCustody> {
+    return await QualificationCustody.#create(sourceInput, true, "owner_manual");
+  }
+
+  static async #create(sourceInput: unknown, native: boolean, browserMode?: "owner_manual"): Promise<QualificationCustody> {
     const source = sourceSchema.parse(sourceInput);
     if (process.platform !== "darwin") throw invalid();
     const runId = randomUUID();
@@ -159,7 +164,7 @@ export class QualificationCustody {
         ...Object.fromEntries(QUALIFICATION_CLEANUP_ROOTS.map((name) => [name, toDirectory(directories[name])])),
         proofKey: { path: keyPath, device: observedKey.identity.dev, inode: observedKey.identity.ino, mode: 0o600 } };
       custody.#state = native
-        ? createNativeQualification({ ...binding, version: 2, mode: "native_qualification" }, custody.#key, custody.ownerEpoch)
+        ? createNativeQualification({ ...binding, version: 2, mode: "native_qualification", ...(browserMode === undefined ? {} : { browserMode }) }, custody.#key, custody.ownerEpoch)
         : createQualification(binding, custody.#key, custody.ownerEpoch);
       const record = custody.#record(custody.#encode(custody.#state));
       custody.#receipt = await AtomicPrivateJsonReceipt.create(record, custody.#policy());

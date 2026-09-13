@@ -17,7 +17,13 @@ export const qualificationBindingSchema = z.strictObject({
   proofKey: z.strictObject({ path, device: z.number().int().nonnegative().safe(), inode: z.number().int().positive().safe(), mode: z.literal(0o600) }),
 });
 /** Native provenance is a distinct authenticated binding, never a fixture-mode toggle. */
-export const nativeQualificationBindingSchema = qualificationBindingSchema.extend({ version: z.literal(2), mode: z.literal("native_qualification") });
+export const nativeQualificationBindingSchema = qualificationBindingSchema.extend({ version: z.literal(2), mode: z.literal("native_qualification"),
+  // Absence preserves historical checkpoint bytes, never new manual-browser admission.
+  browserMode: z.literal("owner_manual").optional() });
+export function assertManualBrowserQualificationBinding(value: unknown): void {
+  const parsed = nativeQualificationBindingSchema.safeParse(value);
+  if (!parsed.success || parsed.data.browserMode !== "owner_manual") throw new QualificationStateError("binding_invalid");
+}
 export type QualificationBinding = z.infer<typeof qualificationBindingSchema> | z.infer<typeof nativeQualificationBindingSchema>;
 const identity = z.strictObject({ runId: uuid, attemptId: uuid, probeId: uuid, profile: z.enum(["A", "B"]), profileTag: tag,
   signedIn: z.boolean(), accountTag: tag.nullable(), emailTag: tag.nullable(), organizationTag: tag.nullable(), evidence: z.literal("reported_identity_only") });

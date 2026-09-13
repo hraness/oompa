@@ -14,18 +14,19 @@ import { ClaudeHostToolCallbackServer, claudeHostToolCallbackSocketPath } from "
 import type { ProfileAuthority } from "../../src/daemon/ports";
 import { resolveStatePaths } from "../../src/storage/paths";
 import { bindDarwinQualificationEnvironment, type ClaudeQualificationBindingInput } from "../claude-macos-auth-process/binding";
-import type { DarwinSessionCustody, JournalAttempt, SessionSummary } from "./custody";
+import type { JournalAttempt, SessionSummary } from "./custody";
+import type { QualificationSessionCustody } from "./custody-port";
 import type { SessionAdmission } from "./authentication";
 import { DarwinSessionQualificationError, SessionTurnObservation, type SessionTurnScenario } from "./turn";
 
 function refuse(): never { throw new DarwinSessionQualificationError("recovery_required"); }
 type TrackedProcess = { process: ClaudeProcess; identity: ClaudeProcessIdentity | null; childJoined: boolean; stdoutEof: boolean; stderrEof: boolean; bytes: number };
-type Ticket = Awaited<ReturnType<DarwinSessionCustody["prepareDispatch"]>>;
+type Ticket = Awaited<ReturnType<QualificationSessionCustody["prepareDispatch"]>>;
 const sameIdentity = (a: ClaudeProcessIdentity, b: ClaudeProcessIdentity): boolean => a.pid === b.pid && a.pidDomain === b.pidDomain && a.procStart === b.procStart;
 
 /** Internal live adapter composition. No injected transport or authority reaches the native runner. */
 export class DarwinQualificationSession {
-  readonly #custody: DarwinSessionCustody;
+  readonly #custody: QualificationSessionCustody;
   readonly #admission: SessionAdmission;
   readonly #binding: ClaudeQualificationBindingInput;
   readonly #runtime: PinnedClaudeRuntime;
@@ -49,7 +50,7 @@ export class DarwinQualificationSession {
   #acknowledgedFrames = 0;
   readonly #pendingSettlements = new Map<string, string>();
 
-  constructor(custody: DarwinSessionCustody, admission: SessionAdmission, binding: ClaudeQualificationBindingInput,
+  constructor(custody: QualificationSessionCustody, admission: SessionAdmission, binding: ClaudeQualificationBindingInput,
     runtime: PinnedClaudeRuntime, signal: AbortSignal) {
     this.#custody = custody; this.#admission = admission; this.#binding = binding; this.#runtime = runtime; this.#signal = signal;
     this.#authority = Object.freeze({ provider: "claude", id: profileIdSchema.parse(custody.scope.profileId), providerAccountId: claudeProviderAccountIdSchema.parse(custody.scope.providerAccountId),

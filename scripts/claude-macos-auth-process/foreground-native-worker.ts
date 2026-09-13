@@ -7,7 +7,7 @@ import { dlopen } from "bun:ffi";
 import { runClaudeForegroundLogin } from "../../src/claude/auth";
 import { CLAUDE_PIN, CLAUDE_PIN_EFFORT, CLAUDE_PIN_MODEL, CLAUDE_PIN_NATIVE_FALLBACK_CAPABILITY } from "../../src/claude/pin";
 import { buildPinnedClaudeRuntimeArgv, type PinnedClaudeRuntime } from "../../src/claude/runtime";
-import { bindDarwinForegroundLogin } from "./foreground";
+import { bindDarwinForegroundLogin, bindDarwinManualBrowserForegroundLogin } from "./foreground";
 
 let phase = "input";
 async function main(): Promise<void> {
@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   if (typeof value !== "object" || value === null) throw new Error("foreground_fixture_input_refused");
   const input = value as Record<string, unknown>;
   if (typeof input.sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(input.sha256) || typeof input.mode !== "string"
-    || !["normal", "abort", "ctrl_c", "preabort", "binding_changed", "terminal_changed", "one_owner"].includes(input.mode)) throw new Error("foreground_fixture_input_refused");
+    || !["normal", "manual_browser", "abort", "ctrl_c", "preabort", "binding_changed", "terminal_changed", "one_owner"].includes(input.mode)) throw new Error("foreground_fixture_input_refused");
   const configDir = join(process.cwd(), input.mode);
   const executablePath = join(process.cwd(), "fixture");
   const controller = new AbortController();
@@ -24,8 +24,9 @@ async function main(): Promise<void> {
     if (typeof message === "object" && message !== null && Object.keys(message).length === 1 && Reflect.get(message, "kind") === "abort") controller.abort();
   });
   phase = "binding";
-  const binding = bindDarwinForegroundLogin({ executablePath, executableSha256: input.sha256, configDir,
-    temporaryDirectory: join(process.cwd(), "temporary"), environment: { PATH: "/usr/bin:/bin", HOME: homedir(), LANG: "C", LC_ALL: "C", TZ: "UTC", ANTHROPIC_API_KEY: "synthetic-must-not-cross", NODE_OPTIONS: "synthetic-must-not-cross" },
+  const bind = input.mode === "manual_browser" ? bindDarwinManualBrowserForegroundLogin : bindDarwinForegroundLogin;
+  const binding = bind({ executablePath, executableSha256: input.sha256, configDir,
+    temporaryDirectory: join(process.cwd(), "temporary"), environment: { PATH: "/usr/bin:/bin", HOME: homedir(), LANG: "C", LC_ALL: "C", TZ: "UTC", BROWSER: "/synthetic-must-not-launch", ANTHROPIC_API_KEY: "synthetic-must-not-cross", NODE_OPTIONS: "synthetic-must-not-cross" },
   });
   binding.assertOwnerTerminalCurrent();
   const runtime: PinnedClaudeRuntime = { executablePath, version: CLAUDE_PIN, model: CLAUDE_PIN_MODEL, effort: CLAUDE_PIN_EFFORT,

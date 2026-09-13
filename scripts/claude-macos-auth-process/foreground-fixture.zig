@@ -34,6 +34,10 @@ pub fn main(init: std.process.Init.Minimal) void {
     if (argv.len != 4 or !std.mem.eql(u8, std.mem.span(argv[1]), "auth") or !std.mem.eql(u8, std.mem.span(argv[2]), "login") or !std.mem.eql(u8, std.mem.span(argv[3]), "--claudeai")) c._exit(64);
     const config = c.getenv("CLAUDE_CONFIG_DIR") orelse c._exit(65);
     const mode = std.fs.path.basename(std.mem.span(config));
+    const browser = c.getenv("BROWSER");
+    if (std.mem.eql(u8, mode, "manual_browser")) {
+        if (browser == null or !std.mem.eql(u8, std.mem.span(browser.?), "/usr/bin/true")) c._exit(66);
+    } else if (browser != null) c._exit(66);
     if (c.getenv("ANTHROPIC_API_KEY") != null or c.getenv("NODE_OPTIONS") != null) c._exit(66);
     const parent = c.getppid();
     if (c.getsid(0) != c.getsid(parent) or c.getpgrp() != c.getpgid(parent) or c.tcgetpgrp(0) != c.getpgrp()) c._exit(67);

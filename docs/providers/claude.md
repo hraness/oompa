@@ -14,6 +14,33 @@ oompa account login <profile> --provider claude
 
 This is a Linux-only foreground, TTY-only command. It refuses `--json`, resolves the installed Claude executable to a regular-file path, requires its exact self-reported version to match Oompa's compatibility pin, and launches that path with `auth login --claudeai`, the isolated `CLAUDE_CONFIG_DIR`, and Oompa's allowlisted environment. That version assertion does not authenticate the executable's package bytes and does not defend against a malicious same-user PATH substitution. The Claude CLI owns its prompts and browser handoff. Oompa explicitly supplies the terminal descriptors but never reads, copies, stores, or forwards the credential. A terminal Ctrl-C reaches the foreground process group; Oompa observes it, joins the exact child, and bounds cleanup if the child does not exit. An internal caller abort sends that child `SIGTERM` and applies the same bounded join. On macOS, Oompa refuses before launching Claude.
 
+To choose the browser session yourself, opt in on the same foreground command:
+
+```sh
+oompa account login <profile> --provider claude --manual-browser
+```
+
+Oompa prints the selected local profile label and preparation guidance, then
+suppresses automatic browser opening with the fixed system opener. Close all
+prior private/incognito windows in your chosen browser, open one fresh private
+window, and copy Claude's printed URL unchanged into it. Multiple private windows
+can share cookies. Keep your normal browser sessions unchanged, and check the
+intended account on Claude's own page before approving sign-in. A profile label
+or successful sign-in does not prove that two profiles use distinct accounts.
+Oompa neither launches a browser nor captures the URL, and adds no terminal input
+reader. Without this flag, browser behavior is unchanged.
+
+The option is local presentation, not stored account identity or launch authority.
+Oompa's locally constructed replay guidance preserves it. Durable account status
+and historical recovery receipts do not record or prove browser mode. A same-key
+retry remains recovery-only after an uncertain launch, even if the flag changes;
+it never starts another child. Manual mode requires the fixed `/usr/bin/true`
+executable on a supported POSIX host and has no fallback to normal browser opening.
+The managed macOS and Windows restrictions remain unchanged. The pinned Mac
+opener source and synthetic process tests establish the reviewed mechanism;
+actual Linux OAuth handoff and complete two-account isolation require their own
+live acceptance evidence.
+
 Claude has no Oompa device-code, handoff-file, web-linking, or ordinary background cancellation flow. Do not pass `--device-code` or `--handoff-file`. Before launching Claude, Oompa durably consumes a one-child grant. Another login cannot start under that grant. When the profile is signed out, preparation may locally release and terminalize only Claude sessions that are quiescent and idle under the same profile. That release stops Oompa's local runtime hold but does not delete the provider thread. An active turn, queued work, a pending interaction, recovery, or any other unsettled provider authority refuses login without releasing the session. New Claude provider effects are likewise refused while a login grant is unsettled.
 
 Each Claude child is process-local, but the durable Oompa session can resume in a later daemon. Oompa records the exact child identity and will launch `claude --resume` only after it proves the prior process is no longer live. The replacement child is durably claimed and observed before its provisioned Oompa host-tool binding becomes callable. Unknown or still-live process custody fails closed.

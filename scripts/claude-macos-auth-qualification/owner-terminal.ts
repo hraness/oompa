@@ -45,7 +45,7 @@ async function writeOwnerPrompt(output: Writable, message: string): Promise<void
   })]); } finally { clearTimeout(timer); }
 }
 /** This reader owns only its listeners and temporary bytes, never the owner's descriptors. */
-async function promptOwner(streams: OwnerTerminalStreams, signal: AbortSignal, scope: OwnerTerminalScope, challenge: string, description: string): Promise<void> {
+async function promptOwner(streams: OwnerTerminalStreams, signal: AbortSignal, scope: OwnerTerminalScope, challenge: string, description: string, readiness = false): Promise<void> {
   const isAborted = (): boolean => signal.aborted;
   streams.assertCurrent(); if (isAborted()) return refused("aborted");
   const input = streams.input;
@@ -53,8 +53,9 @@ async function promptOwner(streams: OwnerTerminalStreams, signal: AbortSignal, s
   const unavailable = (): boolean => outputFailed || input.destroyed || input.readableEnded || streams.output.destroyed || streams.output.writableEnded;
   if (unavailable() || input.readableEncoding !== null || input.readableFlowing === true
     || input.readableLength !== 0 || input.listenerCount("data") !== 0 || input.listenerCount("readable") !== 0) return refused("owner_refused");
-  const expected = Buffer.from(`${challenge} ${randomUUID()}\n`, "ascii");
-  const message = `${description} For run ${scope.runId}, attempt ${scope.attemptId}, ${scope.step === 1 ? "confirm you signed in to your intended A account. " : `step ${scope.step}, `}Type exactly: ${expected.toString("ascii")}`;
+  const expected = Buffer.from(readiness ? "\n" : `${challenge} ${randomUUID()}\n`, "ascii");
+  const message = readiness ? `${description}\nPress Enter when ready.\n`
+    : `${description} For run ${scope.runId}, attempt ${scope.attemptId}, step ${scope.step}. Type exactly: ${expected.toString("ascii")}`;
   const outputFailure = (): void => { outputFailed = true; rejectResponse?.(); };
   streams.output.on("error", outputFailure); streams.output.on("close", outputFailure);
   try {
@@ -99,7 +100,7 @@ async function promptOwner(streams: OwnerTerminalStreams, signal: AbortSignal, s
 export async function readOwnerTerminalResponse(streams: OwnerTerminalStreams, signal: AbortSignal, value: unknown): Promise<void> {
   const current = scope(value);
   const prompts = {
-    1: ["signed-in-A", "Claude's A login child has joined."],
+    1: ["signed-in-A", "Claude's A login child has joined. Confirm you signed in to your intended A account."],
     4: ["signed-in-B-distinct", "Claude's B login child has joined. Confirm you chose a different intended B account."],
     13: ["interrupted-before-browser-completion", "The interrupted A login child has joined. Confirm you pressed Ctrl-C before completing browser authentication."],
     15: ["recovered-A", "Claude's recovery A login child has joined. Confirm you chose the original intended A account."],
@@ -107,6 +108,20 @@ export async function readOwnerTerminalResponse(streams: OwnerTerminalStreams, s
   if (current.step !== 1 && current.step !== 4 && current.step !== 13 && current.step !== 15) return refused("order_refused");
   const [challenge, description] = prompts[current.step];
   await promptOwner(streams, signal, current, challenge, description);
+}
+
+/** Readiness is an owner observation before launch, never successful authentication evidence. */
+export async function prepareOwnerManualBrowserLogin(streams: OwnerTerminalStreams, signal: AbortSignal, value: unknown): Promise<void> {
+  const current = scope(value);
+  const prompts = {
+    1: ["ready-A", "Next: sign in to your intended A account."],
+    4: ["ready-B", "Next: sign in to your intended B account, different from A. Do not accept A if it appears."],
+    13: ["ready-interrupt-A", "Next: interrupt A's login. After Claude prints its link, press Ctrl-C before opening the link or completing authentication."],
+    15: ["ready-recover-A", "Next: sign in to the original intended A account again."],
+  } as const;
+  if (current.step !== 1 && current.step !== 4 && current.step !== 13 && current.step !== 15) return refused("order_refused");
+  const [challenge, task] = prompts[current.step];
+  await promptOwner(streams, signal, current, challenge, `${task} Claude has not started this login. Automatic browser opening is disabled.\nClose all prior private/incognito windows in the browser you will use, then open one fresh private window: multiple private windows can share cookies. Keep your normal windows and sessions unchanged.\n${current.step === 13 ? "For this interruption step, do not open the link." : "Copy that exact link from Claude's terminal into the fresh private window without changing it; do not click it into your normal browser. Check the intended account before approving sign-in."}`, true);
 }
 
 const armBrand = Symbol("qualification-interruption-owner-input");
