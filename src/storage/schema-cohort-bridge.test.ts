@@ -45,7 +45,7 @@ test("an authentic private48 checkpoint bridges once without rewriting immutable
   const now = 1_900_000_001_000;
   const store = new StateStore(paths, { now: () => now });
   cleanup.push(async () => { store.close(); });
-  expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+  expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
   expect(snapshots(database)).toEqual(old);
   expect(database.query("SELECT version,applied_at FROM migrations WHERE version>=40 ORDER BY version").all())
     .toEqual([
@@ -54,6 +54,7 @@ test("an authentic private48 checkpoint bridges once without rewriting immutable
       ...privateTask48Fixture.migrations.filter((row) => row.version >= 40)
         .map((row) => ({ version: row.version + 11, applied_at: row.applied_at })),
       { version: 60, applied_at: now },
+      { version: 61, applied_at: now },
     ]);
   expect(database.query("SELECT message,state FROM queue_entries WHERE id=?").get(privateTask48Fixture.queueId))
     .toEqual({ message: "Private sealed queue remains pending.", state: "pending" });
@@ -211,6 +212,7 @@ test("authentic private48 usage preserves exact authority across the bridge whil
     ...archived.migrations.filter((row) => row.version >= 40)
       .map((row) => ({ version: row.version + 11, applied_at: row.applied_at })),
     { version: 60, applied_at: now },
+    { version: 61, applied_at: now },
   ];
   const assertExact = (store: StateStore) => {
     expect(store.requireProviderAccountAuthority(archived.profileId, "codex")).toEqual(archived.authority);
@@ -224,7 +226,7 @@ test("authentic private48 usage preserves exact authority across the bridge whil
   };
   const migrated = new StateStore(paths, { now: () => now });
   cleanup.push(async () => { migrated.close(); });
-  expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+  expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
   assertExact(migrated);
   migrated.recordUsage(archived.profileId, 1, 10_000, archived.first, archived.authority);
   migrated.recordUsagePollFailure(archived.profileId, archived.fingerprint, 2, 20_000, archived.authority);

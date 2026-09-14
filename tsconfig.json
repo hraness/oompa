@@ -24,6 +24,8 @@
     "app/**/*.ts",
     "app/**/*.tsx",
     "convex/**/*.ts",
+    "native/process-kernel/verify-transport.ts",
+    "packages/native-process/src/**/*.ts",
     "plugins/**/*.ts",
     "scripts/**/*.ts",
     "scripts/app-browser-runner.mjs",

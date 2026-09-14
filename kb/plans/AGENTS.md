@@ -1,5 +1,6 @@
 # Contents
 
+- `native-provider-process.md` tracks the Rust provider-process owner, production Codex join evidence, independently installed consumers and native artifact/platform acceptance.
 - `windows-portable-contracts.md` tracks the separate native Windows run of pure protocol and help-parser contracts and its limits.
 - `cross-platform-daily-driver.md` tracks the owner's macOS-first daily-driver target and native macOS, Linux and Windows implementation and acceptance.
 - `authority-reduction-headroom.md` tracks the read-only quota-ceiling diagnostic, exact record demand, explicit byte uncertainty and unchanged repair/activation authority.

@@ -2,13 +2,47 @@ import { expect, test } from "bun:test";
 import fc from "fast-check";
 
 import { CodexError } from "./errors.ts";
+import type { CodexProcess } from "./process.ts";
 import { CodexConnectionEffects } from "./session-effects.ts";
+
+const emptyBytes: AsyncIterable<Uint8Array> = {
+  [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true, value: undefined }) }),
+};
 
 function latch<A>(): { promise: Promise<A>; resolve: (value: A) => void } {
   let resolve!: (value: A) => void;
   const promise = new Promise<A>(done => { resolve = done; });
   return { promise, resolve };
 }
+
+test("root exit alone cannot settle native custody and scope cleanup stays retryable", async () => {
+  const runtime = new CodexConnectionEffects();
+  let released = false; let forced = 0;
+  const child: CodexProcess = { stdout: emptyBytes, stderr: emptyBytes, exited: Promise.resolve(0),
+    write: async () => {}, terminate: () => {}, forceTerminate: () => { forced += 1; },
+    joinCustody: async () => { if (!released) throw Error("scope closure unproved"); },
+  };
+  try {
+    const first = await runtime.shutdown(child, null, { termGraceMs: 1, settlementMs: 5, diagnostic: () => {} });
+    expect(first.exitSettled).toBe(true); expect(first.custodySettled).toBe(false); expect(forced).toBe(1);
+    released = true;
+    const second = await runtime.shutdown(child, null, { termGraceMs: 1, settlementMs: 5, diagnostic: () => {} });
+    expect(second.exitSettled).toBe(true); expect(second.custodySettled).toBe(true); expect(forced).toBe(1);
+  } finally { await runtime.close(); }
+});
+
+test("native scope join that follows forced shutdown is separate from earlier root exit", async () => {
+  const runtime = new CodexConnectionEffects(); const custody = latch<undefined>();
+  const signals: string[] = [];
+  const child: CodexProcess = { stdout: emptyBytes, stderr: emptyBytes, exited: Promise.resolve(0),
+    write: async () => {}, terminate: () => { signals.push("TERM"); },
+    forceTerminate: () => { signals.push("KILL"); custody.resolve(undefined); }, joinCustody: () => custody.promise,
+  };
+  try {
+    const result = await runtime.shutdown(child, null, { termGraceMs: 1, settlementMs: 20, diagnostic: () => {} });
+    expect(signals).toEqual(["TERM", "KILL"]); expect(result.custodySettled).toBe(true);
+  } finally { custody.resolve(undefined); await runtime.close(); }
+});
 
 test("completion reserves synchronously and preserves native failure identity", async () => {
   const runtime = new CodexConnectionEffects();

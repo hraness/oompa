@@ -118,7 +118,7 @@ export interface LaunchPinnedCodexOptions
     readonly runtime: PinnedCodexRuntime;
     readonly codexHome: string;
     readonly environment?: Readonly<Record<string, string | undefined>>;
-  }) => CodexProcess;
+  }) => CodexProcess | Promise<CodexProcess>;
 }
 
 type ProcessExitObservation =
@@ -132,7 +132,7 @@ const cleanupDuration = (value: number | undefined, fallback: number): number =>
     : fallback;
 
 const observeProcessExit = async (
-  exited: Promise<number>,
+  exited: Promise<unknown>,
   timeoutMs: number,
 ): Promise<ProcessExitObservation> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -169,7 +169,8 @@ const closeSpawnedCodexProcess = async (
     }
   }
 
-  const afterTerm = await observeProcessExit(process.exited, input.termGraceMs);
+  const custody = async (): Promise<unknown> => await (process.joinCustody === undefined ? process.exited : process.joinCustody());
+  const afterTerm = await observeProcessExit(custody(), input.termGraceMs);
   if (afterTerm.state === "exited") return errors;
   if (afterTerm.state === "rejected") {
     errors.push(new Error("Codex process exit observation failed during launch cleanup.", {
@@ -182,9 +183,7 @@ const closeSpawnedCodexProcess = async (
   } catch (error: unknown) {
     errors.push(error);
   }
-  if (afterTerm.state === "rejected") return errors;
-
-  const afterForce = await observeProcessExit(process.exited, input.settlementMs);
+  const afterForce = await observeProcessExit(custody(), input.settlementMs);
   if (afterForce.state === "rejected") {
     errors.push(new Error("Codex process exit observation failed after forced launch cleanup.", {
       cause: afterForce.error,
@@ -211,7 +210,7 @@ export async function launchPinnedCodexAppServer(
         codexHome: input.codexHome,
         ...(input.environment === undefined ? {} : { environment: input.environment }),
       }));
-  const process = processFactory({
+  const process = await processFactory({
     runtime,
     codexHome: options.expectedCodexHome,
     ...(options.environment === undefined ? {} : { environment: options.environment }),

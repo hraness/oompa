@@ -1,0 +1,240 @@
+name: Native process target qualification
+
+on:
+  workflow_call:
+    inputs:
+      source-sha:
+        description: Exact source commit admitted by the calling workflow
+        required: true
+        type: string
+      os:
+        description: One fixed GitHub-hosted runner from the calling target matrix
+        required: true
+        type: string
+      target:
+        description: One native artifact target from the calling target matrix
+        required: true
+        type: string
+    outputs:
+      artifact-id:
+        description: Numeric immutable workflow artifact ID
+        value: ${{ jobs.qualify.outputs.artifact-id }}
+      artifact-digest:
+        description: SHA-256 of the uploaded workflow artifact
+        value: ${{ jobs.qualify.outputs.artifact-digest }}
+      qualification-sha256:
+        description: SHA-256 of the completed target qualification record
+        value: ${{ jobs.qualify.outputs.qualification-sha256 }}
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    # Closed scheduling labels prevent foreign input from selecting self-hosted
+    # runners. Invalid values reach the fixed Linux runner and fail before checkout.
+    # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+    runs-on: ${{ inputs.os == 'macos-15' && 'macos-15' || inputs.os == 'macos-15-intel' && 'macos-15-intel' || inputs.os == 'ubuntu-24.04-arm' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      artifact-id: ${{ steps.outputs.outputs.artifact-id }}
+      artifact-digest: ${{ steps.outputs.outputs.artifact-digest }}
+      qualification-sha256: ${{ steps.bundle.outputs.qualification-sha256 }}
+    steps:
+      - name: Admit exact target and source
+        id: admission
+        env:
+          OOMPA_SOURCE_SHA: ${{ inputs.source-sha }}
+          OOMPA_TARGET: ${{ inputs.target }}
+          OOMPA_RUNNER_LABEL: ${{ inputs.os }}
+          OOMPA_RUNNER_OS: ${{ runner.os }}
+          OOMPA_RUNNER_ARCH: ${{ runner.arch }}
+        run: |
+          set -euo pipefail
+          trap 'echo "::error::NATIVE_PROCESS_TARGET_ADMISSION_FAILED"' ERR
+          if ! [[ ${#OOMPA_SOURCE_SHA} -eq 40 && "$OOMPA_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::NATIVE_PROCESS_TARGET_SOURCE_INVALID"
+            exit 1
+          fi
+          case "$OOMPA_TARGET:$OOMPA_RUNNER_LABEL:$OOMPA_RUNNER_OS:$OOMPA_RUNNER_ARCH" in
+            darwin-arm64:macos-15:macOS:ARM64) rust_target=aarch64-apple-darwin ;;
+            darwin-x64:macos-15-intel:macOS:X64) rust_target=x86_64-apple-darwin ;;
+            linux-x64:ubuntu-24.04:Linux:X64) rust_target=x86_64-unknown-linux-musl ;;
+            linux-arm64:ubuntu-24.04-arm:Linux:ARM64) rust_target=aarch64-unknown-linux-musl ;;
+            *) echo "::error::NATIVE_PROCESS_TARGET_MAPPING_INVALID"; exit 1 ;;
+          esac
+          printf 'rust-target=%s\n' "$rust_target" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the admitted commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-sha }}
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+
+      - name: Install pinned Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Verify source and native host
+        env:
+          OOMPA_SOURCE_SHA: ${{ inputs.source-sha }}
+          OOMPA_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          trap 'echo "::error::NATIVE_PROCESS_TARGET_SOURCE_FAILED"' ERR
+          test "$(git rev-parse --verify 'HEAD^{commit}')" = "$OOMPA_SOURCE_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          test "$(cat .bun-version)" = "1.3.14"
+          bun --no-env-file --no-install -e '
+            if (Bun.version !== "1.3.14" || `${process.platform}-${process.arch}` !== process.env.OOMPA_TARGET) {
+              console.error("::error::NATIVE_PROCESS_TARGET_HOST_INVALID"); process.exit(1);
+            }
+          '
+
+      - name: Create private target preparation directories
+        id: paths
+        run: |
+          set -euo pipefail
+          umask 077
+          trap 'echo "::error::NATIVE_PROCESS_TARGET_DIRECTORIES_FAILED"' ERR
+          work="$(mktemp -d "$RUNNER_TEMP/native-process-target.XXXXXX")"
+          mkdir "$work/cargo" "$work/rustup" "$work/temporary" "$work/bun-cache"
+          printf 'work=%s\nbundle=%s/bundle\n' "$work" "$work" >> "$GITHUB_OUTPUT"
+          printf 'CARGO_HOME=%s/cargo\nRUSTUP_HOME=%s/rustup\nTMPDIR=%s/temporary\nBUN_INSTALL_CACHE_DIR=%s/bun-cache\n' \
+            "$work" "$work" "$work" "$work" >> "$GITHUB_ENV"
+
+      - name: Install the frozen JavaScript dependency graph
+        timeout-minutes: 10
+        env:
+          OOMPA_TARGET_WORK: ${{ steps.paths.outputs.work }}
+        run: |
+          set -euo pipefail
+          if ! bun install --frozen-lockfile --ignore-scripts > "$OOMPA_TARGET_WORK/bun-install.log" 2>&1; then
+            echo "::error::NATIVE_PROCESS_TARGET_DEPENDENCIES_FAILED"
+            exit 1
+          fi
+          if ! git diff --quiet --exit-code -- package.json bun.lock; then
+            echo "::error::NATIVE_PROCESS_TARGET_DEPENDENCIES_CHANGED"
+            exit 1
+          fi
+
+      - name: Prepare the pinned Rust toolchain and target
+        timeout-minutes: 10
+        env:
+          OOMPA_RUST_TARGET: ${{ steps.admission.outputs.rust-target }}
+          OOMPA_TARGET_WORK: ${{ steps.paths.outputs.work }}
+        run: |
+          set -euo pipefail
+          trap 'echo "::error::NATIVE_PROCESS_TARGET_TOOLCHAIN_FAILED"' ERR
+          if ! rustup toolchain install 1.97.1 --profile minimal --component clippy --component rustfmt \
+            --target "$OOMPA_RUST_TARGET" > "$OOMPA_TARGET_WORK/rustup.log" 2>&1; then
+            echo "::error::NATIVE_PROCESS_TARGET_TOOLCHAIN_FAILED"
+            exit 1
+          fi
+          cargo_path="$(rustup which --toolchain 1.97.1 cargo)"
+          test -x "$cargo_path"
+          printf '%s\n' "$(dirname "$cargo_path")" >> "$GITHUB_PATH"
+
+      - name: Fetch locked native dependencies before offline qualification
+        timeout-minutes: 10
+        env:
+          OOMPA_RUST_TARGET: ${{ steps.admission.outputs.rust-target }}
+          OOMPA_TARGET_WORK: ${{ steps.paths.outputs.work }}
+          CARGO_NET_OFFLINE: "false"
+        run: |
+          set -euo pipefail
+          trap 'echo "::error::NATIVE_PROCESS_TARGET_FETCH_FAILED"' ERR
+          if ! [[ "$(cargo --version)" == "cargo 1.97.1 "* ]]; then
+            echo "::error::NATIVE_PROCESS_TARGET_COMPILER_INVALID"
+            exit 1
+          fi
+          if ! cargo fetch --locked --target "$OOMPA_RUST_TARGET" --manifest-path native/process-kernel/Cargo.toml \
+            > "$OOMPA_TARGET_WORK/cargo-fetch.log" 2>&1; then
+            echo "::error::NATIVE_PROCESS_TARGET_FETCH_FAILED"
+            exit 1
+          fi
+          if ! git diff --quiet --exit-code -- native/process-kernel/Cargo.lock; then
+            echo "::error::NATIVE_PROCESS_TARGET_LOCK_CHANGED"
+            exit 1
+          fi
+
+      - name: Qualify exact release bytes offline on this host
+        timeout-minutes: 20
+        env:
+          OOMPA_TARGET_WORK: ${{ steps.paths.outputs.work }}
+          OOMPA_TARGET_BUNDLE: ${{ steps.paths.outputs.bundle }}
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          set -euo pipefail
+          if ! bun --no-env-file --no-install scripts/native-process-qualify.ts "$OOMPA_TARGET_BUNDLE" \
+            > "$OOMPA_TARGET_WORK/qualification.log" 2>&1; then
+            # Failed harness custody remains retained in its private sibling
+            # workroot. Never upload it or remove it as a cleanup assumption.
+            echo "::error::NATIVE_PROCESS_TARGET_QUALIFICATION_FAILED"
+            exit 1
+          fi
+
+      - name: Admit the completed target bundle
+        id: bundle
+        env:
+          OOMPA_SOURCE_SHA: ${{ inputs.source-sha }}
+          OOMPA_TARGET: ${{ inputs.target }}
+          OOMPA_TARGET_BUNDLE: ${{ steps.paths.outputs.bundle }}
+        run: |
+          set -euo pipefail
+          bun --no-env-file --no-install - <<'BUN'
+          import { appendFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { nativeBuildInput, nativeInputHash } from "./scripts/native-process-build-inputs.ts";
+          import { NATIVE_QUALIFICATION_HARNESS_FILES, parseNativeQualification } from "./scripts/native-process-qualification-model.ts";
+          try {
+            const bundle = process.env.OOMPA_TARGET_BUNDLE;
+            const bytes = nativeBuildInput(join(bundle, "qualification.json"), 256 * 1024);
+            const receipt = parseNativeQualification(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+            if (receipt.source.commitSha !== process.env.OOMPA_SOURCE_SHA || receipt.target !== process.env.OOMPA_TARGET) throw Error();
+            const images = [["oompa-process-kernel", receipt.artifact],
+              ...Object.entries(NATIVE_QUALIFICATION_HARNESS_FILES).map(([name, file]) => [file, receipt.harnesses[name]])];
+            for (const [file, identity] of images) {
+              const image = nativeBuildInput(join(bundle, file), 32 * 1024 * 1024);
+              if (image.length !== identity.bytes || nativeInputHash(image) !== identity.sha256) throw Error();
+            }
+            const licenses = nativeBuildInput(join(bundle, "licenses/manifest.json"), 256 * 1024);
+            if (nativeInputHash(licenses) !== receipt.licensesSha256) throw Error();
+            appendFileSync(process.env.GITHUB_OUTPUT, `qualification-sha256=${nativeInputHash(bytes)}\n`);
+          } catch {
+            console.error("::error::NATIVE_PROCESS_TARGET_BUNDLE_INVALID"); process.exitCode = 1;
+          }
+          BUN
+
+      - name: Upload only the completed qualification bundle
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-process-target-${{ inputs.target }}-${{ inputs.source-sha }}-${{ github.run_attempt }}
+          path: ${{ steps.paths.outputs.bundle }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+          include-hidden-files: false
+          overwrite: false
+
+      - name: Export exact workflow artifact identity
+        id: outputs
+        env:
+          OOMPA_ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          OOMPA_ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          trap 'echo "::error::NATIVE_PROCESS_TARGET_UPLOAD_IDENTITY_INVALID"' ERR
+          if ! [[ "$OOMPA_ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$OOMPA_ARTIFACT_ID" != *[!0-9]* && ${#OOMPA_ARTIFACT_ID} -le 20 ]] \
+            || ! [[ ${#OOMPA_ARTIFACT_DIGEST} -eq 64 && "$OOMPA_ARTIFACT_DIGEST" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "::error::NATIVE_PROCESS_TARGET_UPLOAD_IDENTITY_INVALID"
+            exit 1
+          fi
+          printf 'artifact-id=%s\nartifact-digest=%s\n' "$OOMPA_ARTIFACT_ID" "$OOMPA_ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,556 @@
+name: Native process release
+
+on:
+  push:
+    tags:
+      - "native-process-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-process-release
+  cancel-in-progress: false
+
+jobs:
+  source:
+    name: Verify native package release source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.identity.outputs.sha }}
+      tag-object: ${{ steps.identity.outputs.tag-object }}
+    steps:
+      - name: Require the public repository and owner tag push
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          ACTOR_ID: ${{ github.actor_id }}
+          SENDER_ID: ${{ github.event.sender.id }}
+          SENDER_TYPE: ${{ github.event.sender.type }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          OWNER_ID: ${{ github.repository_owner_id }}
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+          REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REPOSITORY" != "hraness/oompa" || "$REPOSITORY_ID" != "1343008607" || "$OWNER_ID" != "307125679" || "$REPOSITORY_PRIVATE" != "false" || "$REPOSITORY_VISIBILITY" != "public" ]]; then
+            echo "::error::NATIVE_RELEASE_REPOSITORY_INVALID"; exit 1
+          fi
+          if [[ "$EVENT_NAME" != "push" || "$ACTOR_ID" != "894119" || "$SENDER_ID" != "894119" || "$SENDER_TYPE" != "User" || "$EVENT_REF" != "refs/tags/native-process-v0.1.0" ]]; then
+            echo "::error::NATIVE_RELEASE_EVENT_INVALID"; exit 1
+          fi
+          if [[ ${#SOURCE_SHA} -ne 40 || ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ || "$WORKFLOW_SHA" != "$SOURCE_SHA" ]]; then
+            echo "::error::NATIVE_RELEASE_SOURCE_INVALID"; exit 1
+          fi
+      - name: Check out the exact package tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/native-process-v0.1.0
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+      - name: Fetch only governed package release history
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags --unshallow origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            '+refs/tags/native-process-v0.1.0:refs/tags/native-process-v0.1.0'
+          if [[ "$(git rev-parse --is-shallow-repository)" != "false" ]]; then exit 1; fi
+          while IFS= read -r release_ref; do
+            case "$release_ref" in
+              refs/remotes/origin/main|refs/tags/native-process-v0.1.0) ;;
+              *) echo "::error::NATIVE_RELEASE_REF_INVALID"; exit 1 ;;
+            esac
+          done < <(git for-each-ref --format='%(refname)')
+          if [[ "$(git for-each-ref --format='%(refname)' | wc -l | tr -d ' ')" != "2" ]]; then exit 1; fi
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      - name: Verify annotated tag and reviewed source
+        id: identity
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          EVENT_TAG_OBJECT: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          if [[ "$(git cat-file -t refs/tags/native-process-v0.1.0)" != "tag" || "$(git rev-parse HEAD)" != "$SOURCE_SHA" || "$(git rev-parse 'refs/tags/native-process-v0.1.0^{commit}')" != "$SOURCE_SHA" ]]; then
+            echo "::error::NATIVE_RELEASE_TAG_INVALID"; exit 1
+          fi
+          git merge-base --is-ancestor "$SOURCE_SHA" refs/remotes/origin/main
+          if [[ ${#EVENT_TAG_OBJECT} -ne 40 || ! "$EVENT_TAG_OBJECT" =~ ^[0-9a-f]{40}$ || "$(git rev-parse 'refs/tags/native-process-v0.1.0^{tag}')" != "$EVENT_TAG_OBJECT" ]]; then
+            echo "::error::NATIVE_RELEASE_EVENT_TAG_CHANGED"; exit 1
+          fi
+          bun -e 'const p = await Bun.file("packages/native-process/package.json").json(); if (p.name !== "@hraness/native-process" || p.version !== "0.1.0") throw Error("NATIVE_RELEASE_PACKAGE_INVALID")'
+          printf 'sha=%s\ntag-object=%s\n' "$SOURCE_SHA" "$(git rev-parse 'refs/tags/native-process-v0.1.0^{tag}')" >> "$GITHUB_OUTPUT"
+      - name: Install locked dependencies without lifecycle scripts
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Require complete successful CI on the tagged main commit
+        env:
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ steps.identity.outputs.sha }}
+        run: bun scripts/check-commit-ci-run.ts
+
+  darwin_arm64:
+    needs: source
+    uses: ./.github/workflows/native-process-target.yml
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+      os: macos-15
+      target: darwin-arm64
+  darwin_x64:
+    needs: source
+    uses: ./.github/workflows/native-process-target.yml
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+      os: macos-15-intel
+      target: darwin-x64
+  linux_arm64:
+    needs: source
+    uses: ./.github/workflows/native-process-target.yml
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+      os: ubuntu-24.04-arm
+      target: linux-arm64
+  linux_x64:
+    needs: source
+    uses: ./.github/workflows/native-process-target.yml
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+      os: ubuntu-24.04
+      target: linux-x64
+
+  assemble:
+    name: Assemble one exact native package
+    needs: [source, darwin_arm64, darwin_x64, linux_arm64, linux_x64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      artifact-id: ${{ steps.archive_identity.outputs.artifact-id }}
+      artifact-digest: ${{ steps.archive_identity.outputs.artifact-digest }}
+      archive-sha256: ${{ steps.assembly.outputs.archive-sha256 }}
+      manifest-sha256: ${{ steps.assembly.outputs.manifest-sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Require four exact workflow artifact identities before download
+        env:
+          DARWIN_ARM64_ID: ${{ needs.darwin_arm64.outputs.artifact-id }}
+          DARWIN_ARM64_DIGEST: ${{ needs.darwin_arm64.outputs.artifact-digest }}
+          DARWIN_X64_ID: ${{ needs.darwin_x64.outputs.artifact-id }}
+          DARWIN_X64_DIGEST: ${{ needs.darwin_x64.outputs.artifact-digest }}
+          LINUX_ARM64_ID: ${{ needs.linux_arm64.outputs.artifact-id }}
+          LINUX_ARM64_DIGEST: ${{ needs.linux_arm64.outputs.artifact-digest }}
+          LINUX_X64_ID: ${{ needs.linux_x64.outputs.artifact-id }}
+          LINUX_X64_DIGEST: ${{ needs.linux_x64.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          for artifact_id in "$DARWIN_ARM64_ID" "$DARWIN_X64_ID" "$LINUX_ARM64_ID" "$LINUX_X64_ID"; do
+            if [[ ! "$artifact_id" =~ ^[1-9][0-9]*$ || "$artifact_id" == *[!0-9]* || ${#artifact_id} -gt 20 ]]; then
+              echo "::error::NATIVE_RELEASE_ARTIFACT_ID_INVALID"; exit 1
+            fi
+          done
+          for digest in "$DARWIN_ARM64_DIGEST" "$DARWIN_X64_DIGEST" "$LINUX_ARM64_DIGEST" "$LINUX_X64_DIGEST"; do
+            if [[ ${#digest} -ne 64 || ! "$digest" =~ ^[a-f0-9]{64}$ ]]; then
+              echo "::error::NATIVE_RELEASE_ARTIFACT_DIGEST_INVALID"; exit 1
+            fi
+          done
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.darwin_arm64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/native-process-bundles/darwin-arm64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.darwin_x64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/native-process-bundles/darwin-x64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.linux_arm64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/native-process-bundles/linux-arm64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.linux_x64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/native-process-bundles/linux-x64
+      - name: Bind all four qualified bundles and assemble once
+        id: assembly
+        env:
+          DARWIN_ARM64: ${{ needs.darwin_arm64.outputs.qualification-sha256 }}
+          DARWIN_X64: ${{ needs.darwin_x64.outputs.qualification-sha256 }}
+          LINUX_ARM64: ${{ needs.linux_arm64.outputs.qualification-sha256 }}
+          LINUX_X64: ${{ needs.linux_x64.outputs.qualification-sha256 }}
+        run: |
+          bun --no-env-file --no-install - <<'BUN'
+          import { appendFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { nativeBuildInput, nativeInputHash } from "./scripts/native-process-build-inputs.ts";
+          import { parseNativeQualification } from "./scripts/native-process-qualification-model.ts";
+          import { buildQualifiedNativeProcessPackage } from "./scripts/native-process-package.ts";
+          const entries = [["darwin-arm64", "DARWIN_ARM64"], ["darwin-x64", "DARWIN_X64"], ["linux-arm64", "LINUX_ARM64"], ["linux-x64", "LINUX_X64"]];
+          const directories = entries.map(([target, variable]) => {
+            const directory = join(process.env.RUNNER_TEMP, "native-process-bundles", target);
+            const bytes = nativeBuildInput(join(directory, "qualification.json"), 256 * 1024);
+            if (!/^[a-f0-9]{64}$/.test(process.env[variable] ?? "") || nativeInputHash(bytes) !== process.env[variable] || parseNativeQualification(JSON.parse(bytes)).target !== target) throw Error("NATIVE_RELEASE_BUNDLE_INVALID");
+            return directory;
+          });
+          const result = await buildQualifiedNativeProcessPackage(join(process.env.RUNNER_TEMP, "native-process-archive"), directories);
+          appendFileSync(process.env.GITHUB_OUTPUT, `archive-sha256=${result.archiveSha256}\nmanifest-sha256=${result.manifestSha256}\n`);
+          BUN
+      - name: Retain the single canonical archive
+        id: archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-process-archive-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-process-archive/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Export the exact canonical workflow artifact identity
+        id: archive_identity
+        env:
+          ARTIFACT_ID: ${{ steps.archive.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.archive.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ || "$ARTIFACT_ID" == *[!0-9]* || ${#ARTIFACT_ID} -gt 20 || ${#ARTIFACT_DIGEST} -ne 64 || ! "$ARTIFACT_DIGEST" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "::error::NATIVE_RELEASE_ARCHIVE_IDENTITY_INVALID"; exit 1
+          fi
+          printf 'artifact-id=%s\nartifact-digest=%s\n' "$ARTIFACT_ID" "$ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
+
+
+  installed_darwin_arm64:
+    needs: [source, assemble, darwin_arm64]
+    uses: ./.github/workflows/native-process-installed-target.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+      os: macos-15
+      target: darwin-arm64
+      archive-id: ${{ needs.assemble.outputs.artifact-id }}
+      archive-digest: ${{ needs.assemble.outputs.artifact-digest }}
+      archive-sha256: ${{ needs.assemble.outputs.archive-sha256 }}
+      manifest-sha256: ${{ needs.assemble.outputs.manifest-sha256 }}
+      bundle-id: ${{ needs.darwin_arm64.outputs.artifact-id }}
+      bundle-digest: ${{ needs.darwin_arm64.outputs.artifact-digest }}
+
+  installed_darwin_x64:
+    needs: [source, assemble, darwin_x64]
+    uses: ./.github/workflows/native-process-installed-target.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+      os: macos-15-intel
+      target: darwin-x64
+      archive-id: ${{ needs.assemble.outputs.artifact-id }}
+      archive-digest: ${{ needs.assemble.outputs.artifact-digest }}
+      archive-sha256: ${{ needs.assemble.outputs.archive-sha256 }}
+      manifest-sha256: ${{ needs.assemble.outputs.manifest-sha256 }}
+      bundle-id: ${{ needs.darwin_x64.outputs.artifact-id }}
+      bundle-digest: ${{ needs.darwin_x64.outputs.artifact-digest }}
+
+  installed_linux_arm64:
+    needs: [source, assemble, linux_arm64]
+    uses: ./.github/workflows/native-process-installed-target.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+      os: ubuntu-24.04-arm
+      target: linux-arm64
+      archive-id: ${{ needs.assemble.outputs.artifact-id }}
+      archive-digest: ${{ needs.assemble.outputs.artifact-digest }}
+      archive-sha256: ${{ needs.assemble.outputs.archive-sha256 }}
+      manifest-sha256: ${{ needs.assemble.outputs.manifest-sha256 }}
+      bundle-id: ${{ needs.linux_arm64.outputs.artifact-id }}
+      bundle-digest: ${{ needs.linux_arm64.outputs.artifact-digest }}
+
+  installed_linux_x64:
+    needs: [source, assemble, linux_x64]
+    uses: ./.github/workflows/native-process-installed-target.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
+      os: ubuntu-24.04
+      target: linux-x64
+      archive-id: ${{ needs.assemble.outputs.artifact-id }}
+      archive-digest: ${{ needs.assemble.outputs.artifact-digest }}
+      archive-sha256: ${{ needs.assemble.outputs.archive-sha256 }}
+      manifest-sha256: ${{ needs.assemble.outputs.manifest-sha256 }}
+      bundle-id: ${{ needs.linux_x64.outputs.artifact-id }}
+      bundle-digest: ${{ needs.linux_x64.outputs.artifact-digest }}
+
+  attest:
+    name: Attest the complete installed native package
+    needs: [source, assemble, installed_darwin_arm64, installed_darwin_x64, installed_linux_arm64, installed_linux_x64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      artifact-id: ${{ steps.identity.outputs.artifact-id }}
+      artifact-digest: ${{ steps.identity.outputs.artifact-digest }}
+      provenance-sha256: ${{ steps.combine.outputs.provenance-sha256 }}
+    env:
+      NATIVE_PROCESS_RELEASE_CONTEXT: >-
+        {"repository":"${{ github.repository }}","repositoryId":"${{ github.repository_id }}","repositoryOwnerId":"${{ github.repository_owner_id }}","actorId":"${{ github.actor_id }}","senderId":"${{ github.event.sender.id }}","senderType":"${{ github.event.sender.type }}","eventName":"${{ github.event_name }}","ref":"${{ github.ref }}","refName":"${{ github.ref_name }}","refType":"${{ github.ref_type }}","workflowRef":"${{ github.workflow_ref }}","runId":"${{ github.run_id }}","runAttempt":${{ github.run_attempt }},"sourceSha":"${{ github.sha }}","workflowSha":"${{ github.workflow_sha }}"}
+      NATIVE_PROCESS_TAG_OBJECT_SHA: ${{ needs.source.outputs.tag-object }}
+      NATIVE_PROCESS_ARCHIVE_SHA256: ${{ needs.assemble.outputs.archive-sha256 }}
+      NATIVE_PROCESS_MANIFEST_SHA256: ${{ needs.assemble.outputs.manifest-sha256 }}
+      NATIVE_PROCESS_INSTALLED_DARWIN_ARM64_SHA256: ${{ needs.installed_darwin_arm64.outputs.receipt-sha256 }}
+      NATIVE_PROCESS_INSTALLED_DARWIN_X64_SHA256: ${{ needs.installed_darwin_x64.outputs.receipt-sha256 }}
+      NATIVE_PROCESS_INSTALLED_LINUX_ARM64_SHA256: ${{ needs.installed_linux_arm64.outputs.receipt-sha256 }}
+      NATIVE_PROCESS_INSTALLED_LINUX_X64_SHA256: ${{ needs.installed_linux_x64.outputs.receipt-sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      - name: Install frozen independent dependency files
+        run: bun install --frozen-lockfile --ignore-scripts --backend=copyfile
+      - name: Create private release work directory
+        id: paths
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$(mktemp -d "$RUNNER_TEMP/native-process-release.XXXXXX")"
+          work="$(cd "$work" && pwd -P)"
+          mkdir "$work/publication"
+          printf 'work=%s\n' "$work" >> "$GITHUB_OUTPUT"
+      - name: Admit exact archive and four installed artifact identities
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NATIVE_PROCESS_SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          NATIVE_PROCESS_ARTIFACTS: >-
+            [{"id":"${{ needs.assemble.outputs.artifact-id }}","digest":"${{ needs.assemble.outputs.artifact-digest }}"},{"id":"${{ needs.installed_darwin_arm64.outputs.artifact-id }}","digest":"${{ needs.installed_darwin_arm64.outputs.artifact-digest }}"},{"id":"${{ needs.installed_darwin_x64.outputs.artifact-id }}","digest":"${{ needs.installed_darwin_x64.outputs.artifact-digest }}"},{"id":"${{ needs.installed_linux_arm64.outputs.artifact-id }}","digest":"${{ needs.installed_linux_arm64.outputs.artifact-digest }}"},{"id":"${{ needs.installed_linux_x64.outputs.artifact-id }}","digest":"${{ needs.installed_linux_x64.outputs.artifact-digest }}"}]
+        run: bun --no-env-file --no-install scripts/native-process-workflow-artifacts.ts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.assemble.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.work }}/archive
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.installed_darwin_arm64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.work }}/receipts/darwin-arm64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.installed_darwin_x64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.work }}/receipts/darwin-x64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.installed_linux_arm64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.work }}/receipts/linux-arm64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.installed_linux_x64.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.work }}/receipts/linux-x64
+      - name: Read the exact annotated tag object
+        env:
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          WORK: ${{ steps.paths.outputs.work }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git fetch --no-tags origin '+refs/tags/native-process-v0.1.0:refs/tags/native-process-v0.1.0'
+          test "$(git rev-parse 'refs/tags/native-process-v0.1.0^{tag}')" = "$NATIVE_PROCESS_TAG_OBJECT_SHA"
+          test "$(git rev-parse 'refs/tags/native-process-v0.1.0^{commit}')" = "$SOURCE_SHA"
+          git cat-file tag "$NATIVE_PROCESS_TAG_OBJECT_SHA" > "$WORK/tag-object"
+      - name: Join all four installed results into the qualification predicate
+        id: evidence
+        env:
+          WORK: ${{ steps.paths.outputs.work }}
+        run: |
+          bun --no-env-file --no-install - <<'BUN'
+          import { appendFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { runNativeReleaseEvidence } from "./scripts/native-process-release-evidence.ts";
+          const work = process.env.WORK;
+          const result = runNativeReleaseEvidence(["prepare", join(work, "archive/hraness-native-process-0.1.0.tgz"),
+            join(work, "archive/SHA256SUMS"), join(work, "receipts"), join(work, "tag-object"), join(work, "evidence")], process.env);
+          appendFileSync(process.env.GITHUB_OUTPUT, `predicate-sha256=${result.predicateSha256}\ncoordinate-sha256=${result.coordinateSha256}\n`);
+          BUN
+      - name: Require current workload authority before signing
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          bun --no-env-file --no-install - <<'BUN'
+          import { nativeProcessReleaseRun } from "./scripts/native-process-release-policy.ts";
+          import { fetchNativeProcessReleaseAuthority, nativeProcessReleaseAuthority } from "./scripts/native-process-release-authority.ts";
+          const run = nativeProcessReleaseRun(JSON.parse(process.env.NATIVE_PROCESS_RELEASE_CONTEXT));
+          const tagObjectSha = process.env.NATIVE_PROCESS_TAG_OBJECT_SHA;
+          nativeProcessReleaseAuthority(await fetchNativeProcessReleaseAuthority({ token: process.env.GITHUB_TOKEN, run, tagObjectSha }), run, tagObjectSha);
+          BUN
+      - name: Sign the archive checksum and complete qualification predicate
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            ${{ steps.paths.outputs.work }}/archive/hraness-native-process-0.1.0.tgz
+            ${{ steps.paths.outputs.work }}/archive/SHA256SUMS
+          predicate-type: https://github.com/hraness/oompa/native-process/qualification/v1
+          predicate-path: ${{ steps.paths.outputs.work }}/evidence/predicate.json
+          create-storage-record: false
+          push-to-registry: false
+      - name: Bind the returned signature bundle to the unchanged package
+        id: combine
+        env:
+          WORK: ${{ steps.paths.outputs.work }}
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          NATIVE_PROCESS_PREDICATE_SHA256: ${{ steps.evidence.outputs.predicate-sha256 }}
+          NATIVE_PROCESS_COORDINATE_SHA256: ${{ steps.evidence.outputs.coordinate-sha256 }}
+        run: |
+          bun --no-env-file --no-install - <<'BUN'
+          import { appendFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { runNativeReleaseEvidence } from "./scripts/native-process-release-evidence.ts";
+          const work = process.env.WORK;
+          const result = runNativeReleaseEvidence(["combine", join(work, "archive/hraness-native-process-0.1.0.tgz"),
+            join(work, "archive/SHA256SUMS"), join(work, "evidence/predicate.json"), join(work, "evidence/coordinate.json"),
+            process.env.BUNDLE, join(work, "signed")], process.env);
+          appendFileSync(process.env.GITHUB_OUTPUT, `provenance-sha256=${result.provenanceSha256}\n`);
+          BUN
+      - name: Retain the original producing attempt's provenance
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-process-provenance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.paths.outputs.work }}/signed/native-process-provenance.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+      - name: Export the exact provenance workflow artifact
+        id: identity
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ || ${#ARTIFACT_ID} -gt 20 || ! "$ARTIFACT_DIGEST" =~ ^[a-f0-9]{64}$ || ${#ARTIFACT_DIGEST} -ne 64 ]]; then exit 1; fi
+          printf 'artifact-id=%s\nartifact-digest=%s\n' "$ARTIFACT_ID" "$ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish immutable native package
+    needs: [source, assemble, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    env:
+      NATIVE_PROCESS_RELEASE_CONTEXT: >-
+        {"repository":"${{ github.repository }}","repositoryId":"${{ github.repository_id }}","repositoryOwnerId":"${{ github.repository_owner_id }}","actorId":"${{ github.actor_id }}","senderId":"${{ github.event.sender.id }}","senderType":"${{ github.event.sender.type }}","eventName":"${{ github.event_name }}","ref":"${{ github.ref }}","refName":"${{ github.ref_name }}","refType":"${{ github.ref_type }}","workflowRef":"${{ github.workflow_ref }}","runId":"${{ github.run_id }}","runAttempt":${{ github.run_attempt }},"sourceSha":"${{ github.sha }}","workflowSha":"${{ github.workflow_sha }}"}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+      - name: Install frozen independent dependency files
+        run: bun install --frozen-lockfile --ignore-scripts --backend=copyfile
+      - name: Create private release work directory
+        id: paths
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$(mktemp -d "$RUNNER_TEMP/native-process-release.XXXXXX")"
+          work="$(cd "$work" && pwd -P)"
+          mkdir "$work/publication"
+          printf 'work=%s\n' "$work" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.20.0
+      - name: Admit exact archive and producing provenance artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NATIVE_PROCESS_SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          NATIVE_PROCESS_ARTIFACTS: >-
+            [{"id":"${{ needs.assemble.outputs.artifact-id }}","digest":"${{ needs.assemble.outputs.artifact-digest }}"},{"id":"${{ needs.attest.outputs.artifact-id }}","digest":"${{ needs.attest.outputs.artifact-digest }}"}]
+        run: bun --no-env-file --no-install scripts/native-process-workflow-artifacts.ts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.assemble.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.work }}/archive
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.attest.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.work }}/provenance
+      - name: Bind downloaded bytes to their original admitted job outputs
+        env:
+          WORK: ${{ steps.paths.outputs.work }}
+          ARCHIVE_SHA256: ${{ needs.assemble.outputs.archive-sha256 }}
+          MANIFEST_SHA256: ${{ needs.assemble.outputs.manifest-sha256 }}
+          PROVENANCE_SHA256: ${{ needs.attest.outputs.provenance-sha256 }}
+        run: |
+          bun --no-env-file --no-install - <<'BUN'
+          import { join } from "node:path";
+          import { nativeBuildInput, nativeInputHash } from "./scripts/native-process-build-inputs.ts";
+          import { parseNativeReleaseProvenance } from "./scripts/native-process-release-policy.ts";
+          const provenance = nativeBuildInput(join(process.env.WORK, "provenance/native-process-provenance.json"), 256 * 1024);
+          const archive = nativeBuildInput(join(process.env.WORK, "archive/hraness-native-process-0.1.0.tgz"), 64 * 1024 * 1024);
+          const coordinate = parseNativeReleaseProvenance(provenance).qualification.coordinate;
+          if (nativeInputHash(provenance) !== process.env.PROVENANCE_SHA256 || nativeInputHash(archive) !== process.env.ARCHIVE_SHA256
+            || coordinate.archive.sha256 !== process.env.ARCHIVE_SHA256 || coordinate.manifestSha256 !== process.env.MANIFEST_SHA256) throw Error("NATIVE_RELEASE_DOWNLOAD_CHANGED");
+          BUN
+      - name: Require complete successful source CI before publication
+        env:
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ github.token }}
+          VERIFIED_SHA: ${{ needs.source.outputs.sha }}
+        run: bun scripts/check-commit-ci-run.ts
+      - name: Publish and verify immutable native package
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WORK: ${{ steps.paths.outputs.work }}
+        run: |
+          set -euo pipefail
+          bun --no-env-file --no-install scripts/native-process-publish.ts             "$WORK/archive/hraness-native-process-0.1.0.tgz" "$WORK/archive/SHA256SUMS"             "$WORK/provenance/native-process-provenance.json" "$WORK/publication" > "$WORK/publication-receipt.json"
+      - name: Retain the completed publication receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-process-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.paths.outputs.work }}/publication-receipt.json
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: false

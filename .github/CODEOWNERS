@@ -2,6 +2,10 @@
 /.github/ @0thernet
 /package.json @0thernet
 /bun.lock @0thernet
+/native/process-kernel/ @0thernet
+/packages/native-process/ @0thernet
+/scripts/native-process-*.ts @0thernet
+/scripts/native-process-*.mjs @0thernet
 /scripts/check-commit-ci-run.ts @0thernet
 /scripts/create-release-tag.ts @0thernet
 /scripts/check-package.ts @0thernet

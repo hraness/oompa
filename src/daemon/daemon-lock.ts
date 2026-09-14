@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { constants, type Stats } from "node:fs";
+import { constants, lstatSync, realpathSync, type Stats } from "node:fs";
 import { lstat, open, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
@@ -7,7 +7,11 @@ import { Database, type SQLiteError } from "bun:sqlite";
 import { z } from "zod";
 
 import { LOCAL_DAEMON_PROTOCOL } from "../domain/contracts";
+import { issueDaemonRecoveryAuthority, providerProcessFileIdentitySchema, type DaemonRecoveryAuthority, type ProviderProcessFileIdentity,
+  type ProviderProcessLocalFiles, type ProviderProcessRecoveryActor,
+  type ProviderProcessRecoverySnapshot, type ProviderProcessRecoveryStore } from "../domain/provider-process-custody";
 import { ensurePrivateDirectory, type StatePaths } from "../storage/paths";
+export { readDaemonRecoveryAuthority, type DaemonRecoveryAuthority } from "../domain/provider-process-custody";
 
 export const DAEMON_PROTOCOL = LOCAL_DAEMON_PROTOCOL;
 
@@ -306,6 +310,16 @@ export class DaemonAuthorityFence {
       throw new DaemonAuthoritySafetyError("The daemon effect authority generation or boot ID changed.");
     }
   }
+
+  /** Final admission prefix: no await between this check and the owned effect. */
+  assertCurrentSynchronously(): void {
+    if (this.#isClosed()) throw new DaemonAuthoritySafetyError("The daemon effect authority is closed.");
+    this.#lock.nativeFileIdentity();
+    const receipt = this.#lock.receipt;
+    if (receipt.generation !== this.authority.generation || receipt.bootId !== this.authority.bootId) {
+      throw new DaemonAuthoritySafetyError("The daemon effect authority generation or boot ID changed.");
+    }
+  }
 }
 
 type DaemonReceiptReadHooks = Readonly<{
@@ -592,12 +606,26 @@ export async function inspectDaemonAuthority(paths: StatePaths): Promise<DaemonA
   });
 }
 
+function nativeAuthorityFileIdentity(path: string, expected?: ProviderProcessFileIdentity): ProviderProcessFileIdentity {
+  const metadata = lstatSync(path, { bigint: true });
+  const uid = currentUid();
+  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.nlink !== 1n
+    || (metadata.mode & 0o777n) !== 0o600n || (uid !== undefined && metadata.uid !== BigInt(uid))
+    || realpathSync(path) !== path) throw new DaemonAuthoritySafetyError("Unsafe native daemon authority identity.");
+  const identity = providerProcessFileIdentitySchema.parse({ device: metadata.dev.toString(), inode: metadata.ino.toString() });
+  if (expected !== undefined && (identity.device !== expected.device || identity.inode !== expected.inode)) {
+    throw new DaemonAuthoritySafetyError("The exact native daemon authority file changed.");
+  }
+  return identity;
+}
+
 export class DaemonLock {
   readonly #paths: StatePaths;
   readonly #database: Database;
   readonly #authorityPath: string;
   readonly #authorityDevice: number;
   readonly #authorityInode: number;
+  readonly #nativeAuthorityIdentity: ProviderProcessFileIdentity;
   #receipt: DaemonAuthorityReceipt;
   #receiptDevice: number;
   #receiptInode: number;
@@ -607,7 +635,7 @@ export class DaemonLock {
   private constructor(
     paths: StatePaths,
     database: Database,
-    authority: { path: string; device: number; inode: number },
+    authority: { path: string; device: number; inode: number; nativeIdentity: ProviderProcessFileIdentity },
     receipt: { value: DaemonAuthorityReceipt; device: number; inode: number },
   ) {
     this.#paths = paths;
@@ -615,13 +643,49 @@ export class DaemonLock {
     this.#authorityPath = authority.path;
     this.#authorityDevice = authority.device;
     this.#authorityInode = authority.inode;
+    this.#nativeAuthorityIdentity = authority.nativeIdentity;
     this.#receipt = receipt.value;
     this.#receiptDevice = receipt.device;
     this.#receiptInode = receipt.inode;
   }
 
   get receipt(): DaemonAuthorityReceipt {
-    return this.#receipt;
+    return { ...this.#receipt };
+  }
+
+  #assertHeldSynchronously(): void {
+    if (this.#released || !this.#database.inTransaction) {
+      throw new DaemonAuthoritySafetyError("The exact daemon authority transaction is not held.");
+    }
+    this.#database.query("SELECT 1 AS authority_held").get();
+    nativeAuthorityFileIdentity(this.#authorityPath, this.#nativeAuthorityIdentity);
+  }
+
+  nativeFileIdentity(): ProviderProcessFileIdentity {
+    this.#assertHeldSynchronously();
+    return { ...this.#nativeAuthorityIdentity };
+  }
+
+  /** Issued only before this lock publishes a generation; the old tuple is never impersonated. */
+  async createRecoveryAuthority(store: ProviderProcessRecoveryStore): Promise<DaemonRecoveryAuthority> {
+    await this.assertCurrent();
+    if (this.#receipt.state !== "booting" || this.#receipt.generation !== undefined
+      || store.paths.daemonLock !== this.#paths.daemonLock) {
+      throw new DaemonAuthoritySafetyError("Startup admission is not closed for this exact store.");
+    }
+    const snapshot: ProviderProcessRecoverySnapshot = store.providerProcessRecoverySnapshot();
+    const actor: ProviderProcessRecoveryActor = { kind: "startup-recovery", authorityNonce: this.#receipt.nonce,
+      previousDaemon: snapshot.previousDaemon };
+    const localFiles: ProviderProcessLocalFiles = { authority: this.nativeFileIdentity(), state: snapshot.state };
+    const assertHeld = () => {
+      this.#assertHeldSynchronously();
+      if (this.#receipt.state !== "booting" || this.#receipt.generation !== undefined) {
+        throw new DaemonAuthoritySafetyError("Startup recovery admission is closed.");
+      }
+      store.assertProviderProcessRecoverySnapshot(snapshot);
+    };
+    return issueDaemonRecoveryAuthority({ store, actor, localFiles, assertHeld,
+      assertCurrent: () => this.assertCurrent() });
   }
 
   async #validateAuthorityName(): Promise<void> {
@@ -657,6 +721,7 @@ export class DaemonLock {
     }
     await hooks.afterTransactionProbe?.();
     await this.#validateAuthorityName();
+    this.#assertHeldSynchronously();
   }
 
   static async acquire(
@@ -664,6 +729,7 @@ export class DaemonLock {
     input: { pid?: number; nonce?: string; now?: number; state?: "booting" | "maintenance" } = {},
   ): Promise<DaemonLock> {
     const authority = await ensureAuthorityDatabaseFile(paths);
+    const nativeIdentity = nativeAuthorityFileIdentity(authority.path);
     const database = new Database(authority.path, { create: false, strict: true });
     try {
       const opened = await validateOwnedRegularFile(authority.path);
@@ -711,6 +777,7 @@ export class DaemonLock {
         path: authority.path,
         device: authority.metadata.dev,
         inode: authority.metadata.ino,
+        nativeIdentity: nativeAuthorityFileIdentity(authority.path, nativeIdentity),
       }, {
         value: receipt,
         device: publishedReceipt.dev,
@@ -800,7 +867,7 @@ export class DaemonLock {
       this.#receipt = next;
       this.#receiptDevice = published.dev;
       this.#receiptInode = published.ino;
-      return next;
+      return { ...next };
     });
   }
 

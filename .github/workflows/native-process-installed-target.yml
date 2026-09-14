@@ -1,0 +1,265 @@
+name: Installed native process target qualification
+
+on:
+  workflow_call:
+    inputs:
+      source-sha:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+      archive-id:
+        required: true
+        type: string
+      archive-digest:
+        required: true
+        type: string
+      archive-sha256:
+        required: true
+        type: string
+      manifest-sha256:
+        required: true
+        type: string
+      bundle-id:
+        required: true
+        type: string
+      bundle-digest:
+        required: true
+        type: string
+    outputs:
+      artifact-id:
+        description: Numeric immutable installed-receipt artifact ID
+        value: ${{ jobs.installed.outputs.artifact-id }}
+      artifact-digest:
+        description: Server artifact SHA-256 for the uploaded receipt
+        value: ${{ jobs.installed.outputs.artifact-digest }}
+      receipt-sha256:
+        description: SHA-256 of the completed installed qualification JSON
+        value: ${{ jobs.installed.outputs.receipt-sha256 }}
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  installed:
+    runs-on: ${{ inputs.os == 'macos-15' && 'macos-15' || inputs.os == 'macos-15-intel' && 'macos-15-intel' || inputs.os == 'ubuntu-24.04-arm' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      artifact-id: ${{ steps.outputs.outputs.artifact-id }}
+      artifact-digest: ${{ steps.outputs.outputs.artifact-digest }}
+      receipt-sha256: ${{ steps.receipt.outputs.receipt-sha256 }}
+    steps:
+      - name: Admit exact source target and artifact coordinates
+        id: admission
+        env:
+          SOURCE_SHA: ${{ inputs.source-sha }}
+          TARGET: ${{ inputs.target }}
+          RUNNER_LABEL: ${{ inputs.os }}
+          HOST_OS: ${{ runner.os }}
+          HOST_ARCH: ${{ runner.arch }}
+          ARCHIVE_ID: ${{ inputs.archive-id }}
+          BUNDLE_ID: ${{ inputs.bundle-id }}
+          RUN_ID: ${{ github.run_id }}
+          ARCHIVE_DIGEST: ${{ inputs.archive-digest }}
+          BUNDLE_DIGEST: ${{ inputs.bundle-digest }}
+          ARCHIVE_SHA256: ${{ inputs.archive-sha256 }}
+          MANIFEST_SHA256: ${{ inputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::NATIVE_INSTALLED_COORDINATE_INVALID"; exit 1; }
+          if ! [[ ${#SOURCE_SHA} -eq 40 && "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]; then fail; fi
+          case "$TARGET:$RUNNER_LABEL:$HOST_OS:$HOST_ARCH" in
+            darwin-arm64:macos-15:macOS:ARM64|darwin-x64:macos-15-intel:macOS:X64|linux-arm64:ubuntu-24.04-arm:Linux:ARM64|linux-x64:ubuntu-24.04:Linux:X64) ;;
+            *) fail ;;
+          esac
+          for name in ARCHIVE_ID BUNDLE_ID RUN_ID; do
+            value="${!name}"
+            if ! [[ "$value" =~ ^[1-9][0-9]*$ && "$value" != *[!0-9]* && ${#value} -le 20 ]]; then fail; fi
+          done
+          if [[ "$ARCHIVE_ID" == "$BUNDLE_ID" ]]; then fail; fi
+          for name in ARCHIVE_DIGEST BUNDLE_DIGEST ARCHIVE_SHA256 MANIFEST_SHA256; do
+            value="${!name}"
+            if ! [[ ${#value} -eq 64 && "$value" =~ ^[a-f0-9]{64}$ ]]; then fail; fi
+          done
+
+      - name: Check out the admitted source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-sha }}
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+      - name: Install pinned Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+      - name: Verify exact source and native host
+        env:
+          SOURCE_SHA: ${{ inputs.source-sha }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          trap 'echo "::error::NATIVE_INSTALLED_SOURCE_INVALID"' ERR
+          test "$(git rev-parse --verify 'HEAD^{commit}')" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          test "$(cat .bun-version)" = "1.3.14"
+          bun --no-env-file --no-install -e '
+            if (Bun.version !== "1.3.14" || `${process.platform}-${process.arch}` !== process.env.TARGET) {
+              console.error("::error::NATIVE_INSTALLED_HOST_INVALID"); process.exit(1);
+            }
+          '
+      - name: Create private installed qualification directories
+        id: paths
+        run: |
+          set -euo pipefail
+          umask 077
+          trap 'echo "::error::NATIVE_INSTALLED_DIRECTORIES_FAILED"' ERR
+          work="$(mktemp -d "$RUNNER_TEMP/native-process-installed-target.XXXXXX")"
+          work="$(cd "$work" && pwd -P)"
+          mkdir "$work/temporary" "$work/bun-cache"
+          printf 'work=%s\narchive=%s/archive\nbundle=%s/bundle\ninstalled=%s/installed\n' \
+            "$work" "$work" "$work" "$work" >> "$GITHUB_OUTPUT"
+          printf 'TMPDIR=%s/temporary\nBUN_INSTALL_CACHE_DIR=%s/bun-cache\n' "$work" "$work" >> "$GITHUB_ENV"
+      - name: Install frozen JavaScript dependencies without lifecycle scripts
+        timeout-minutes: 10
+        env:
+          WORK: ${{ steps.paths.outputs.work }}
+        run: |
+          set -euo pipefail
+          if ! bun install --frozen-lockfile --ignore-scripts > "$WORK/dependencies.log" 2>&1; then
+            echo "::error::NATIVE_INSTALLED_DEPENDENCIES_FAILED"; exit 1
+          fi
+          if ! git diff --quiet --exit-code -- package.json bun.lock; then
+            echo "::error::NATIVE_INSTALLED_DEPENDENCIES_CHANGED"; exit 1
+          fi
+      - name: Read back exact server artifact identities
+        id: server
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source-sha }}
+          RUN_ID: ${{ github.run_id }}
+          ARCHIVE_ID: ${{ inputs.archive-id }}
+          ARCHIVE_DIGEST: ${{ inputs.archive-digest }}
+          BUNDLE_ID: ${{ inputs.bundle-id }}
+          BUNDLE_DIGEST: ${{ inputs.bundle-digest }}
+        run: |
+          bun --no-env-file --no-install - <<'BUN'
+          import { z } from "zod";
+          import { readBoundedJsonResponse } from "./scripts/bounded-json-response.ts";
+          // Get-an-artifact returns the server digest and producing workflow.
+          // This is identity readback; download-artifact does not hard-fail a
+          // recomputed ZIP mismatch. The installed gate separately hashes the tgz.
+          try {
+            const integer = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+            const schema = z.object({ id: integer, digest: z.string(), expired: z.literal(false),
+              workflow_run: z.object({ id: integer, repository_id: z.literal(1343008607),
+                head_repository_id: z.literal(1343008607), head_sha: z.string() }) });
+            const token = process.env.GITHUB_TOKEN;
+            if (typeof token !== "string" || token.length < 1 || token.length > 8192) throw Error();
+            for (const [id, digest] of [[process.env.ARCHIVE_ID, process.env.ARCHIVE_DIGEST], [process.env.BUNDLE_ID, process.env.BUNDLE_DIGEST]]) {
+              const response = await fetch(`https://api.github.com/repos/hraness/oompa/actions/artifacts/${id}`, {
+                headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`,
+                  "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "oompa-native-installed-artifact-readback" },
+                redirect: "error", cache: "no-store", signal: AbortSignal.timeout(15000),
+              });
+              if (response.status !== 200) throw Error();
+              const value = schema.parse(await readBoundedJsonResponse(response, "native artifact identity", 128 * 1024));
+              if (String(value.id) !== id || value.digest !== `sha256:${digest}`
+                || String(value.workflow_run.id) !== process.env.RUN_ID || value.workflow_run.head_sha !== process.env.SOURCE_SHA) throw Error();
+            }
+          } catch {
+            console.error("::error::NATIVE_INSTALLED_SERVER_ARTIFACT_INVALID"); process.exitCode = 1;
+          }
+          BUN
+      - name: Download only the canonical archive artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ inputs.archive-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.archive }}
+      - name: Download only this target qualification bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ inputs.bundle-id }}
+          merge-multiple: true
+          path: ${{ steps.paths.outputs.bundle }}
+      - name: Prepare only the exact locked installer dependency
+        timeout-minutes: 2
+        env:
+          WORK: ${{ steps.paths.outputs.work }}
+        run: |
+          set -euo pipefail
+          if ! bun --no-env-file --no-install scripts/native-process-dependency.ts "$WORK/dependency" > "$WORK/dependency.log" 2>&1; then
+            echo "::error::NATIVE_INSTALLED_DEPENDENCY_FAILED"; exit 1
+          fi
+      - name: Repeat qualification against the exact installed archive
+        timeout-minutes: 15
+        env:
+          WORK: ${{ steps.paths.outputs.work }}
+          ARCHIVE: ${{ steps.paths.outputs.archive }}
+          BUNDLE: ${{ steps.paths.outputs.bundle }}
+          INSTALLED: ${{ steps.paths.outputs.installed }}
+          ARCHIVE_SHA256: ${{ inputs.archive-sha256 }}
+          MANIFEST_SHA256: ${{ inputs.manifest-sha256 }}
+        run: |
+          set -euo pipefail
+          if ! bun --no-env-file --no-install scripts/native-process-installed.ts \
+            "$ARCHIVE/hraness-native-process-0.1.0.tgz" "$ARCHIVE_SHA256" "$MANIFEST_SHA256" \
+            "$BUNDLE" "$WORK/dependency/zod-4.4.3.tgz" "$INSTALLED" > "$WORK/installed.log" 2>&1; then
+            echo "::error::NATIVE_INSTALLED_QUALIFICATION_FAILED"; exit 1
+          fi
+      - name: Admit only the completed installed receipt
+        id: receipt
+        env:
+          SOURCE_SHA: ${{ inputs.source-sha }}
+          TARGET: ${{ inputs.target }}
+          ARCHIVE_SHA256: ${{ inputs.archive-sha256 }}
+          MANIFEST_SHA256: ${{ inputs.manifest-sha256 }}
+          INSTALLED: ${{ steps.paths.outputs.installed }}
+        run: |
+          bun --no-env-file --no-install - <<'BUN'
+          import { appendFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { nativeBuildInput, nativeInputHash } from "./scripts/native-process-build-inputs.ts";
+          import { nativeInstalledReceiptSchema } from "./scripts/native-process-installed-model.ts";
+          try {
+            const bytes = nativeBuildInput(join(process.env.INSTALLED, "installed-qualification.json"), 256 * 1024);
+            const receipt = nativeInstalledReceiptSchema.parse(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+            if (receipt.source.commitSha !== process.env.SOURCE_SHA || receipt.target !== process.env.TARGET
+              || receipt.archiveSha256 !== process.env.ARCHIVE_SHA256 || receipt.manifestSha256 !== process.env.MANIFEST_SHA256) throw Error();
+            appendFileSync(process.env.GITHUB_OUTPUT, `receipt-sha256=${nativeInputHash(bytes)}\n`);
+          } catch {
+            console.error("::error::NATIVE_INSTALLED_RECEIPT_INVALID"); process.exitCode = 1;
+          }
+          BUN
+      - name: Retain only the completed installed receipt
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-process-installed-${{ inputs.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.paths.outputs.installed }}/installed-qualification.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          include-hidden-files: false
+          overwrite: false
+      - name: Export exact installed artifact identity
+        id: outputs
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ && "$ARTIFACT_ID" != *[!0-9]* && ${#ARTIFACT_ID} -le 20 ]] \
+            || ! [[ ${#ARTIFACT_DIGEST} -eq 64 && "$ARTIFACT_DIGEST" =~ ^[a-f0-9]{64}$ ]]; then
+            echo "::error::NATIVE_INSTALLED_UPLOAD_IDENTITY_INVALID"; exit 1
+          fi
+          printf 'artifact-id=%s\nartifact-digest=%s\n' "$ARTIFACT_ID" "$ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"

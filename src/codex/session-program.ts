@@ -63,6 +63,7 @@ export interface ShutdownOperations {
   readonly terminate: Effect.Effect<void, CodexTaskFailure>;
   readonly forceTerminate: Effect.Effect<void, CodexTaskFailure>;
   readonly exited: Effect.Effect<unknown, CodexTaskFailure>;
+  readonly custody: Effect.Effect<unknown, CodexTaskFailure>;
   readonly readSettled: Effect.Effect<unknown, CodexTaskFailure>;
   readonly diagnostic: (message: string) => Effect.Effect<void>;
   readonly termGraceMs: number;
@@ -79,6 +80,7 @@ function settlesBefore(program: Effect.Effect<unknown, CodexTaskFailure>, timeou
 
 export interface ShutdownReport {
   readonly exitSettled: boolean;
+  readonly custodySettled: boolean;
   readonly readSettled: boolean;
   readonly factsSettled: boolean;
   readonly writesSettled: boolean;
@@ -93,7 +95,7 @@ export function settleConnection(operations: ShutdownOperations): Effect.Effect<
   return Effect.gen(function* () {
     const work = yield* CodexConnectionWork;
     const terminated = yield* operations.terminate.pipe(
-      Effect.flatMap(() => settlesBefore(operations.exited, operations.termGraceMs, true)),
+      Effect.flatMap(() => settlesBefore(operations.custody, operations.termGraceMs, true)),
       Effect.catchAllCause(() => Effect.as(operations.diagnostic("Codex TERM failed; forcing process termination"), false)),
     );
     if (!terminated) {
@@ -101,6 +103,7 @@ export function settleConnection(operations: ShutdownOperations): Effect.Effect<
     }
     return yield* Effect.all({
       exitSettled: settlesBefore(operations.exited, operations.settlementMs, true),
+      custodySettled: settlesBefore(operations.custody, operations.settlementMs, true),
       readSettled: settlesBefore(operations.readSettled, operations.settlementMs),
       factsSettled: settlesBefore(FiberSet.awaitEmpty(work.groups.facts), operations.settlementMs),
       writesSettled: settlesBefore(FiberSet.awaitEmpty(work.groups.writes), operations.settlementMs),

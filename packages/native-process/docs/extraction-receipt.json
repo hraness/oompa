@@ -1,0 +1,219 @@
+{
+  "formatVersion": 1,
+  "purpose": "Development extraction receipt; not published artifact provenance",
+  "nativeSource": "../../native/process-kernel",
+  "records": [
+    {
+      "origin": "src/native-process/protocol.ts",
+      "path": "src/protocol.ts",
+      "originSha256": "9aba914dc7ca5b57bad9e5571531cfe45de44ce0656bed5cc134946f6cb6b1e2",
+      "sha256": "0d22bc43a26978500b26679c099283c42af5bb75274406edb9a04e13c521afe8",
+      "transformation": "package-local identity import only"
+    },
+    {
+      "origin": "src/native-process/byte-queue.ts",
+      "path": "src/byte-queue.ts",
+      "originSha256": "bebe236c061a6ac2e1efba84104b1e86419d937f429d9adfa938feb8f54ea6ca",
+      "sha256": "bebe236c061a6ac2e1efba84104b1e86419d937f429d9adfa938feb8f54ea6ca",
+      "transformation": "none"
+    },
+    {
+      "origin": "src/native-process/transport.ts",
+      "path": "src/transport.ts",
+      "originSha256": "cad9c2036b811d1259a58af3fd82f2be61ee1e584dd6254381bf25baaa1f2e66",
+      "sha256": "b764c9f473cb5222e327030d814fce237ea76ec68b1aaec2c61c1a63809ab041",
+      "transformation": "package-local identity import only"
+    },
+    {
+      "origin": "src/native-process/observation-protocol.ts",
+      "path": "src/observation-protocol.ts",
+      "originSha256": "5a9ef54ff7946b21ab77cf379cc1b482dbbb26786bfb89132253e358f370c60e",
+      "sha256": "1ca743b54f4331be81a28f58ffe45061c8872f01673eebb1c7c8a54b6cb449ea",
+      "transformation": "package-local identity import only"
+    },
+    {
+      "origin": "src/native-process/observer.ts",
+      "path": "src/observer.ts",
+      "originSha256": "2e9421141b5d3026faa2f3785441011d6e9846d8f723f33c0d08852285b8bf22",
+      "sha256": "2e9421141b5d3026faa2f3785441011d6e9846d8f723f33c0d08852285b8bf22",
+      "transformation": "none"
+    },
+    {
+      "origin": "src/domain/native-process-identity.ts",
+      "path": "src/identity.ts",
+      "originSha256": "72c2a53add09a4ae8d25ab99efcd518a2c895f1de4a3ceb28e6a2070d41332a9",
+      "sha256": "72c2a53add09a4ae8d25ab99efcd518a2c895f1de4a3ceb28e6a2070d41332a9",
+      "transformation": "none"
+    },
+    {
+      "origin": "src/native-process/protocol.test.ts",
+      "path": "src/protocol.test.ts",
+      "originSha256": "25a66f40b390693d7a5404478e879b9f071d8d5e9425f1ad432dba4d0e6b646d",
+      "sha256": "25a66f40b390693d7a5404478e879b9f071d8d5e9425f1ad432dba4d0e6b646d",
+      "transformation": "none"
+    },
+    {
+      "origin": "src/native-process/byte-queue.test.ts",
+      "path": "src/byte-queue.test.ts",
+      "originSha256": "8b11898f9f01cb896af28be5aeab7b49899758b61129b101d62c0e63a55d3790",
+      "sha256": "8b11898f9f01cb896af28be5aeab7b49899758b61129b101d62c0e63a55d3790",
+      "transformation": "none"
+    },
+    {
+      "origin": "src/native-process/transport.test.ts",
+      "path": "src/transport.test.ts",
+      "originSha256": "2bc3323c0fd524146a82492a5e54aebf2c55e8f13f4e44b3dc3e84b7896d4226",
+      "sha256": "2bc3323c0fd524146a82492a5e54aebf2c55e8f13f4e44b3dc3e84b7896d4226",
+      "transformation": "none"
+    },
+    {
+      "origin": "src/native-process/observation-protocol.test.ts",
+      "path": "src/observation-protocol.test.ts",
+      "originSha256": "973d89edd1f9e6ad106dfff23e1287fbc7a8a2ec1b2cda784944a761268d51c6",
+      "sha256": "ccedfe28adb77c5fe2ba9b187ce5f78fa8e597c1942fff88e2aeee7c29c9c178",
+      "transformation": "package-local identity import only"
+    },
+    {
+      "origin": "src/native-process/observer.test.ts",
+      "path": "src/observer.test.ts",
+      "originSha256": "9896ce526f0b8e177cc96043afb35e29cd135eca117ee3902a7f6cb83f2aadc0",
+      "sha256": "9896ce526f0b8e177cc96043afb35e29cd135eca117ee3902a7f6cb83f2aadc0",
+      "transformation": "none"
+    },
+    {
+      "origin": "agentrouter/packages/agentrouter/src/process-port.ts",
+      "path": "src/process-port.ts",
+      "originSha256": "bea4d0987e9b44a5f9e7f4968998a2c2cbb28664e02cfb3cc5e6e8be8c07ce25",
+      "sha256": "373c8d9c4a2e8935e84b163a4d1b9ce07e002e2ccdf1d09d792954178f955125",
+      "transformation": "version-1 comparison enforced by snapshot validator; redundant typed version equality removed with root agreement; comment documents validated inputs"
+    }
+  ],
+  "sourceBases": {
+    "oompa": {
+      "head": "ebf3cab73a2b05a0270b6052eabd410992dddbd1",
+      "worktree": "uncommitted task candidate; file hashes, not HEAD, identify extracted code"
+    },
+    "agentrouter": {
+      "head": "a878d72d37ed86fd0cb3a3b78924a1221ce0135a",
+      "worktree": "uncommitted task candidate; file hashes, not HEAD, identify extracted code"
+    }
+  },
+  "runtime": {
+    "bun": "1.3.14",
+    "bunRevision": "0d9b296a",
+    "zod": "4.4.3",
+    "typescript": "5.9.2",
+    "rootBunLockSha256": "687b76edef19cace3eb9cfc6bd99a5b922cd2a4b39ce26e40ebb84b0a3b06d83"
+  },
+  "validation": [
+    {
+      "status": "passed",
+      "receipt": "bfa3b2",
+      "command": "/Users/bg/.bun/bin/bun --no-env-file --no-install test packages/native-process/src/protocol.test.ts packages/native-process/src/byte-queue.test.ts packages/native-process/src/observation-protocol.test.ts packages/native-process/src/identity.test.ts packages/native-process/src/process-port.test.ts --isolate --max-concurrency=1",
+      "tests": 27,
+      "assertions": 2902
+    },
+    {
+      "status": "passed",
+      "receipt": "adde40",
+      "command": "/Users/bg/.bun/bin/bun --no-env-file --no-install node_modules/typescript/bin/tsc --noEmit -p packages/native-process/tsconfig.json"
+    },
+    {
+      "status": "passed",
+      "receipt": "028dd6",
+      "command": "/Users/bg/.bun/bin/bun --no-env-file --no-install node_modules/eslint/bin/eslint.js packages/native-process/src"
+    },
+    {
+      "status": "pending-root-owned-scheduler-gate",
+      "command": "/Users/bg/.bun/bin/oompa-host-run --mode=heavy --lane=compute --label=oompa-native-package-modeled -- /Users/bg/.bun/bin/bun --no-env-file --no-install test packages/native-process/src/transport.test.ts packages/native-process/src/observer.test.ts --isolate --max-concurrency=1",
+      "note": "Mocked children only; not run while scheduler shell-transport clarification is pending. No native OS qualification implied."
+    }
+  ],
+  "packageInventoryExcludingReceipt": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "10783fdf8963b6a31718361c0e762b2217996971d43dd4a1bdb26b8a705e0452"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "2875a979247548431aa55a481c8cf68b12d437cf8cbca76be6d68f787678ecaa"
+    },
+    {
+      "path": "README.md",
+      "sha256": "8dc11f8ff2ab5bdee78a4e8e09e870adbf046bfd0966ae67969c9d286839591a"
+    },
+    {
+      "path": "docs/release-design.md",
+      "sha256": "02b12a0b2e6ccfb481991c99e912899be8e6d48dcc4a812f0c8f8b74a6038393"
+    },
+    {
+      "path": "package.json",
+      "sha256": "e705c7b750beb75305fcb03cd510a18829110ee49bad5a1ed35e2ad42eae38d2"
+    },
+    {
+      "path": "src/byte-queue.test.ts",
+      "sha256": "8b11898f9f01cb896af28be5aeab7b49899758b61129b101d62c0e63a55d3790"
+    },
+    {
+      "path": "src/byte-queue.ts",
+      "sha256": "bebe236c061a6ac2e1efba84104b1e86419d937f429d9adfa938feb8f54ea6ca"
+    },
+    {
+      "path": "src/identity.test.ts",
+      "sha256": "edb05d11825dbacff0f96f0306574fc9ad9a66e0fd8b20d762d840610cd00dc7"
+    },
+    {
+      "path": "src/identity.ts",
+      "sha256": "72c2a53add09a4ae8d25ab99efcd518a2c895f1de4a3ceb28e6a2070d41332a9"
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "b5151db945a762f131ac8776fa37d1abcbaada0e44534b0b0a093835a1425f13"
+    },
+    {
+      "path": "src/observation-protocol.test.ts",
+      "sha256": "ccedfe28adb77c5fe2ba9b187ce5f78fa8e597c1942fff88e2aeee7c29c9c178"
+    },
+    {
+      "path": "src/observation-protocol.ts",
+      "sha256": "1ca743b54f4331be81a28f58ffe45061c8872f01673eebb1c7c8a54b6cb449ea"
+    },
+    {
+      "path": "src/observer.test.ts",
+      "sha256": "9896ce526f0b8e177cc96043afb35e29cd135eca117ee3902a7f6cb83f2aadc0"
+    },
+    {
+      "path": "src/observer.ts",
+      "sha256": "2e9421141b5d3026faa2f3785441011d6e9846d8f723f33c0d08852285b8bf22"
+    },
+    {
+      "path": "src/process-port.test.ts",
+      "sha256": "e2170b8af9b01a9dc1beef3e51247a089fbc5e8ce13d50fe6aa73e88cab3ff0f"
+    },
+    {
+      "path": "src/process-port.ts",
+      "sha256": "373c8d9c4a2e8935e84b163a4d1b9ce07e002e2ccdf1d09d792954178f955125"
+    },
+    {
+      "path": "src/protocol.test.ts",
+      "sha256": "25a66f40b390693d7a5404478e879b9f071d8d5e9425f1ad432dba4d0e6b646d"
+    },
+    {
+      "path": "src/protocol.ts",
+      "sha256": "0d22bc43a26978500b26679c099283c42af5bb75274406edb9a04e13c521afe8"
+    },
+    {
+      "path": "src/transport.test.ts",
+      "sha256": "2bc3323c0fd524146a82492a5e54aebf2c55e8f13f4e44b3dc3e84b7896d4226"
+    },
+    {
+      "path": "src/transport.ts",
+      "sha256": "b764c9f473cb5222e327030d814fce237ea76ec68b1aaec2c61c1a63809ab041"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "e11906d6bda9c455aec9577186d4316afb6f1591cb9bc92e39621cdcd1d70221"
+    }
+  ],
+  "packageInventorySha256": "cf61a42d58b0d301ad03c96e05f6dd71b29be61db6511f38b1cb0d4598d8e7e5"
+}

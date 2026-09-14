@@ -314,6 +314,27 @@ describe("pinned Codex runtime", () => {
     expect(child.signals).toEqual(["SIGTERM"]);
   });
 
+  test("failed construction waits for native custody after root exit and accepts an asynchronous factory", async () => {
+    const packageJsonPath = await fakePackage("0.153.2");
+    const child = new TrackedProcess();
+    let release!: () => void;
+    const joined = new Promise<void>(resolve => { release = resolve; });
+    const force = child.forceTerminate.bind(child);
+    const nativeChild: CodexProcess = Object.assign(child, {
+      joinCustody: () => joined,
+      forceTerminate: () => { force(); release(); },
+    });
+    const error = await launchPinnedCodexAppServer({
+      packageJsonPath, bunExecutable: process.execPath, processFactory: async () => nativeChild,
+      authority: codexAuthority(0), credentialStorePreflight: CREDENTIAL_STORE_PREFLIGHT,
+      expectedCodexHome: "/tmp/hra-control-plane/profile-a/codex-home", isAuthorityCurrent: () => true,
+      shutdownTermGraceMs: 1, shutdownSettlementMs: 20,
+    }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "INVALID_INPUT" });
+    expect(child.exitedSettled).toBe(true);
+    expect(child.signals).toEqual(["SIGTERM", "SIGKILL"]);
+  });
+
   test("preserves initialization failure when TERM cleanup also fails", async () => {
     const packageJsonPath = await fakePackage("0.153.2");
     const codexHome = "/tmp/hra-control-plane/profile-a/codex-home";

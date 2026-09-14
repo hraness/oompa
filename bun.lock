@@ -18,6 +18,7 @@
         "@eslint/js": "9.34.0",
         "@hraness/design-kit": "github:hraness/design-kit#v0.6.4",
         "@hraness/direct": "github:hraness/direct#v0.7.0",
+        "@hraness/native-process": "workspace:*",
         "@hraness/posthog": "github:hraness/posthog#v0.1.2",
         "@hraness/site-footer": "github:hraness/site-footer#v0.6.3",
         "@hraness/ui": "github:hraness/ui#v0.5.13",
@@ -45,6 +46,18 @@
         "typescript": "5.9.2",
         "typescript-eslint": "8.67.0",
         "vite": "7.3.6",
+      },
+    },
+    "packages/native-process": {
+      "name": "@hraness/native-process",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.3.14",
+        "fast-check": "4.3.0",
+        "typescript": "5.9.2",
       },
     },
   },
@@ -174,6 +187,8 @@
     "@hraness/design-kit": ["@hraness/design-kit@github:hraness/design-kit#65f6f1b", { "dependencies": { "@hugeicons/core-free-icons": "^4.2.2", "@stylexjs/stylex": "0.19.0", "motion": "12.42.0", "next-themes": "0.4.6", "react-aria-components": "1.19.0", "recharts": "3.8.0", "sugar-high": "^1.2.1", "web-haptics": "0.0.6" }, "peerDependencies": { "@hraness/ui": ">=0.5.12 <0.6.0", "react": ">=18 <20", "react-dom": ">=18 <20" }, "optionalPeers": ["@hraness/ui"] }, "hraness-design-kit-65f6f1b", "sha512-Cp4UvKaxlsYXpaTZWSRHOnw2OLgkHQe9O7GQVw1LyHLYqFRvM0upsJDv795jbtB5gKp3bC/9RPQhkNF+k9Gu7w=="],
 
     "@hraness/direct": ["@hraness/direct@github:hraness/direct#849f341", { "peerDependencies": { "agent-browser": "0.32.3", "react": ">=18 <20" }, "optionalPeers": ["agent-browser", "react"] }, "hraness-direct-849f341", "sha512-cvWcokL4EY871qpDMjaZm85pSMD3OjwmTAcN/xUgzeXDPeAt0S7+3gP0X/77MUA1hma5SoHiNJlKdnEXL3PVew=="],
+
+    "@hraness/native-process": ["@hraness/native-process@workspace:packages/native-process"],
 
     "@hraness/oh": ["@hraness/oh@0.4.1", "", { "peerDependencies": { "@libsql/client": ">=0.17.4 <1", "@suss/datalog": "0.20.0", "@tobilu/qmd": "2.5.3" }, "optionalPeers": ["@libsql/client", "@suss/datalog", "@tobilu/qmd"], "bin": { "oh": "dist/cli.js" } }, "sha512-J4JMsGvd2wwacwLn2NT98ZmgBQ/8diaMkxSSBh3oUkOyeBa5V91BIbgfEev2jNDzw1DEAls330q1p1jEZQLrvQ=="],
 

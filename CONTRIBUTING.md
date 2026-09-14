@@ -59,6 +59,12 @@ Those tests preserve expanded command multiplicity, remainder ordering, pinned
 whole-file source coverage, and failure propagation; both operating-system
 matrices and the separate browser job must pass.
 
+The ordered remainder includes the shared native-process package's TypeScript
+contracts, modeled transport and installed-artifact admission tests. Root
+typechecking includes that package and its native transport verifier. These
+checks do not execute the Rust fault suite or qualify a platform; exact native
+release bytes and the finished archive have separate qualification gates.
+
 Changes to workflows, test discovery, commands, deadlines, or platform coverage
 need independent comparison against the prior required coverage. Modified
 equivalence assertions alone cannot certify a reduction.

@@ -4,6 +4,9 @@ export interface CodexProcess {
   readonly stdout: AsyncIterable<Uint8Array>;
   readonly stderr: AsyncIterable<Uint8Array>;
   readonly exited: Promise<number>;
+  /** Native providers prove the whole scope closed and its durable writer
+   * barrier released. Legacy injected processes expose only root exit. */
+  joinCustody?(): Promise<void>;
   write(bytes: Uint8Array): Promise<void>;
   terminate(): void;
   forceTerminate(): void;

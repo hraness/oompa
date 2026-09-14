@@ -1,0 +1,84 @@
+{
+  "formatVersion": 1,
+  "purpose": "Source and synthetic-filesystem qualification only; not a published artifact or native platform qualification",
+  "sourceBase": "ebf3cab73a2b05a0270b6052eabd410992dddbd1",
+  "sourceState": "uncommitted task candidate; the inventory identifies exact checked source",
+  "inventory": [
+    {
+      "path": "src/artifact-model.ts",
+      "sha256": "23fdd570e270dd44c1ec2127619ba964d3151cb6359415c6ab5334e8e032f906"
+    },
+    {
+      "path": "src/artifact-resolver.ts",
+      "sha256": "b58f3fd5cef608b5e3a56e2335fca1ce55548a272ce2d15b6cf0f26ff0319a2c"
+    },
+    {
+      "path": "src/artifact-model.test.ts",
+      "sha256": "fe9b771d26b0627d8389c5ae7248aa3800744891ae79d2a0c415db4c332433ee"
+    },
+    {
+      "path": "src/artifact-resolver.test.ts",
+      "sha256": "13ab6d3a22dae626d6fd289f6b1c314375ef56c24652f81b6134b206ea5d1f09"
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "547dfa20d4183ad35f954d8242f6f6a7ba1f8da4d6bce2340bb08ef02d4ba3e7"
+    },
+    {
+      "path": "package.json",
+      "sha256": "05e188633a760d5030abdb9a80a7b5a5574cd809074ab2e8af34967bce2ec9be"
+    },
+    {
+      "path": "README.md",
+      "sha256": "07c05105e4b9625beb8bab2554979492278ead1004008c21cd55b51fb0f5c590"
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "79ba36012069cf4e3c28f74fce3efc41a48fa9700abc4fae4c84947f7d67cfa0"
+    },
+    {
+      "path": "docs/release-design.md",
+      "sha256": "279996c4f19bf4f76d96f6b5cb645bb1dd0072799a9fbba4c399bac5d7121b44"
+    }
+  ],
+  "inventorySha256": "0b6ae94132450fe88728a652fa26a99baed22d1ec68cc48819189da23f7340fd",
+  "environment": {
+    "bun": "1.3.14",
+    "bunRevision": "0d9b296a",
+    "typescript": "5.9.2",
+    "rootBunLockSha256": "687b76edef19cace3eb9cfc6bd99a5b922cd2a4b39ce26e40ebb84b0a3b06d83"
+  },
+  "checks": [
+    {
+      "receipt": "054eec",
+      "command": "/Users/bg/.bun/bin/bun --no-env-file --no-install test packages/native-process/src/artifact-model.test.ts packages/native-process/src/artifact-resolver.test.ts --isolate --max-concurrency=1",
+      "status": "passed",
+      "tests": 31,
+      "assertions": 726,
+      "durationMs": 309
+    },
+    {
+      "receipt": "738b07",
+      "command": "/Users/bg/.bun/bin/bun --no-env-file --no-install node_modules/typescript/bin/tsc --noEmit -p packages/native-process/tsconfig.json",
+      "status": "passed"
+    },
+    {
+      "receipt": "7c542e",
+      "command": "/Users/bg/.bun/bin/bun --no-env-file --no-install node_modules/eslint/bin/eslint.js packages/native-process/src/artifact-model.ts packages/native-process/src/artifact-resolver.ts packages/native-process/src/artifact-model.test.ts packages/native-process/src/artifact-resolver.test.ts",
+      "status": "passed"
+    },
+    {
+      "receipt": "9add34",
+      "check": "all package files whitespace/conflict-marker and runtime import-boundary scan",
+      "status": "passed"
+    }
+  ],
+  "limitations": [
+    "Tests use synthetic executable bytes; none were executed.",
+    "No native compilation, install, release, publication or provider operation ran.",
+    "Real archive provenance and target qualification are release-builder prerequisites.",
+    "Modeled transport/observer scheduler gate remains root-owned and pending.",
+    "Cooperative same-UID immutable image retention, not hostile same-UID isolation.",
+    "Root manifest/workspace/native release-profile edits were not owned or validated by this receipt."
+  ]
+}

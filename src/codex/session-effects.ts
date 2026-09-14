@@ -158,6 +158,7 @@ export class CodexConnectionEffects {
       terminate: callback(() => { process.terminate(); }),
       forceTerminate: callback(() => { process.forceTerminate(); }),
       exited: callback(() => process.exited),
+      custody: callback<unknown>(() => process.joinCustody === undefined ? process.exited : process.joinCustody()),
       readSettled: callback(() => readTask ?? undefined),
       diagnostic: message => Effect.sync(() => { options.diagnostic(message); }),
       termGraceMs: options.termGraceMs,

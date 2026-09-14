@@ -1,0 +1,47 @@
+{
+  "name": "@hraness/native-process",
+  "version": "0.1.0",
+  "description": "Bounded native process transport and observation contracts for Bun hosts with explicit artifact admission and durable custody.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./identity": "./src/identity.ts",
+    "./protocol": "./src/protocol.ts",
+    "./byte-queue": "./src/byte-queue.ts",
+    "./transport": "./src/transport.ts",
+    "./observation-protocol": "./src/observation-protocol.ts",
+    "./observer": "./src/observer.ts",
+    "./process-port": "./src/process-port.ts",
+    "./artifact-model": "./src/artifact-model.ts",
+    "./artifact-resolver": "./src/artifact-resolver.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts",
+    "!src/**/AGENTS.md",
+    "native-artifacts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test:pure": "bun test ./src/protocol.test.ts ./src/byte-queue.test.ts ./src/observation-protocol.test.ts ./src/identity.test.ts ./src/process-port.test.ts --isolate --max-concurrency=1",
+    "test:modeled-transport": "bun test ./src/transport.test.ts ./src/observer.test.ts --isolate --max-concurrency=1",
+    "test:artifacts": "bun test ./src/artifact-model.test.ts ./src/artifact-resolver.test.ts --isolate --max-concurrency=1",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "engines": { "bun": "1.3.14" },
+  "dependencies": { "zod": "4.4.3" },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "fast-check": "4.3.0",
+    "typescript": "5.9.2"
+  },
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hraness/oompa.git",
+    "directory": "packages/native-process"
+  },
+  "bugs": { "url": "https://github.com/hraness/oompa/issues" }
+}

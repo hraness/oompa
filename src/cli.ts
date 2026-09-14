@@ -4170,7 +4170,18 @@ async function runDaemonLifecycle(
     }
     if (store !== undefined) {
       if (generation !== undefined && bootId !== undefined) {
-        try { store.markDaemonStopped(generation, bootId); } catch (error: unknown) { cleanupErrors.push(error); }
+        const failedStoppedMarker = (reason: unknown): void => {
+          const error = reason instanceof Error ? reason : new Error("Daemon stopped marker failed.", { cause: reason });
+          if (runError === undefined) runError = error;
+          else cleanupErrors.push(error);
+        };
+        try {
+          if (!store.markDaemonStopped(generation, bootId)) failedStoppedMarker(new Error("Daemon authority changed before the stopped marker could commit."));
+        } catch (error: unknown) {
+          // A failed custody census or stale marker cannot publish a successful
+          // lock receipt, even when the provider's ordinary close returned.
+          failedStoppedMarker(error);
+        }
       }
       try { store.close(); } catch (error: unknown) { cleanupErrors.push(error); }
     }

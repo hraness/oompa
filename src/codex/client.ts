@@ -1290,6 +1290,7 @@ export class CodexAppServerClient {
 
     const {
       exitSettled,
+      custodySettled,
       readSettled,
       factsSettled,
       writesSettled,
@@ -1302,6 +1303,7 @@ export class CodexAppServerClient {
       diagnostic: this.#onSafeDiagnostic,
     });
     if (!exitSettled) this.#onSafeDiagnostic("Codex process exit did not settle after termination");
+    if (!custodySettled) this.#onSafeDiagnostic("Codex native process custody did not settle after termination");
     if (!readSettled) this.#onSafeDiagnostic("Codex stdout did not settle after termination");
     if (!factsSettled) this.#onSafeDiagnostic("Oompa fact delivery did not settle after Codex termination");
     if (!writesSettled) this.#onSafeDiagnostic("Codex writes did not settle after termination");
@@ -1314,10 +1316,10 @@ export class CodexAppServerClient {
     if (!responsesSettled) {
       this.#onSafeDiagnostic("Codex response settlement did not finish after termination");
     }
-    if (!exitSettled) {
+    if (!exitSettled || !custodySettled) {
       throw new CodexError(
         "PROCESS_EXITED",
-        "Codex process exit could not be proven after force termination",
+        "Codex process exit and custody could not be proven after force termination",
       );
     }
     await this.#effects.close();

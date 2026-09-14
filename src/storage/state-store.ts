@@ -7,13 +7,28 @@ import {
   lstatSync,
   openSync,
   realpathSync,
-  type Stats,
+  type BigIntStats,
 } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 import { Database, constants as sqliteConstants } from "bun:sqlite";
 import { z } from "zod";
 import { snapshotForeignJson } from "../domain/guards";
+import type { NativePrepared, NativeReady } from "../domain/native-process-identity";
+import { readDaemonRecoveryAuthority, providerProcessFileIdentitySchema, providerProcessPriorDaemonSchema,
+  type DaemonRecoveryAuthority,
+  type ProviderProcessFileIdentity, type ProviderProcessInvocation, type ProviderProcessReleaseProof,
+  type ProviderProcessReservation, type ProviderProcessRecoverySnapshot, type ProviderProcessRecoveryTransition,
+  type ProviderProcessLaunchContext, type ProviderProcessTransition } from "../domain/provider-process-custody";
+import {
+  applyProviderProcessCustody, assertProviderProcessCustodyAbsent, assertProviderProcessCustodySchema,
+  auditProviderProcessCustody, reserveProviderProcessInvocation, prepareProviderProcessInvocation,
+  markProviderProcessInvocationRunning, beginProviderProcessInvocationRelease, releaseProviderProcessInvocation,
+  readProviderProcessInvocation, listUnreleasedProviderProcessInvocations, type ListProviderProcessInvocations,
+  recoverUnpreparedProviderProcessInvocation, recoverObservedProviderProcessInvocation,
+  assertProviderProcessInvocationsReleased,
+  assertProviderProcessInvocationCurrent,
+} from "./provider-process-custody";
 import { assertCombined49AdoptionSchema } from "./combined49-adoption-schema";
 import {
   joinedMutationEffectEvidenceSchema,
@@ -4315,7 +4330,7 @@ type DesktopSwitchPlan =
 // policy, v47/v48 memory authority, and the v49 nullable Work project fence.
 // Private candidate only until the exact governed canonical50 join is proved.
 // Canonical1..50 precede the nine frozen usage units51..59 and joined bridge60.
-const currentSchemaVersion = 60;
+const currentSchemaVersion = 61;
 // A cloud device public id (`isOpaqueIdentifier` in src/cloud/contracts.ts).
 // The ledger keys on it, so the shape is pinned here rather than accepting an
 // arbitrary string from the cloud bridge.
@@ -4372,15 +4387,15 @@ const defaultMachineTimeZoneResolver: MachineTimeZoneResolver = () => {
   return timeZone;
 };
 
-type StateDatabaseFileIdentity = Readonly<{ device: number; inode: number }>;
+type StateDatabaseFileIdentity = Readonly<{ device: bigint; inode: bigint }>;
 
-const stateDatabaseFileIsSafe = (metadata: Stats): boolean => {
+const stateDatabaseFileIsSafe = (metadata: BigIntStats): boolean => {
   const owner = process.getuid?.();
   return metadata.isFile()
     && !metadata.isSymbolicLink()
-    && metadata.nlink === 1
-    && (metadata.mode & 0o777) === 0o600
-    && (owner === undefined || metadata.uid === owner);
+    && metadata.nlink === 1n
+    && (metadata.mode & 0o777n) === 0o600n
+    && (owner === undefined || metadata.uid === BigInt(owner));
 };
 
 const assertStateDatabaseFile = (
@@ -4388,7 +4403,7 @@ const assertStateDatabaseFile = (
   expected?: StateDatabaseFileIdentity,
 ): StateDatabaseFileIdentity => {
   try {
-    const metadata = lstatSync(path);
+    const metadata = lstatSync(path, { bigint: true });
     if (
       !stateDatabaseFileIsSafe(metadata)
       || realpathSync(path) !== resolve(path)
@@ -4432,7 +4447,7 @@ const prepareStateDatabaseFile = (
         | constants.O_NONBLOCK,
     );
     if (created) fchmodSync(descriptor, 0o600);
-    const opened = fstatSync(descriptor);
+    const opened = fstatSync(descriptor, { bigint: true });
     if (!stateDatabaseFileIsSafe(opened)) throw new Error("STATE_DATABASE_FILE_UNSAFE");
     const identity = { device: opened.dev, inode: opened.ino };
     assertStateDatabaseFile(path, identity);
@@ -19325,10 +19340,10 @@ const joinedProviderRootObjects = privateTask40RootObjects.filter((object) =>
   ![...JOINED_EVIDENCE_PREDECESSOR_GUARDS, ...PROVIDER_LOGIN_BINDING_PREDECESSOR_GUARDS]
     .some((guard) => guard.name === object.name));
 
-const assertJoinedStateSchema = (database: Database): void => {
+const assertJoinedStateSchema = (database: Database, finalVersion: 60 | 61 = 61): void => {
   assertSchemaCohortObjects(database, joinedQueueMessageScrubObjects, "joined60");
   assertSchemaMigrationLedgerTail(database,
-    Array.from({ length: 26 }, (_, index) => index + 35), "STATE_SCHEMA_JOIN_LEDGER_INVALID");
+    Array.from({ length: finalVersion - 34 }, (_, index) => index + 35), "STATE_SCHEMA_JOIN_LEDGER_INVALID");
   assertJoinedCanonicalObjects(database);
   assertSchemaCohortObjects(database, joinedProviderRootObjects, "joined60");
   assertEffectEvidenceProvenanceSchema(database);
@@ -19355,8 +19370,10 @@ const migrateWritableDatabase = (
     if (initialVersion > currentSchemaVersion) {
       throw new Error(`STATE_SCHEMA_NEWER:${initialVersion}:${currentSchemaVersion}`);
     }
-    if (initialVersion === currentSchemaVersion) {
-      assertJoinedStateSchema(database);
+    if (initialVersion === 60 || initialVersion === currentSchemaVersion) {
+      assertJoinedStateSchema(database, initialVersion === 60 ? 60 : 61);
+      if (initialVersion === 60) assertProviderProcessCustodyAbsent(database);
+      else assertProviderProcessCustodySchema(database);
       auditProviderLoginBindingTransitions(database);
       assertLegacyCanonicalProfileRows(database);
       auditEffectEvidenceProvenance(database);
@@ -19371,10 +19388,20 @@ const migrateWritableDatabase = (
       const excludedHistoricalSequences = readProvedMalformedSessionSwitchJournalSequences(database, "current");
       auditSessionSwitchExecutionContexts(database, { excludedMalformedJournalSequences: excludedHistoricalSequences });
       auditCurrentSessionSwitchJournals(database, excludedHistoricalSequences);
+      if (initialVersion === 60) {
+        // This successor only adds an empty custody table after the complete
+        // released v60 assertion. No predecessor row or proof is rewritten.
+        applyProviderProcessCustody(database);
+        database.query("INSERT INTO migrations(version,applied_at) VALUES(61,?)")
+          .run(unixMillisecondsSchema.parse(now()));
+        database.exec("PRAGMA user_version=61");
+      }
+      auditProviderProcessCustody(database);
       // Current schema is an assertion boundary, not permission to replay
       // historical installers, move a ledger or reconstruct missing proof.
       return hasPendingSecurityScrub(database);
     }
+    assertProviderProcessCustodyAbsent(database);
     const cohort = classifyStateSchemaCohort(database, initialVersion);
     if (database.query(`SELECT 1 FROM sqlite_master WHERE
       name GLOB '*effect_evidence_provenance*' OR name GLOB 'session_switch_execution_*'
@@ -20377,6 +20404,11 @@ const migrateWritableDatabase = (
     database.query("INSERT INTO migrations(version,applied_at) VALUES (?,?)")
       .run(60, unixMillisecondsSchema.parse(now()));
     database.exec("PRAGMA user_version=60");
+    assertJoinedStateSchema(database, 60);
+    applyProviderProcessCustody(database);
+    database.query("INSERT INTO migrations(version,applied_at) VALUES(61,?)")
+      .run(unixMillisecondsSchema.parse(now()));
+    database.exec("PRAGMA user_version=61");
     assertJoinedStateSchema(database);
     return hasPendingSecurityScrub(database);
   }).immediate();
@@ -23222,6 +23254,8 @@ export class UnusableProjectRootError extends Error {
 
 export class StateStore {
   readonly #database: Database;
+  readonly #databaseFile: StateDatabaseFileIdentity;
+  #closed = false;
   readonly #now: () => number;
   readonly #readonly: boolean;
   readonly #securityScrubCheckpoint: SecurityScrubCheckpointPolicy;
@@ -23250,6 +23284,7 @@ export class StateStore {
     this.#publicProviderIdentifierProjector = options.publicProviderIdentifierProjector
       ?? processLocalPublicProviderIdentifierProjector;
     const databaseFile = prepareStateDatabaseFile(paths.database, this.#readonly);
+    this.#databaseFile = databaseFile;
     const databaseOpenFlags = stateDatabaseOpenFlags(this.#readonly);
     options.beforeDatabaseOpen?.({ flags: databaseOpenFlags, path: paths.database });
     // Bun's object options do not expose SQLITE_OPEN_NOFOLLOW. Numeric flags are
@@ -23283,6 +23318,7 @@ export class StateStore {
       assertSchemaVersion40AdoptionObjects(this.#database, { useExactProviderProcessCustody: true });
       assertExactSchemaVersion40AdoptionSurface(this.#database);
       assertJoinedStateSchema(this.#database);
+      auditProviderProcessCustody(this.#database);
       // A readonly open skips the O(rows) foreign_key_check so `oompa status`
       // never pins a WAL snapshot long enough to block the writer's scrub.
       if (this.#readonly) assertReadonlyWorkSchema(this.#database);
@@ -23318,7 +23354,89 @@ export class StateStore {
   }
 
   close(): void {
+    this.#closed = true;
     this.#database.close(false);
+  }
+
+  nativeFileIdentity(): ProviderProcessFileIdentity {
+    if (this.#closed || this.#readonly) throw new Error("PROVIDER_PROCESS_CUSTODY_STALE");
+    const identity = assertStateDatabaseFile(this.paths.database, this.#databaseFile);
+    return providerProcessFileIdentitySchema.parse({ device: identity.device.toString(), inode: identity.inode.toString() });
+  }
+
+  providerProcessRecoverySnapshot(): ProviderProcessRecoverySnapshot {
+    const state = this.nativeFileIdentity();
+    const row = z.object({ generation: z.number().int().nonnegative().safe(), boot_id: z.string().nullable(),
+      stopped_at: unixMillisecondsSchema.nullable() }).strict().parse(this.#database.query(
+      "SELECT generation,boot_id,stopped_at FROM daemon_state WHERE singleton=1",
+    ).get());
+    return { state, previousDaemon: providerProcessPriorDaemonSchema.parse({
+      generation: row.generation, bootId: row.boot_id, stoppedAt: row.stopped_at,
+    }) };
+  }
+
+  assertProviderProcessRecoverySnapshot(expected: ProviderProcessRecoverySnapshot): void {
+    if (JSON.stringify(this.providerProcessRecoverySnapshot()) !== JSON.stringify(expected)) {
+      throw new Error("PROVIDER_PROCESS_CUSTODY_STALE");
+    }
+  }
+
+  recoverUnpreparedInvocation(authority: DaemonRecoveryAuthority,
+    input: ProviderProcessRecoveryTransition & { currentContext: ProviderProcessLaunchContext }): ProviderProcessInvocation {
+    return recoverUnpreparedProviderProcessInvocation(this.#database, input, this.#now(),
+      () => readDaemonRecoveryAuthority(authority, this));
+  }
+
+  recoverObservedInvocation(authority: DaemonRecoveryAuthority,
+    input: ProviderProcessRecoveryTransition & { proof: ProviderProcessReleaseProof }): ProviderProcessInvocation {
+    return recoverObservedProviderProcessInvocation(this.#database, input, this.#now(),
+      () => readDaemonRecoveryAuthority(authority, this));
+  }
+
+  assertAllProviderInvocationsReleasedBeforeGenerationAdvance(authority: DaemonRecoveryAuthority): void {
+    this.#database.transaction(() => {
+      readDaemonRecoveryAuthority(authority, this);
+      assertProviderProcessInvocationsReleased(this.#database);
+    }).immediate();
+  }
+
+  reserveProviderProcessInvocation(input: ProviderProcessReservation): ProviderProcessInvocation {
+    return reserveProviderProcessInvocation(this.#database, input, this.#now(), authority => {
+      this.assertProviderAccountAuthorityCurrent(authority);
+    });
+  }
+
+  prepareProviderProcessInvocation(input: ProviderProcessTransition & { prepared: NativePrepared }): ProviderProcessInvocation {
+    return prepareProviderProcessInvocation(this.#database, input, this.#now(), authority => {
+      this.assertProviderAccountAuthorityCurrent(authority);
+    });
+  }
+
+  markProviderProcessInvocationRunning(input: ProviderProcessTransition & { ready: NativeReady }): ProviderProcessInvocation {
+    return markProviderProcessInvocationRunning(this.#database, input, this.#now(), authority => {
+      this.assertProviderAccountAuthorityCurrent(authority);
+    });
+  }
+
+  assertProviderProcessInvocationCurrent(input: ProviderProcessTransition & { state: "prepared" | "running" }): void {
+    this.nativeFileIdentity();
+    assertProviderProcessInvocationCurrent(this.#database, input, authority => this.assertProviderAccountAuthorityCurrent(authority));
+  }
+
+  beginProviderProcessInvocationRelease(input: ProviderProcessTransition): ProviderProcessInvocation {
+    return beginProviderProcessInvocationRelease(this.#database, input, this.#now());
+  }
+
+  releaseProviderProcessInvocation(input: ProviderProcessTransition & { proof: ProviderProcessReleaseProof }): ProviderProcessInvocation {
+    return releaseProviderProcessInvocation(this.#database, input, this.#now());
+  }
+
+  readProviderProcessInvocation(nonce: string): ProviderProcessInvocation | null {
+    return readProviderProcessInvocation(this.#database, nonce);
+  }
+
+  listUnreleasedProviderProcessInvocations(input: ListProviderProcessInvocations = {}): readonly ProviderProcessInvocation[] {
+    return listUnreleasedProviderProcessInvocations(this.#database, input);
   }
 
   createWorkStore(
@@ -51346,6 +51464,7 @@ export class StateStore {
         if (current.stopped_at !== null) throw new Error("DAEMON_BOOT_ID_RETIRED");
         return current.generation;
       }
+      assertProviderProcessInvocationsReleased(this.#database);
       auditSessionSendOwners(this.#database);
       auditAttachmentCustody(this.#database, { kind: "source_selected" }, "acknowledged_v1");
       auditClaudeProcessCustody(this.#database);
@@ -52084,7 +52203,17 @@ export class StateStore {
   }
 
   markDaemonStopped(generation: number, bootId: string): boolean {
-    const result = this.#database.query("UPDATE daemon_state SET stopped_at=? WHERE singleton=1 AND generation=? AND boot_id=?").run(this.#now(), generation, bootId);
-    return result.changes === 1;
+    return this.#database.transaction(() => {
+      // A stale caller cannot publish a stop or turn another daemon's custody
+      // into its own cleanup failure. The matching owner must prove the native
+      // writer barrier empty in the same transaction as its stopped marker.
+      if (this.#database.query("SELECT 1 FROM daemon_state WHERE singleton=1 AND generation=? AND boot_id=?")
+        .get(generation, bootId) === null) return false;
+      this.nativeFileIdentity();
+      assertProviderProcessInvocationsReleased(this.#database);
+      const result = this.#database.query("UPDATE daemon_state SET stopped_at=? WHERE singleton=1 AND generation=? AND boot_id=?")
+        .run(this.#now(), generation, bootId);
+      return result.changes === 1;
+    }).immediate();
   }
 }
