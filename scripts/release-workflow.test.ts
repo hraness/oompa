@@ -74,8 +74,13 @@ function requireCiGateCoverage(scripts: Readonly<Record<string, unknown>>): void
   }
 }
 
-const sourceShardArguments = ["--shard=1/3", "--shard=2/3", "--shard=3/3"] as const;
-const shardFixtureNames = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"] as const;
+const sourceShardArguments = [
+  "--shard=1/6", "--shard=2/6", "--shard=3/6", "--shard=4/6", "--shard=5/6", "--shard=6/6",
+] as const;
+// Eight fixture files across six shards: some shards receive two files and
+// the rest one, so the contract proves whole-file partitioning rather than
+// one file per shard.
+const shardFixtureNames = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel"] as const;
 
 async function withShardFixture(run: (directory: string) => void): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), "oompa-ci-shard-contract-"));
@@ -132,7 +137,7 @@ describe("release workflow", () => {
       const shardCases = sourceShardArguments.map((shard) => {
         const result = runShardFixture(directory, shard, false);
         expect(result.exitCode).toBe(0);
-        expect(result.cases).toHaveLength(4);
+        expect([2, 4]).toContain(result.cases.length);
         for (const name of shardFixtureNames) {
           const cases = result.cases.filter((entry) => entry.startsWith(`CI_SHARD_CASE:${name}:`));
           expect(cases.length === 0 || cases.length === 2).toBeTrue();
@@ -141,6 +146,8 @@ describe("release workflow", () => {
       });
       expect(shardCases.flat().sort()).toEqual(expected);
       expect(new Set(shardCases.flat()).size).toBe(expected.length);
+      expect(shardCases.filter((cases) => cases.length === 4)).toHaveLength(2);
+      expect(shardCases.filter((cases) => cases.length === 2)).toHaveLength(4);
     });
   });
 
@@ -148,9 +155,10 @@ describe("release workflow", () => {
     await withShardFixture((directory) => {
       const result = runShardFixture(directory, shard, true);
       expect(result.exitCode).toBe(1);
-      expect(result.cases).toHaveLength(4);
-      expect(result.stderr).toContain("2 pass");
-      expect(result.stderr).toContain("2 fail");
+      expect([2, 4]).toContain(result.cases.length);
+      const files = result.cases.length / 2;
+      expect(result.stderr).toContain(`${files} pass`);
+      expect(result.stderr).toContain(`${files} fail`);
     });
   });
 
@@ -602,17 +610,19 @@ describe("release workflow", () => {
     expect(changelog).not.toContain("## v0.6.3 candidate (unreleased)");
     expect(changelog).toContain("docs/beta-release.md#immutable-v063-successful-release-record");
     expect(readme).toContain(installCommand);
-    expect(readme).toContain("Local CLI v0.8.0 is a release candidate");
-    expect(readme).not.toContain("Local CLI v0.8.0 is the fully admitted public artifact");
-    expect(readme).not.toContain("Install and verify the admitted v0.8.0 CLI artifact");
-    expect(readme).toContain("Only after immutable GitHub release admission, install and verify the v0.8.0 candidate CLI artifact. This does not start the daemon:");
-    expect(readme).toContain("The v0.8.0 candidate is not yet admitted");
-    expect(readme).toContain("https://github.com/hraness/oompa/tree/v0.7.1#get-started");
+    expect(readme).toContain("Local CLI v0.8.2 is a release candidate");
+    expect(readme).not.toContain("Local CLI v0.8.2 is the fully admitted public artifact");
+    expect(readme).not.toContain("Install and verify the admitted v0.8.2 CLI artifact");
+    expect(readme).toContain("Only after immutable GitHub release admission, install and verify the v0.8.2 candidate CLI artifact. This does not start the daemon:");
+    expect(readme).toContain("The v0.8.2 candidate is not yet admitted");
+    expect(readme).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
     expect(releaseNotes).toContain("## Admitted v0.7.0 predecessor");
     expect(releaseNotes).toContain("## Admitted v0.7.1 predecessor");
     for (const surface of [readme, releaseNotes, availability, gettingStarted]) {
       expect(surface).toContain("This release candidate is not yet admitted");
-      expect(surface).toContain("https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install");
+      expect(surface).toContain(surface === releaseNotes ? "#admitted-v081-canonical-artifact" : "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
+      expect(surface).toContain("v0.8.1");
+      expect(surface).toContain("npm mirror");
       expect(surface).toContain("install command");
       expect(surface).toContain("unavailable until");
       const noticePosition = surface.indexOf("This release candidate is not yet admitted");
@@ -622,35 +632,36 @@ describe("release workflow", () => {
       expect(noticePosition).toBeLessThan(installPosition);
     }
     for (const guide of [availability, gettingStarted]) {
-      expect(guide).not.toContain("v0.8.0 is released");
-      expect(guide).not.toContain("The v0.8.0 CLI passed immutable GitHub and npm artifact admission");
-      expect(guide).not.toContain("You can install and check v0.8.0 now");
+      expect(guide).not.toContain("v0.8.2 is released");
+      expect(guide).not.toContain("The v0.8.2 CLI passed immutable GitHub and npm artifact admission");
+      expect(guide).not.toContain("You can install and check v0.8.2 now");
     }
     expect(readme).not.toContain("The v0.7.1 candidate is not yet admitted");
-    expect(readme).toContain("[Availability](https://oompa.dev/docs/status/)");
-    expect(readme).toContain("[ordered update runbook](https://oompa.dev/docs/status/#install-and-update)");
+    expect(readme).toContain("[Availability](https://oompa.app/docs/status/)");
+    expect(readme).toContain("[ordered update runbook](https://oompa.app/docs/status/#install-and-update)");
     expect(readme).not.toContain("Local CLI v0.7.0 is a release candidate");
     const homepageAvailability = publicContent.questions.find(({ question }) => question === "Can I start using it now?");
     expect(homepageAvailability).toBeDefined();
     expect(homepageAvailability?.answer).toContainEqual({ kind: "link", label: "Check the setup status", href: "/docs/status/" });
-    expect(homepageAvailability?.answer).toContainEqual({ kind: "link", label: "admitted release's immutable installation notes", href: "https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install" });
+    expect(homepageAvailability?.answer).toContainEqual({ kind: "link", label: "verified installation notes", href: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact" });
     const homepageAvailabilityText = homepageAvailability?.answer.filter((part) => part.kind === "text").map((part) => part.value).join("");
-    expect(homepageAvailabilityText).toContain("The admitted v0.7.1 CLI has its own");
-    expect(homepageAvailabilityText).toContain("The v0.8.0 candidate is not yet admitted.");
+    expect(homepageAvailabilityText).toContain("The admitted v0.8.1 CLI has its own");
+    expect(homepageAvailabilityText).toContain("The v0.8.2 candidate is not yet admitted.");
     expect(homepageAvailabilityText).toContain("Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass.");
     expect(homepageAvailabilityText).toContain("before initialization or daemon startup.");
     // The concise entry points link to the canonical availability guide. The
     // release-bound recovery restrictions must survive that relocation intact.
     expect(docsPathForSection("install-and-update")).toBe("/docs/status/#install-and-update");
     expect(availability).toContain(installCommand);
-    expect(availability).toContain("The v0.7.1 CLI passed immutable GitHub and npm artifact admission.");
-    expect(availability).not.toContain("The v0.7.1 candidate is not yet admitted");
-    expect(availability).toContain("The v0.8.0 candidate is not yet admitted");
-    expect(availability).not.toContain("v0.8.0 is released");
+    expect(availability).toContain("The v0.8.1 CLI passed immutable GitHub artifact admission.");
+    expect(availability).toContain("Its optional npm mirror is not admitted.");
+    expect(availability).not.toContain("The v0.8.0 candidate is not yet admitted");
+    expect(availability).toContain("The v0.8.2 candidate is not yet admitted");
+    expect(availability).not.toContain("v0.8.2 is released");
     expect(availability).toContain("their availability does not authorize starting the current daemon or sending new hosted commands");
     for (const document of [readme, availability]) {
       expect(document).toContain("Current daemon and hosted command-writer rollout remains blocked on capacity.");
-      expect(document).toContain("Do not initialize, start, or autostart either the admitted v0.7.1 daemon or the v0.8.0 candidate");
+      expect(document).toContain("Do not initialize, start, or autostart either the admitted v0.8.1 daemon or the v0.8.2 candidate");
       expect(document).toContain("protected two-pass zero-debt capacity evidence and its exact .activated readback receipt");
       expect(document).toContain("Artifact availability and the live sync service do not clear this gate.");
       expect(document).toContain("daemon and target marker-2 proofs before globally enabling hosted writers");
@@ -677,13 +688,13 @@ describe("release workflow", () => {
     expect(releaseNotes).not.toContain("Cloud enrollment is invitation-only");
     expect(releaseNotes).not.toContain("artifact-identity SPDX");
     expect(releaseNotes).not.toContain("runtime SPDX inventory");
-    expect(releaseNotes).toContain("# Oompa v0.8.0 local CLI candidate\n");
+    expect(releaseNotes).toContain("# Oompa v0.8.2 local CLI candidate\n");
     expect(thirdPartyNotices).toContain("exact tarball plus `SHA256SUMS`");
     expect(thirdPartyNotices).toContain("The admitted `v0.7.1` predecessor records its own build graph");
     expect(thirdPartyNotices).toContain("This candidate is not yet admitted");
-    expect(thirdPartyNotices).not.toContain("The admitted `v0.8.0` release records its build graph");
+    expect(thirdPartyNotices).not.toContain("The admitted `v0.8.2` release records its build graph");
     expect(thirdPartyNotices).toContain("bound the immutable source tag");
-    expect(thirdPartyNotices).toContain("`@hraness/site-footer` v0.6.1");
+    expect(thirdPartyNotices).toContain("`@hraness/site-footer` v0.9.0");
     expect(thirdPartyNotices).toContain("`@hraness/design-kit` v0.6.2");
     expect(thirdPartyNotices).toContain("`@hraness/ui` v0.5.6");
     expect(thirdPartyNotices).toContain("`@hraness/direct` v0.7.0");
@@ -692,8 +703,9 @@ describe("release workflow", () => {
     expect(thirdPartyNotices).not.toContain("`@hraness/design-kit` v0.3.0");
     expect(thirdPartyNotices).not.toContain("SPDX");
     expect(changelog).toContain("## v0.7.0\n");
+    expect(changelog).toContain("## v0.8.2 candidate (unreleased)\n");
     expect(changelog).toContain("## v0.8.0 candidate (unreleased)\n");
-    expect(changelog).not.toContain("## v0.8.0\n");
+    expect(changelog).not.toContain("## v0.8.2\n");
     expect(changelog).toContain("## v0.7.1\n");
     expect(changelog).toContain("Forward repair for the incomplete `v0.6.0` admission");
     expect(security).toContain("| `v0.7.1` | Fully admitted beta. Supported and receives security fixes. Hosted command-writer rollout remains capacity-gated. |");
@@ -701,7 +713,7 @@ describe("release workflow", () => {
     expect(security).toContain("| `v0.6.3` | Superseded by `v0.7.0`. Unsupported. Do not bypass the update runbook to migrate. |");
     expect(security).toContain("| `v0.6.2` | Superseded by `v0.6.3`. Unsupported. Do not bypass the update runbook to migrate. |");
     expect(security).toContain("Only the latest fully admitted beta receives security fixes");
-    expect(security).toContain("| `v0.8.0` candidate | Not admitted or supported as a public release.");
+    expect(security).toContain("| `v0.8.2` candidate | Not admitted or supported as a public release.");
     expect(security).toContain("| `v0.6.0` | Immutable partial publication. The workflow did not complete final admission; unsupported. |");
     expect(security).toContain("| `v0.5.0` | Superseded by `v0.6.1`. Unsupported. Do not bypass the update runbook to migrate. |");
     expect(releaseNotes).toContain("Current daemon startup and command-writer rollout remain blocked by `authority_reduction_hard_quota`");
@@ -887,12 +899,12 @@ describe("release workflow", () => {
     expect(changelog).toContain("docs/beta-release.md#immutable-v071-successful-release-record");
     expect(changelog).not.toContain("## v0.7.1 (unreleased)");
     expect(releaseRecord).toContain("`v0.7.0`, and `v0.7.1` are complete publications");
-    expect(releaseRecord).toContain("`v0.7.1` is the current admitted artifact.");
+    expect(releaseRecord).toContain("`v0.8.1` is the current admitted canonical GitHub artifact; `v0.7.1` remains an admitted npm predecessor.");
     expect(releaseRecord).not.toContain("`v0.7.0` is the current admitted artifact.");
     expect(routing).toContain("The v0.7.1 artifact is fully admitted");
     expect(routing).toContain("Operational rollout remains pending");
     expect(releaseNotes).toContain("../README.md#get-started");
-    expect(releaseNotes).toContain("https://oompa.dev/docs/status/#install-and-update");
+    expect(releaseNotes).toContain("https://oompa.app/docs/status/#install-and-update");
     expect(releaseNotes).not.toContain("../README.md#update-runbook");
     const recovery = releaseRecord.split("## Recover delayed public visibility\n")[1]?.split("\n## ")[0];
     for (const boundary of [
@@ -963,8 +975,9 @@ describe("release workflow", () => {
     expect(domainRecord).toContain("unresolved_prior_intent");
     expect(domainRecord).toContain("reasserts only the plan's exact source");
     expect(domainRecord).toContain("unresolved_current_intent");
-    expect(releaseRecord.split("\n")[2]).toContain("Status: `v0.8.0` is an unreleased provider-usage foundation candidate");
-    expect(releaseRecord.split("\n")[2]).toContain("`v0.7.1` remains the fully admitted public CLI beta");
+    expect(releaseRecord.split("\n")[2]).toContain("Status: `v0.8.2` is an unreleased provider-usage foundation candidate");
+    expect(releaseRecord.split("\n")[2]).toContain("`v0.8.1` is the admitted canonical GitHub predecessor");
+    expect(releaseRecord.split("\n")[2]).toContain("optional npm mirror failed before publication and is not admitted");
     expect(releaseRecord).toContain("Artifact admission does not clear the blocked hosted command-writer rollout or authorize daemon upgrades");
     expect(releaseRecord).toContain("At retirement, `hraness/oompa` had no `v0.1.0` tag");
     expect(releaseRecord).toContain("## Immutable v0.1.0 failure record");
@@ -1082,13 +1095,14 @@ describe("release workflow", () => {
     expect(releaseRecord).toContain("The package gate still scans `rev-list --all`");
     expect(releaseRecord).toContain("coordinate completed its non-executable bootstrap");
     expect(releaseRecord).toContain("npm trusted publishing has exactly one binding");
-    expect(releaseRecord).toContain("Stable `@hraness/hra@0.7.1` is the current admitted artifact");
+    expect(releaseRecord).toContain("Stable `@hraness/hra@0.7.1` remains an admitted npm predecessor");
+    expect(releaseRecord).toContain("current canonical GitHub artifact is `@hraness/oompa@0.8.1`, whose optional npm mirror is not admitted");
     expect(releaseRecord).toContain("The canonical README and website use a two-phase local-release surface");
-    expect(releaseRecord).toContain("The `v0.7.1` local CLI artifacts are admitted");
+    expect(releaseRecord).toContain("The `v0.8.1` canonical GitHub artifact is admitted; the npm mirror is not");
     expect(releaseRecord).toContain("preserves that predecessor's admission record and the pre-admission wording captured in its immutable README and package metadata");
-    expect(releaseRecord).toContain("Their immutable installation notes name the exact admitted GitHub Release and verified archive");
-    expect(releaseRecord).toContain("v0.8.0 candidate command, explicitly unavailable until its own exact artifact admission");
-    expect(releaseRecord).toContain("links to the v0.7.1 notes for the existing artifact");
+    expect(releaseRecord).toContain("Its verified current installation notes name the exact immutable GitHub Release, archive and tagged transactional installer");
+    expect(releaseRecord).toContain("v0.8.2 candidate command, explicitly unavailable until its own exact artifact admission");
+    expect(releaseRecord).toContain("links to the [reviewed v0.8.1 canonical installation notes](beta-release-notes.md#admitted-v081-canonical-artifact) for the existing artifact");
     expect(releaseRecord).toContain("https://github.com/hraness/hra/tree/v0.7.1#get-started");
     expect(releaseRecord).toContain("https://github.com/hraness/hra/blob/v0.6.1/docs/beta-release-notes.md#install");
     expect(releaseRecord).toContain("Hosted sync went live separately on 2026-09-03");
@@ -1200,7 +1214,7 @@ describe("release workflow", () => {
     expect(workflow).not.toContain("convex");
   });
 
-  test("requires all three source shards and remainder on both operating systems with complete governed history", async () => {
+  test("requires all six source shards and remainder on both operating systems with complete governed history", async () => {
     const workflow = await readFile(
       join(import.meta.dir, "..", ".github", "workflows", "ci.yml"),
       "utf8",
@@ -1212,14 +1226,14 @@ describe("release workflow", () => {
     expect(Object.keys(jobs).sort()).toEqual(["browser", "check", "required"]);
     expect(check.name).toBe("Check (${{ matrix.os }}, ${{ matrix.gate }})");
     expect(check["runs-on"]).toBe("${{ matrix.os }}");
-    expect(check["timeout-minutes"]).toBe("${{ matrix.gate == 'remainder' && 20 || 75 }}");
+    expect(check["timeout-minutes"]).toBe("${{ matrix.gate == 'remainder' && (matrix.os == 'macos-15' && 25 || 20) || 75 }}");
     expect(check.if).toBeUndefined();
     expect(check["continue-on-error"]).toBeUndefined();
     expect(check.strategy).toEqual({
       "fail-fast": false,
       matrix: {
         os: ["macos-15", "ubuntu-24.04"],
-        gate: ["source-1", "source-2", "source-3", "remainder"],
+        gate: ["source-1", "source-2", "source-3", "source-4", "source-5", "source-6", "remainder"],
       },
     });
     const steps = check.steps;
@@ -1289,7 +1303,7 @@ describe("release workflow", () => {
     const gateStep = asRecord(gate, "CI gate step");
     expect(gateStep.if).toBeUndefined();
     expect(String(gateStep.run).trim().replace(/\s+/gu, " ")).toBe(
-      'set -euo pipefail case "$CI_GATE" in source-1) bun run test:source --shard=1/3 ;; source-2) bun run test:source --shard=2/3 ;; source-3) bun run test:source --shard=3/3 ;; remainder) bun run check:ci-remainder ;; *) echo "::error::Unexpected CI gate" exit 1 ;; esac',
+      'set -euo pipefail case "$CI_GATE" in source-1) bun run test:source --shard=1/6 ;; source-2) bun run test:source --shard=2/6 ;; source-3) bun run test:source --shard=3/6 ;; source-4) bun run test:source --shard=4/6 ;; source-5) bun run test:source --shard=5/6 ;; source-6) bun run test:source --shard=6/6 ;; remainder) bun run check:ci-remainder ;; *) echo "::error::Unexpected CI gate" exit 1 ;; esac',
     );
     expect(asRecord(asRecord(gate, "CI gate step").env, "CI gate environment")).toEqual({
       NODE_OPTIONS: "--max-old-space-size=4096",

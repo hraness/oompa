@@ -58,7 +58,7 @@ const COMPLETE = "stylex-complete.json";
 const STYLEX_UNION_POLICY_SHA256 = "1ceced1f1bf6359413ca6425ede61e1fdae272b897f4455c2347e2431d75caa1";
 const PUBLICATION_JOURNAL = "pending-publication.json";
 const ENTRY_TAG = '<script type="module" src="/src/main.tsx"></script>';
-const HTML_TAG = '<html lang="en" data-palette="catppuccin" data-theme="dark">';
+const HTML_TAG = '<html lang="en" data-hraness-theme="paper" data-palette="paper" data-theme="light">';
 // This one authored image is already held by the shell under img-src data:.
 // Its exact SVG bytes are reviewed independently of the website runtime.
 const APP_FAVICON_SHA256 = "8b3323b41b8c95bfa39af9af23152105b87b205959834ff096aa7c5b6f83b98d";
@@ -227,7 +227,7 @@ export function prepareAppShell(
   assert.ok(compilerPublicPath(`graphs/client/${graph.entry}`) && graph.entry.endsWith(".js"));
   assert.ok(compilerPublicPath(`graphs/client/${graph.foundation}`) && graph.foundation.endsWith(".css"));
   assert.ok(/^assets\/appearance-[A-Za-z0-9_-]+\.js$/u.test(graph.appearance));
-  const paletteClass = getDesignPaletteTheme("catppuccin", "dark").className;
+  const paletteClass = getDesignPaletteTheme("paper", "light").className;
   assert.ok(/^[A-Za-z0-9_-]+(?: [A-Za-z0-9_-]+)*$/u.test(paletteClass), "Unsafe default palette class");
   return source.replace(HTML_TAG, HTML_TAG.replace(">", ` class="${paletteClass}">`))
     .replace(ENTRY_TAG, `<script type="module" src="${mount}graphs/client/${graph.entry}"></script>`)

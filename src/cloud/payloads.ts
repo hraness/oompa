@@ -61,6 +61,17 @@ import {
   type UsageProjection,
 } from "./usage";
 
+// The browser facade reaches the exact legacy usage decoder through this
+// existing payload boundary; it gains no generic cloud-module import authority.
+export {
+  parseUsageEncryptedEnvelope,
+  USAGE_CLOUD_PROJECTION_MAX_LIMITS,
+  type UsageLimit,
+  type UsageProjection,
+  type UsageReady,
+  type UsageWindow,
+} from "./usage";
+
 // Interaction identifiers are provider-brokered UUIDs (see
 // `src/domain/interactions.ts`, `z.string().uuid()`) that are not necessarily
 // UUIDv7, so this checks the generic RFC 4122 shape rather than reusing the
@@ -624,6 +635,10 @@ export type DeviceRegistryPayload = Readonly<{
   daemonVersion: string;
   defaultApprovalMode: "auto:all" | "auto:workspace" | "manual";
   defaultPreset: ModelPreset;
+  // Additive and optional: the project a start uses when the reader names
+  // none. Absent on a registry from an older daemon, so a browser falls back
+  // to the first listed project. Always one of `projects`.
+  defaultProjectPublicId?: string;
   deviceCommandsAllowed?: boolean;
   heartbeatAt: number;
   machineLabel: string;
@@ -1096,11 +1111,13 @@ function parseDeviceRegistryPayloadUnchecked(value: unknown): DeviceRegistryPayl
   const hasAccountLinking = Object.hasOwn(value, "accountLinkingAllowed");
   const hasDeviceCommands = Object.hasOwn(value, "deviceCommandsAllowed");
   const hasSessionAdoption = Object.hasOwn(value, "sessionAdoption");
+  const hasDefaultProject = Object.hasOwn(value, "defaultProjectPublicId");
   const sessionAdoption = hasSessionAdoption
     ? parseRegistrySessionAdoption(value.sessionAdoption)
     : null;
   if (
-    (hasAccountLinking && typeof value.accountLinkingAllowed !== "boolean")
+    (hasDefaultProject && !isOpaqueIdentifier(value.defaultProjectPublicId))
+    || (hasAccountLinking && typeof value.accountLinkingAllowed !== "boolean")
     || (hasDeviceCommands && typeof value.deviceCommandsAllowed !== "boolean")
     || (hasSessionAdoption && sessionAdoption === null)
   ) return null;
@@ -1112,6 +1129,7 @@ function parseDeviceRegistryPayloadUnchecked(value: unknown): DeviceRegistryPayl
       "daemonVersion",
       "defaultApprovalMode",
       "defaultPreset",
+      ...(hasDefaultProject ? ["defaultProjectPublicId"] : []),
       "heartbeatAt",
       "machineLabel",
       "projects",
@@ -1136,6 +1154,11 @@ function parseDeviceRegistryPayloadUnchecked(value: unknown): DeviceRegistryPayl
   const projects = parseRegistryProjects(value.projects);
   const scheduledTasks = parseRegistryScheduledTasks(value.scheduledTasks);
   if (accounts === null || projects === null || scheduledTasks === null) return null;
+  const defaultProjectPublicId = hasDefaultProject ? value.defaultProjectPublicId as string : null;
+  if (
+    defaultProjectPublicId !== null
+    && !projects.some((project) => project.publicId === defaultProjectPublicId)
+  ) return null;
   return {
     accounts,
     ...(hasAccountLinking
@@ -1144,6 +1167,7 @@ function parseDeviceRegistryPayloadUnchecked(value: unknown): DeviceRegistryPayl
     daemonVersion: value.daemonVersion,
     defaultApprovalMode: value.defaultApprovalMode,
     defaultPreset: value.defaultPreset,
+    ...(defaultProjectPublicId === null ? {} : { defaultProjectPublicId }),
     ...(hasDeviceCommands
       ? { deviceCommandsAllowed: value.deviceCommandsAllowed as boolean }
       : {}),

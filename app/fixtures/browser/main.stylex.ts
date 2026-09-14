@@ -10,4 +10,10 @@ export const fixtureStyles = stylex.create({
     marginTop: "0.75rem",
     paddingBottom: "0.5rem",
   },
+  single: {
+    marginLeft: "auto",
+    marginRight: "auto",
+    maxWidth: "28rem",
+    padding: "1rem",
+  },
 });

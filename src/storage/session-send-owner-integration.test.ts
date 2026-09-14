@@ -47,7 +47,7 @@ async function fixture() {
   const prepared = store.prepareOwnedSessionSend(request);
   const runtimeProfile = effectiveRuntimeProfileSchema.parse({
     profileId: profile.id, processGeneration: profile.processGeneration, observedAt: now(), preset: "high",
-    model: "gpt-5.6-sol", reasoningEffort: "max", serviceTier: null, fast: false,
+    model: "gpt-6-astra", reasoningEffort: "max", serviceTier: null, fast: false,
     approvalPolicy: "on-request", reviewMode: "auto_review", permissionProfile: ":workspace",
     computerUse: true, pluginCapability: true, enabledApps: [],
   });

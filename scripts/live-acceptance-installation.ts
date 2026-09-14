@@ -237,7 +237,6 @@ export function createAcceptanceInstallation(
       paths,
       new FileSecretBackend(join(paths.root, "secret-values")),
     ),
-    desktopSwitching: false,
     documentsDirectory: descriptor.documentsDirectory,
     expectedHomeDirectory,
     kind: "live_acceptance",

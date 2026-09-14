@@ -237,6 +237,7 @@ describe("verified hosted deployment", () => {
         skipLibCheck: true,
         strict: true,
         target: "ES2024",
+        types: ["node"],
       },
       exclude: ["./_generated", "./**/*.test.ts", "./test.setup.ts"],
       include: ["./**/*.ts"],

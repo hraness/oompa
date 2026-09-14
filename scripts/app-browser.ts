@@ -6,13 +6,16 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
 import { transform } from "lightningcss";
-import type { BrowserContext, Locator, Page, Request as BrowserRequest, Response as BrowserResponse } from "playwright-core";
+import type { BrowserContext, CDPSession, Locator, Page, Request as BrowserRequest, Response as BrowserResponse } from "playwright-core";
 import type { DirectBrowserBridge } from "@hraness/direct/web";
 import { browserIoModules } from "../app/fixtures/browser/config";
 import { productIoModules } from "../app/fixtures/product/config";
 import { assertBrowserNode, browserDigest, browserExecutable, browserPublicArtifacts, publishBrowserJson, type BrowserExecutionAdmission } from "./app-browser-handoff.ts";
 import { serveBrowserAssets } from "./app-browser-server.ts";
 import { readRestoredStyleFramePair, settleExactStylesheet, StylesheetSettlementError, type StylesheetSettlementDiagnostics } from "./app-browser-settlement.ts";
+import { inspectSiteCssResources } from "./site-css-resources.ts";
+import { snapshotMarketingPreset } from "./marketing-preset.ts";
+import { checkLanternMaterialSnapshot } from "../site/vendor/lantern-material/check.mjs";
 
 type Artifact = Readonly<{ bytes: number; path: string; sha256: string }>;
 type Surface = Readonly<{ artifacts: readonly Artifact[]; bytes: ReadonlyMap<string, Buffer>; origin: string; stop: () => Promise<void> }>;
@@ -47,7 +50,7 @@ export function browserFailureDetails(value: unknown, depth = 0): BrowserFailure
   };
 }
 type Profile = Readonly<{ name: string; width: number; height: number; coarse: boolean; reduced: boolean; forced: boolean; rtl: boolean; colorScheme?: "dark" | "light" }>;
-const fixtureViews = ["signin", "locked", "enrollment", "grid", "session", "session-long", "retired", "settings", "primitives"] as const;
+const fixtureViews = ["signin", "enrollment", "grid", "session", "session-long", "retired", "settings", "primitives"] as const;
 const productViews = ["overview", "conversation", "question", "settings"] as const;
 type ProductView = typeof productViews[number];
 const siteRouteLabels = ["home", "privacy", "preview", "docs", "docs-start", "docs-web", "docs-sessions", "docs-reference", "docs-status"] as const;
@@ -75,7 +78,7 @@ const browserDiagnosticSteps = new Set([
   ...siteRouteLabels.flatMap((route) => [
     "navigation", "document-bytes", "direction", "heading", "settle-before-fonts", "font-load", "settle-after-fonts",
     "document-clean", "stylesheet-links", "stylesheet-inventory", "color-scheme", "background", "heading-style", "inertness",
-    "negative-final-css", "negative-foundation-css", "negative-document-clean", "resource-bytes", "mobile-anchors",
+    "negative-final-css", "negative-foundation-css", "negative-document-clean", "resource-bytes", "mobile-anchors", "material",
   ].map((step) => `static-site:${route}:${step}`)),
   ...["production-anonymous:negative-css", "fixture:primitives:negative-css", ...siteRouteLabels.flatMap((route) =>
     [`static-site:${route}:negative-final-css`, `static-site:${route}:negative-foundation-css`])]
@@ -147,6 +150,7 @@ const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes
 const bracketedFontPath = "fonts/geist-mono/GeistMono[wght].woff2";
 const fontProvenancePaths = new Set([
   "fonts/geist-mono/PROVENANCE.md", "fonts/nebula-sans/PROVENANCE.md",
+  "fonts/instrument-serif/UPSTREAM.md", "marketing-preset/LICENSE", "marketing-preset/marketing-assets/UPSTREAM.md",
 ]);
 const legacyFontPaths = new Set([bracketedFontPath]);
 const siteRoutes = [
@@ -163,16 +167,26 @@ const siteRoutes = [
 const siteMarkdownPaths = new Set(siteRoutes.filter(({ pathname }) => pathname.startsWith("/docs/")).map(({ path }) => path.replace(/\.html$/u, ".md")));
 const productPreviewCsp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'";
 const productAssetPath = /^examples\/app\/(?:index\.html|stylex\.css|graphs\/client\/assets\/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:js|css))$/u;
-const sitePublicFonts = [
+const siteInstalledPublicFonts = [
   ...["Light", "LightItalic", "Book", "BookItalic", "Medium", "MediumItalic", "Semibold", "SemiboldItalic", "Bold", "BoldItalic", "Black", "BlackItalic"]
     .map((cut) => `nebula-sans/NebulaSans-${cut}.woff2`),
   "geist-mono/GeistMono[wght].woff2",
 ];
+const sitePresetFont = "instrument-serif/instrument-serif-latin-400.woff2";
+const sitePublicFonts = [...siteInstalledPublicFonts, sitePresetFont];
+const sitePresetTextures = ["marketing-assets/grain.svg", "marketing-assets/cells.svg"] as const;
+const sitePresetAttributions = [
+  ["fonts/instrument-serif/OFL.txt", "fonts/instrument-serif/OFL.txt"],
+  ["fonts/instrument-serif/UPSTREAM.md", "fonts/instrument-serif/UPSTREAM.md"],
+  ["marketing-preset/LICENSE", "LICENSE"],
+  ["marketing-preset/marketing-assets/UPSTREAM.md", "marketing-assets/UPSTREAM.md"],
+] as const;
 const sitePublicSupport = [
   "analytics.js", "appearance.js", "site.js", "favicon.svg", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
   ".well-known/security.txt", ".well-known/hra.json",
   "fonts/nebula-sans/LICENSE.txt", "fonts/nebula-sans/PROVENANCE.md",
   "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md",
+  ...sitePresetAttributions.map(([path]) => path),
   ...siteMarkdownPaths,
 ];
 const diagnosticPath = (path: string) => JSON.stringify(path.slice(0, 160));
@@ -215,7 +229,7 @@ export function siteProductionCsp(value: unknown): Readonly<{ siteCsp: string; p
     assert.deepEqual(csp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("font-src")), ["font-src 'self'"]);
   }
   assert.deepEqual(previewCsp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("script-src")), ["script-src 'none'"]);
-  assert.deepEqual(siteCsp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("frame-src")), ["frame-src 'self' https://challenges.cloudflare.com"]);
+  assert.deepEqual(siteCsp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("frame-src")), ["frame-src 'self'"]);
   const productCsp = productionCsp(value, "/examples/app/:path(.*)");
   assert.equal(productCsp, `${productPreviewCsp}; frame-ancestors 'self'`, "Product example CSP drifted");
   const rows = record(value).headers;
@@ -406,8 +420,8 @@ export function siteStylesheetPaths(documents: ReadonlyMap<string, Buffer>): rea
     assert.ok(bytes !== undefined && bytes.length > 0 && bytes.length <= 8 * 1024 * 1024, `Missing bounded site document: ${path}`);
     const { document } = parseHTML(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     assert.equal(document.querySelectorAll("style,[style],base").length, 0, "Static document changed its no-inline/base contract");
-    assert.equal(document.documentElement.getAttribute("data-palette"), "catppuccin", "Static default palette changed");
-    assert.equal(document.documentElement.getAttribute("data-theme"), "dark", "Static default theme changed");
+    assert.equal(document.documentElement.getAttribute("data-palette"), path === "preview/index.html" ? "catppuccin" : "paper", "Static default palette changed");
+    assert.equal(document.documentElement.getAttribute("data-theme"), path === "preview/index.html" ? "dark" : "light", "Static default theme changed");
     const appearance = [...document.querySelectorAll('script[src="/appearance.js"]')];
     const menus = [...document.querySelectorAll("details[data-oompa-appearance]")];
     if (path === "preview/index.html") {
@@ -444,13 +458,14 @@ export function siteStylesheetPaths(documents: ReadonlyMap<string, Buffer>): rea
 
 /** Parse native CSS URLs and all font-face sources. A path becomes admissible
  * only because this captured foundation names it; escaping never broadens it. */
-export function siteFoundationFontPaths(path: string, bytes: Buffer): readonly string[] {
+export function siteFoundationResourcePaths(path: string, bytes: Buffer): Readonly<{ fonts: readonly string[]; textures: readonly string[] }> {
   assert.match(path, /^graphs\/foundation\/assets\/[A-Za-z0-9_.-]+\.css$/u);
   assert.ok(bytes.length > 0 && bytes.length <= 16 * 1024 * 1024);
   const faces: string[] = [];
-  // Dependency analysis also includes image-set string URLs, which the Url
-  // visitor alone omits. The transformed bytes are never served or published.
-  const parsed = transform({ filename: path, code: bytes, analyzeDependencies: true, visitor: {
+  // Inspect original AST URLs, including custom properties and literal
+  // image-set strings. Dependency relocation rejects valid relative token URLs.
+  const urls = inspectSiteCssResources(new TextDecoder("utf-8", { fatal: true }).decode(bytes), path);
+  const parsed = transform({ filename: path, code: bytes, visitor: {
     Rule: {
       import() { throw new Error("Static foundation contains an uncollected CSS import"); },
       "font-face"(rule) {
@@ -465,25 +480,31 @@ export function siteFoundationFontPaths(path: string, bytes: Buffer): readonly s
     },
   } });
   assert.equal(parsed.warnings.length, 0, "Static foundation CSS inspection emitted warnings");
-  assert.ok(parsed.dependencies !== undefined && parsed.dependencies.length <= 64,
-    "Static foundation has an invalid or excessive resource inventory");
-  const urls = parsed.dependencies.map((dependency) => {
-    assert.ok(dependency.type === "url", "Static foundation contains an uncollected CSS import or unsupported resource");
-    return dependency.url;
-  });
-  assert.equal(faces.length, 13, "Static foundation must declare all thirteen public font faces");
-  assert.deepEqual([...urls].sort(), [...faces].sort(), "Static foundation contains a non-font URL");
-  assert.equal(new Set(faces).size, 13, "Static foundation duplicates a font URL");
-  return faces.map((url) => {
+  assert.equal(faces.length, 14, "Static foundation must declare all fourteen public font faces");
+  assert.equal(new Set(faces).size, 14, "Static foundation duplicates a font URL");
+  const textures = urls.filter((url) => !faces.includes(url));
+  assert.equal(textures.length, 4, "Static foundation must contain exactly four non-font texture URLs");
+  const uniqueTextures = [...new Set(textures)];
+  assert.equal(uniqueTextures.length, 2, "Static foundation must reuse exactly two texture assets");
+  for (const texture of uniqueTextures) {
+    assert.equal(textures.filter((url) => url === texture).length, 2, "Each canonical texture must occur in exactly two material roles");
+  }
+  assert.deepEqual([...urls].sort(), [...faces, ...textures].sort(), "Static foundation repeats a font outside its face");
+  const resolveAsset = (url: string, kind: "woff2" | "svg") => {
     // Vite may preserve or sanitize brackets. Both must come from captured CSS,
     // stay in this asset directory, and later match a public input's full hash.
     const decoded = url.replace(/%5b/giu, "[").replace(/%5d/giu, "]");
-    assert.match(decoded, /^(?:\.\/)?[A-Za-z0-9_.[\]-]+\.woff2$/u, "Static font URL escaped its captured asset directory");
+    assert.match(decoded, kind === "woff2" ? /^(?:\.\/)?[A-Za-z0-9_.[\]-]+\.woff2$/u : /^(?:\.\/)?[A-Za-z0-9_.-]+\.svg$/u,
+      "Static resource URL escaped its captured asset directory");
     const resolved = new URL(decoded, `https://site.invalid/${path}`);
     assert.equal(resolved.origin, "https://site.invalid");
     assert.equal(resolved.search + resolved.hash, "");
     return resolved.pathname.slice(1);
-  }).sort();
+  };
+  return { fonts: faces.map((url) => resolveAsset(url, "woff2")).sort(), textures: uniqueTextures.map((url) => resolveAsset(url, "svg")).sort() };
+}
+export function siteFoundationFontPaths(path: string, bytes: Buffer): readonly string[] {
+  return siteFoundationResourcePaths(path, bytes).fonts;
 }
 
 /** This is a distinct compiler generation, never an exception to the parent
@@ -550,7 +571,17 @@ export function snapshotProductPreview(files: ReadonlyMap<string, Buffer>) {
   return { paths, stylesheets, scripts: paths.filter((path) => path.endsWith(".js")) };
 }
 
-export function snapshotStaticSite(allFiles: ReadonlyMap<string, Buffer>, publicFonts: ReadonlyMap<string, Buffer>) {
+/** Revalidate each font against its original physical source. Older installed
+ * kits supply thirteen faces; the editorial face belongs to the admitted vendor. */
+export async function assertSitePublicFontsUnchanged(publicFontRoot: string, presetRoot: string, fonts: ReadonlyMap<string, Buffer>): Promise<void> {
+  assert.deepEqual([...fonts.keys()].sort(), [...sitePublicFonts].sort());
+  for (const [path, bytes] of fonts) {
+    const root = path === sitePresetFont ? presetRoot : publicFontRoot;
+    assert.deepEqual(await ordinary(join(root, "fonts", path)), bytes, "Public font input changed during browser acceptance");
+  }
+}
+
+export function snapshotStaticSite(allFiles: ReadonlyMap<string, Buffer>, publicFonts: ReadonlyMap<string, Buffer>, preset: ReadonlyMap<string, Buffer>) {
   const product = snapshotProductPreview(new Map([...allFiles].filter(([path]) => path.startsWith("examples/app/"))));
   const files = new Map([...allFiles].filter(([path]) => !path.startsWith("examples/app/")));
   assert.deepEqual([...files.keys()].filter((path) => path.endsWith(".html")).sort(), siteRoutes.map(({ path }) => path).sort());
@@ -559,11 +590,11 @@ export function snapshotStaticSite(allFiles: ReadonlyMap<string, Buffer>, public
   const foundation = files.get(stylesheets[0]);
   const union = files.get(stylesheets[1]);
   assert.ok(foundation !== undefined && union !== undefined && union.length > 0);
-  const fonts = siteFoundationFontPaths(stylesheets[0], foundation);
-  assert.deepEqual([...files.keys()].sort(), [...siteRoutes.map(({ path }) => path), ...stylesheets, ...fonts, ...sitePublicSupport].sort(), "Static publication contains a missing or unapproved public artifact");
+  const { fonts, textures } = siteFoundationResourcePaths(stylesheets[0], foundation);
+  assert.deepEqual([...files.keys()].sort(), [...siteRoutes.map(({ path }) => path), ...stylesheets, ...fonts, ...textures, ...sitePublicSupport].sort(), "Static publication contains a missing or unapproved public artifact");
   assert.deepEqual([...files.keys()].filter((path) => /\.woff2?$/u.test(path)).sort(), fonts, "Static font publication is incomplete or redundant");
-  assert.deepEqual([...files.keys()].filter((path) => path.startsWith("graphs/")).sort(), [stylesheets[0], ...fonts].sort(), "Private graph artifacts escaped publication");
-  assert.equal(publicFonts.size, 13);
+  assert.deepEqual([...files.keys()].filter((path) => path.startsWith("graphs/")).sort(), [stylesheets[0], ...fonts, ...textures].sort(), "Private graph artifacts escaped publication");
+  assert.equal(publicFonts.size, 14);
   assert.deepEqual([...publicFonts.keys()].sort(), [...sitePublicFonts].sort());
   const emitted = fonts.map((path) => {
     const bytes = files.get(path);
@@ -571,13 +602,26 @@ export function snapshotStaticSite(allFiles: ReadonlyMap<string, Buffer>, public
     return digest(bytes);
   }).sort();
   assert.deepEqual(emitted, [...publicFonts.values()].map(digest).sort(), "Published fonts differ from the installed public inputs");
+  const presetFont = preset.get(`fonts/${sitePresetFont}`);
+  assert.ok(presetFont !== undefined && presetFont.length > 0);
+  assert.deepEqual(publicFonts.get(sitePresetFont), presetFont, "Editorial font differs from the admitted snapshot");
+  const sourceTextures = sitePresetTextures.map((path) => {
+    const bytes = preset.get(path); assert.ok(bytes !== undefined && bytes.length > 0 && bytes.length <= 2 * 1024 * 1024); return digest(bytes);
+  }).sort();
+  assert.equal(new Set(sourceTextures).size, 2, "Canonical texture identities must be distinct");
+  assert.deepEqual(textures.map((path) => { const bytes = files.get(path); assert.ok(bytes !== undefined && bytes.length > 0 && bytes.length <= 2 * 1024 * 1024); return digest(bytes); }).sort(),
+    sourceTextures, "Published textures differ from the admitted snapshot");
+  for (const [publicPath, sourcePath] of sitePresetAttributions) {
+    const bytes = preset.get(sourcePath); assert.ok(bytes !== undefined && bytes.length > 0);
+    assert.deepEqual(files.get(publicPath), bytes, "Published attribution differs from the admitted snapshot");
+  }
   const parsedUnion = transform({ filename: "stylex.css", code: union, analyzeDependencies: true, visitor: {
     Rule: { import() { throw new Error("Final union contains an uncollected CSS import"); } },
   } });
   assert.equal(parsedUnion.warnings.length, 0, "Final union CSS inspection emitted warnings");
   assert.ok(parsedUnion.dependencies !== undefined);
   assert.equal(parsedUnion.dependencies.length, 0, "Final union contains an unexpected asset URL");
-  return { routes: siteRoutes, stylesheets, fonts, product };
+  return { routes: siteRoutes, stylesheets, fonts, textures, product };
 }
 
 export function assetContentType(key: string): string {
@@ -668,7 +712,14 @@ async function verifyProductScene(iframe: Locator, view: ProductView): Promise<u
         assert.equal(await frame.getByText(title, { exact: true }).count(), 1);
       }
     } else {
-      assert.equal(await frame.locator("h1").textContent(), view === "conversation" ? "Polish the checkout" : view === "question" ? "Choose the export format" : "Settings");
+      if (view === "settings") {
+        assert.equal(await frame.locator("h1").textContent(), "Settings");
+      } else {
+        // A conversation scene is one grid card, whose title is a level-two heading.
+        assert.equal(await frame.locator("[data-session-id]").count(), 1);
+        assert.equal(await frame.getByRole("heading", { level: 2, name: view === "conversation" ? "Polish the checkout" : "Choose the export format", exact: true }).count(), 1);
+        assert.equal(await frame.locator("h1").count(), 0);
+      }
       if (view === "conversation") assert.equal(await frame.getByText("The compact layout is in place. I’m checking the empty cart, delivery choices, and payment error state next.", { exact: true }).count(), 1);
       if (view === "question") {
         const question = frame.locator('[aria-label="Pending interaction"]');
@@ -695,6 +746,24 @@ export async function waitForClosedProductPreview(dialog: Pick<Locator, "waitFor
 }
 
 type CapturedBrowserBody = Promise<{ bytes: Buffer } | { error: unknown }>;
+
+/** Keep resource ownership inside one document's inspection and body settlement. */
+export async function withBrowserResourceCapture(
+  page: {
+    on(event: "response", listener: (response: BrowserResponse) => void): unknown;
+    on(event: "request", listener: (request: BrowserRequest) => void): unknown;
+    off(event: "response", listener: (response: BrowserResponse) => void): unknown;
+    off(event: "request", listener: (request: BrowserRequest) => void): unknown;
+  },
+  captureResponse: (response: BrowserResponse) => void,
+  captureRequest: (request: BrowserRequest) => void,
+  inspectDocument: () => Promise<void>,
+): Promise<void> {
+  page.on("response", captureResponse);
+  page.on("request", captureRequest);
+  try { await inspectDocument(); }
+  finally { page.off("response", captureResponse); page.off("request", captureRequest); }
+}
 
 /** Start native reads at response delivery and observe rejections immediately.
  * A renderer's ready signal does not mean its protocol body read has settled. */
@@ -762,7 +831,7 @@ async function verifyDocsSearch(page: Page, origin: string): Promise<void> {
 
 async function verifyLegacyDocsRedirects(page: Page, origin: string): Promise<unknown[]> {
   const observations: unknown[] = [];
-  for (const [id, destination] of [["install-and-update", "/docs/status/"], ["first-account", "/docs/sessions/"]] as const) {
+  for (const [id, destination] of [["install-and-update", "/docs/status/"], ["first-account", "/docs/start/"], ["first-session", "/docs/start/"]] as const) {
     await page.goto(`${origin}/#${id}`);
     await page.waitForURL(`${origin}${destination}#${id}`);
     const section = page.locator(`details#${id}`);
@@ -783,18 +852,24 @@ async function settle(page: Page): Promise<void> {
 
 type ButtonPlacement = "card-content" | "sign-in-form";
 
-/** Independent default-palette contract for the pinned shared package. OS light
- * preference alone must not override a fresh user's Catppuccin dark choice. */
-export function assertDefaultPalette(value: unknown, forced: boolean): void {
+/** Independent product default contract. Paper follows the operating system;
+ * deliberately inert product previews keep their fixed Catppuccin dark world. */
+export function assertDefaultPalette(value: unknown, forced: boolean,
+  appearance: { readonly palette: "paper"; readonly mode: "light" | "dark" } | { readonly palette: "catppuccin"; readonly mode: "dark" } = { palette: "paper", mode: "dark" }): void {
   const sample = record(value);
-  assert.equal(sample.palette, "catppuccin");
-  assert.equal(sample.theme, "dark");
-  assert.equal(sample.primary, forced ? "Highlight" : "#92bafa", "Shared primary semantic color is missing");
-  assert.equal(sample.foreground, forced ? "CanvasText" : "#dbe1f7", "Shared foreground semantic color is missing");
-  if (!forced) assert.equal(sample.background, "rgb(30, 30, 46)", "Default palette background differs from its semantic role");
+  const expected = appearance.palette === "catppuccin"
+    ? { primary: "#92bafa", foreground: "#dbe1f7", background: "rgb(30, 30, 46)" }
+    : appearance.mode === "light"
+      ? { primary: "#1e5ae1", foreground: "#1c1917", background: "rgb(248, 247, 244)" }
+      : { primary: "#8fb0ff", foreground: "#f5f2ed", background: "rgb(18, 16, 15)" };
+  assert.equal(sample.palette, appearance.palette);
+  assert.equal(sample.theme, appearance.mode);
+  assert.equal(sample.primary, forced ? "Highlight" : expected.primary, "Shared primary semantic color is missing");
+  assert.equal(sample.foreground, forced ? "CanvasText" : expected.foreground, "Shared foreground semantic color is missing");
+  if (!forced) assert.equal(sample.background, expected.background, "Default palette background differs from its semantic role");
 }
 
-async function defaultPalette(page: Page, forced: boolean): Promise<void> {
+async function defaultPalette(page: Page, forced: boolean, mode: "light" | "dark" = "dark", preview = false): Promise<void> {
   assertDefaultPalette(await page.evaluate(() => {
     const root = document.documentElement;
     const css = getComputedStyle(root);
@@ -804,11 +879,183 @@ async function defaultPalette(page: Page, forced: boolean): Promise<void> {
       foreground: css.getPropertyValue("--foreground").trim(),
       background: css.backgroundColor,
     };
-  }), forced);
+  }), forced, preview ? { palette: "catppuccin", mode: "dark" } : { palette: "paper", mode });
+}
+
+/** Actual compiled surfaces must match independent plain-HTML material roles.
+ * The references use the admitted canonical CSS, without inline declarations. */
+export function assertSiteMaterialPaint(value: unknown, home: boolean, opaque: boolean): void {
+  const string = (input: unknown): string => { assert.ok(typeof input === "string"); return input; };
+  const array = (input: unknown): readonly unknown[] => { assert.ok(Array.isArray(input)); return input as unknown[]; };
+  const sample = record(value), header = record(sample.header), expected = record(sample.references);
+  assert.equal(sample.material, "lantern");
+  assert.equal(sample.preset, home ? "editorial" : null);
+  assert.equal(sample.walls, home ? 1 : 0);
+  assert.equal(sample.fields, 0, "The replaced editorial texture field is still mounted");
+  assert.equal(header.background, record(expected.chrome).background, "Compiled header lost canonical material paint");
+  assert.equal(header.backdrop, opaque ? "none" : "blur(20px) saturate(1.1)");
+  assert.equal(header.backdrop, record(expected.chrome).backdrop);
+  const pane = record(expected.pane);
+  assert.match(string(pane.background), /^rgb\(\d+, \d+, \d+\)$/u, "Reading plane must be opaque");
+  for (const actual of array(sample.panes)) {
+    const paint = record(actual);
+    assert.equal(paint.background, pane.background, "Compiled reading plane lost its opaque fill");
+    assert.equal(paint.ink, pane.ink, "Reading plane lost its matched ink");
+  }
+  if (home) {
+    assert.ok(array(sample.panes).length >= 1);
+    const wall = record(sample.wall), reference = record(expected.wall);
+    assert.deepEqual(wall, reference, "Compiled hero differs from the canonical wall");
+    if (opaque) assert.equal(wall.image, "none");
+    else {
+      const image = string(wall.image), origin = string(sample.origin);
+      const parsedOrigin = new URL(origin);
+      assert.equal(parsedOrigin.origin, origin);
+      assert.ok(parsedOrigin.protocol === "http:" || parsedOrigin.protocol === "https:");
+      assert.ok(typeof sample.viewportWidth === "number" && Number.isSafeInteger(sample.viewportWidth) && sample.viewportWidth > 0);
+      const urls = [...image.matchAll(/url\("([^"\\]+)"\)/gu)].map((match) => new URL(string(match[1])));
+      assert.equal(urls.length, 2, "Native wall must name grain then cells");
+      assert.equal(image.split("url(").length - 1, urls.length, "Every native wall URL must be parsed");
+      for (const [index, url] of urls.entries()) {
+        assert.equal(url.origin, origin, "Native texture escaped the owned site origin");
+        assert.equal(url.username + url.password + url.search + url.hash, "");
+        assert.match(url.pathname, index === 0
+          ? /^\/graphs\/foundation\/assets\/grain-[A-Za-z0-9_-]+\.svg$/u
+          : /^\/graphs\/foundation\/assets\/cells-[A-Za-z0-9_-]+\.svg$/u);
+      }
+      assert.equal(image.includes("repeating-"), false, "The retired line grid must remain absent");
+      assert.equal(image.split("gradient(").length - 1, 2);
+      assert.equal(image.split("radial-gradient(").length - 1, 1);
+      assert.equal(image.split("linear-gradient(").length - 1, 1);
+      const cells = sample.viewportWidth <= 760 ? 576 : 768;
+      assert.equal(wall.size, `64px 64px, ${cells}px ${cells}px, 100% 100%, 100% 100%`, "Native grain and cell frequency must match the responsive material");
+    }
+    assert.equal(array(sample.selected).length, 1);
+    for (const [index, actual] of [...array(sample.selected), ...array(sample.disclosures)].entries()) {
+      const paint = record(actual), choice = record(expected.choice);
+      assert.equal(paint.background, choice.background, `${index === 0 ? "Preview selected control" : "FAQ disclosure"} lost its warm/forced plane: ${JSON.stringify(paint)}`);
+      assert.equal(paint.ink, choice.ink, index === 0 ? "Preview selected control lost its matched ink" : "FAQ disclosure lost its matched ink");
+    }
+    assert.equal(array(sample.disclosures).length, 1, "A real native FAQ must be observed open");
+  } else assert.equal(sample.wall, null);
+}
+
+export async function readSiteMaterial(page: Page): Promise<unknown> {
+  // Frames alone need not flush a native disclosure's pending style change.
+  // getAnimations flushes the actual sampled surfaces; await their real finish
+  // promises without changing playback, styles, or the strict paint comparison.
+  await boundedBrowserOperation(page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>((done) => { requestAnimationFrame(() => { requestAnimationFrame(() => { done(); }); }); });
+    const surfaces = document.querySelectorAll('header.hraness-material-chrome, figure[data-product-preview], .hraness-material-wall, .hraness-material-choice[aria-pressed="true"], .hraness-marketing-question[open] > summary');
+    await Promise.all([...surfaces].flatMap((element) => element.getAnimations().map((animation) => animation.finished)));
+  }), 15_000, "Browser material font/frame/transition settlement");
+  return page.evaluate(() => {
+    const nodes: HTMLElement[] = [];
+    const paint = (element: Element | null) => {
+      if (element === null) throw new Error("Material surface is missing");
+      const css = getComputedStyle(element);
+      return { background: css.backgroundColor, ink: css.color, image: css.backgroundImage, size: css.backgroundSize, backdrop: css.backdropFilter };
+    };
+    const reference = (role: string, selected = false) => {
+      const element = document.createElement("div"); element.hidden = true; element.className = role;
+      if (selected) element.setAttribute("data-selected", "");
+      document.body.append(element); nodes.push(element); return paint(element);
+    };
+    try {
+      const references = { chrome: reference("hraness-material-chrome"), pane: reference("hraness-material-pane"),
+        wall: reference("hraness-material-wall"), choice: reference("hraness-material-choice", true) };
+      // Exclude the private reference nodes from actual-role counts.
+      const actual = (selector: string) => [...document.querySelectorAll(selector)].filter((element) => !nodes.includes(element as HTMLElement));
+      const walls = actual(".hraness-material-wall");
+      return { material: document.documentElement.getAttribute("data-hraness-material"), preset: document.documentElement.getAttribute("data-hraness-marketing-preset"),
+        origin: location.origin, viewportWidth: innerWidth,
+        walls: walls.length, fields: actual(".hraness-marketing-field").length,
+        header: paint(document.querySelector("header.hraness-material-chrome")),
+        // The appearance disclosure panel is closed during static-route checks;
+        // only the rendered product pane is an owned reading plane here.
+        panes: actual("figure[data-product-preview]").map(paint),
+        wall: walls.length === 0 ? null : paint(walls[0] ?? null),
+        selected: actual('.hraness-material-choice[aria-pressed="true"]').map(paint),
+        disclosures: actual(".hraness-marketing-question[open] > summary").map(paint), references };
+    } finally { for (const node of nodes) node.remove(); }
+  });
+}
+
+/** A temporary CDP session can clear emulated features when it detaches.
+ * Restore through the owning Playwright page after detachment, including every
+ * original media feature, before observing restored paint. */
+export async function restoreSiteMaterialMedia(
+  page: Pick<Page, "emulateMedia">, session: Pick<CDPSession, "detach">,
+  profile: Readonly<{ colorScheme?: "light" | "dark"; reduced: boolean; forced: boolean }>,
+): Promise<void> {
+  await session.detach();
+  await page.emulateMedia({ colorScheme: profile.colorScheme ?? "dark",
+    reducedMotion: profile.reduced ? "reduce" : "no-preference", forcedColors: profile.forced ? "active" : "none" });
+}
+
+async function verifySiteMaterial(page: Page, pathname: string, profile: Profile): Promise<unknown> {
+  if (pathname === "/preview/") {
+    assert.equal(await page.locator('[data-hraness-material], .hraness-material-wall, .hraness-marketing-field').count(), 0);
+    return { material: null, inertPreviewPreserved: true };
+  }
+  const home = pathname === "/", summary = page.locator(".hraness-marketing-question > summary").first();
+  const previous = await page.evaluateHandle(() => document.activeElement);
+  try {
+    if (home) {
+      assert.equal(await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open), false);
+      await summary.focus(); await page.keyboard.press("Enter");
+      assert.equal(await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open), true);
+      assert.equal(await summary.evaluate((element) => element.matches(":focus-visible")), true);
+    }
+    const normal = await readSiteMaterial(page);
+    assertSiteMaterialPaint(normal, home, profile.forced);
+    if (home) {
+      const selected = page.locator('.hraness-material-choice[aria-pressed="true"]');
+      const disabled = await selected.getAttribute("disabled");
+      try {
+        await selected.evaluate((element) => { element.setAttribute("disabled", ""); });
+        assertSiteMaterialPaint(await readSiteMaterial(page), true, profile.forced);
+      } finally {
+        await selected.evaluate((element, previous) => {
+          if (previous === null) element.removeAttribute("disabled");
+          else element.setAttribute("disabled", previous);
+        }, disabled);
+      }
+      assert.deepEqual(await readSiteMaterial(page), normal, "Disabled control restoration changed actual paint");
+    }
+    if (home && profile.name === "desktop") {
+      const cdp = await page.context().newCDPSession(page);
+      const features = [
+        { name: "prefers-color-scheme", value: "dark" }, { name: "prefers-reduced-motion", value: "no-preference" },
+        { name: "forced-colors", value: "none" },
+      ];
+      try {
+        await cdp.send("Emulation.setEmulatedMedia", { features: [...features, { name: "prefers-reduced-transparency", value: "reduce" }] });
+        await settle(page);
+        assert.equal(await page.evaluate(() => matchMedia("(prefers-reduced-transparency: reduce)").matches), true);
+        assertSiteMaterialPaint(await readSiteMaterial(page), true, true);
+      } finally {
+        try {
+          await cdp.send("Emulation.setEmulatedMedia", { features: [...features, { name: "prefers-reduced-transparency", value: "no-preference" }] });
+          await settle(page);
+        } finally { await restoreSiteMaterialMedia(page, cdp, profile); }
+      }
+      assert.deepEqual(await readSiteMaterial(page), normal, "Material media restoration changed actual paint");
+    }
+    return normal;
+  } finally {
+    if (home) {
+      if (await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open)) { await summary.focus(); await page.keyboard.press("Enter"); }
+      assert.equal(await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open), false);
+    }
+    try { await previous.evaluate((element) => { if (element instanceof HTMLElement && element.isConnected) element.focus(); }); }
+    finally { await previous.dispose(); }
+  }
 }
 
 /** One real guide exercises the shared control; restore before any later route. */
-async function verifyGuideAppearance(page: Page): Promise<void> {
+async function verifyGuideAppearance(page: Page, systemMode: "light" | "dark"): Promise<void> {
   const menu = page.locator("details[data-oompa-appearance]");
   assert.equal(await menu.count(), 1);
   const summary = menu.locator("summary");
@@ -816,13 +1063,24 @@ async function verifyGuideAppearance(page: Page): Promise<void> {
   await page.keyboard.press("Enter");
   const mode = menu.locator("select[data-oompa-mode]");
   await mode.selectOption("light");
-  await page.waitForFunction(() => document.documentElement.dataset.palette === "catppuccin" && document.documentElement.dataset.theme === "light"
+  await page.waitForFunction(() => document.documentElement.dataset.palette === "paper" && document.documentElement.dataset.theme === "light"
     && getComputedStyle(document.documentElement).colorScheme === "light");
-  assert.equal(await summary.getAttribute("aria-label"), "Appearance: Catppuccin, Light");
+  assert.equal(await summary.getAttribute("aria-label"), "Appearance: Paper, Light");
   await mode.selectOption("dark");
   await page.waitForFunction(() => document.documentElement.dataset.theme === "dark"
     && getComputedStyle(document.documentElement).colorScheme === "dark");
   await defaultPalette(page, false);
+  const palette = menu.locator("select[data-oompa-palette]");
+  await palette.selectOption("gruvbox");
+  await page.waitForFunction(() => document.documentElement.dataset.palette === "gruvbox");
+  await page.reload();
+  await page.waitForFunction(() => document.documentElement.dataset.palette === "gruvbox" && document.documentElement.dataset.theme === "dark");
+  assert.equal(await summary.getAttribute("aria-label"), "Appearance: Gruvbox, Dark");
+  await summary.focus(); await page.keyboard.press("Enter");
+  await palette.selectOption("paper");
+  await mode.selectOption("system");
+  await page.waitForFunction((expected) => document.documentElement.dataset.palette === "paper" && document.documentElement.dataset.theme === expected, systemMode);
+  await defaultPalette(page, false, systemMode);
   await mode.focus();
   await page.keyboard.press("Escape");
   assert.equal(await menu.evaluate((element) => (element as HTMLDetailsElement).open), false);
@@ -835,8 +1093,8 @@ export function assertAppColorScheme(value: unknown, profile: Pick<Profile, "for
   assert.equal(sample.forced, profile.forced, "Forced-colors media did not match the requested profile");
   assert.equal(sample.forcedColorAdjust, "auto", "App opted out of the user's forced-color palette");
   // CSS Color Adjustment §3.1 forces the computed value to "light dark".
-  // Ordinary profiles, including a light OS preference, retain authored dark.
-  assert.equal(sample.colorScheme, profile.forced ? "light dark" : "dark", "App color scheme did not match the verified color-adjustment mode");
+  // Ordinary profiles resolve the product's System default to the requested OS mode.
+  assert.equal(sample.colorScheme, profile.forced ? "light dark" : profile.colorScheme ?? "dark", "App color scheme did not match the verified color-adjustment mode");
 }
 
 export function assertDefaultButtonPresentation(value: unknown, placement: ButtonPlacement): void {
@@ -1470,8 +1728,12 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
   for (const [path, bytes] of siteDocuments) assert.deepEqual(siteFiles.get(path), bytes, "Site document changed during graph admission");
   assert.deepEqual(siteFiles.get(foundationPath), foundationBytes, "Site foundation changed during graph admission");
   const publicFontRoot = await realpath(dirname(fileURLToPath(import.meta.resolve("@hraness/design-kit/fonts.css"))));
-  const publicFonts = new Map(await Promise.all(sitePublicFonts.map(async (path) => [path, await ordinary(join(publicFontRoot, "fonts", path))] as const)));
-  const siteGraph = snapshotStaticSite(siteFiles, publicFonts);
+  const preset = await snapshotMarketingPreset(join(root, "site/vendor/marketing-preset"));
+  await checkLanternMaterialSnapshot(join(root, "site/vendor/lantern-material"));
+  const publicFonts = new Map(await Promise.all(siteInstalledPublicFonts.map(async (path) => [path, await ordinary(join(publicFontRoot, "fonts", path))] as const)));
+  const presetFont = preset.files.get(`fonts/${sitePresetFont}`); assert.ok(presetFont !== undefined);
+  publicFonts.set(sitePresetFont, presetFont);
+  const siteGraph = snapshotStaticSite(siteFiles, publicFonts, preset.files);
   const appCsp = productionCsp(JSON.parse((await ordinary(join(root, "app/vercel.json"))).toString("utf8")) as unknown, "/(.*)");
   const siteConfiguration: unknown = JSON.parse((await ordinary(join(root, "vercel.json"))).toString("utf8"));
   const { siteCsp, previewCsp, productPreviewCsp } = siteProductionCsp(siteConfiguration);
@@ -1590,7 +1852,7 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             colorScheme: css.colorScheme, forcedColorAdjust: css.forcedColorAdjust,
           };
         }), profile);
-        await defaultPalette(page, profile.forced);
+        await defaultPalette(page, profile.forced, profile.colorScheme ?? "dark");
         await cleanDocument(page);
         mark("production-anonymous:negative-css");
         await negativeStylesheet(page, "button", "/stylex.css", negativeReporter("production-anonymous:negative-css"), restorationBoundary);
@@ -1604,8 +1866,13 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
           await page.locator("#root button").first().waitFor();
           await settle(page);
           await cleanDocument(page);
-          await defaultPalette(page, profile.forced);
+          await defaultPalette(page, profile.forced, profile.colorScheme ?? "dark");
           if (view === "grid") {
+            const usage = page.getByRole("button", { name: "Codex usage unknown. Open usage history.", exact: true });
+            assert.ok(await usage.isVisible(), "Partial historical usage must remain unknown on the grid");
+            assert.equal(await usage.locator("meter").count(), 0);
+            await usage.click();
+            assert.equal(new URL(page.url()).hash, "#/settings/usage");
             const cards = page.locator("[data-session-id]");
             assert.equal(await cards.count(), 3);
             const before = await cards.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-session-id")));
@@ -1615,12 +1882,18 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             assert.deepEqual(await cards.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-session-id"))), [before[1], before[0], before[2]], "Keyboard card ordering did not preserve the displayed permutation");
             assert.ok(await page.getByLabel("Start a new session").isEnabled());
             assert.ok(await page.getByRole("button", { name: "Start", exact: true }).isDisabled());
+            await page.getByLabel("Start a new session").fill("Run `bun test src/value.test.ts` and report the exit status.");
+            assert.ok(await page.getByText(/Automatic effort: Max for this simple prompt\./u).isVisible());
             await page.getByLabel("Start a new session").fill("Fixture prompt only");
             assert.ok(await page.getByRole("button", { name: "Start", exact: true }).isEnabled());
+            assert.ok(await page.getByText(/Automatic effort: Ultra\./u).isVisible());
           }
           if (view === "session" || view === "session-long" || view === "retired") {
             assert.ok(await page.getByRole("heading", { name: "Browser fixture session", exact: true }).isVisible());
-            assert.ok(await page.getByText("compiled presentation", { exact: true }).isVisible());
+            // Older responses fold to one summary line; only the newest stays open.
+            assert.ok(await page.getByText(view === "session-long"
+              ? "Fixture transcript: compiled presentation and native controls."
+              : "compiled presentation", { exact: true }).isVisible());
             const bubble = await page.getByText("Review the browser fixture", { exact: true }).evaluate((element) => {
               const css = getComputedStyle(element);
               return { left: css.borderTopLeftRadius, right: css.borderTopRightRadius };
@@ -1634,10 +1907,19 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             for (const name of ["Attach a file", "Message this session", "Stop the turn"]) {
               assert.equal(await page.getByLabel(name, { exact: true }).isDisabled(), view === "retired");
             }
-            await page.getByRole("button", { name: "Session menu", exact: true }).click();
-            await page.getByRole("dialog").waitFor({ state: "visible" });
-            await page.keyboard.press("Escape");
-            await page.getByRole("dialog").waitFor({ state: "hidden" });
+            assert.equal(await page.getByLabel("Message this session", { exact: true }).evaluate((element) => element.tagName), "TEXTAREA");
+            await page.getByRole("button", { name: /^Session actions for /u }).click();
+            const settingsItem = page.getByRole("menuitem", { name: "Approvals and provider", exact: true });
+            await settingsItem.waitFor({ state: "visible" });
+            if (view === "retired") {
+              assert.ok(await settingsItem.isDisabled(), "Retired session still offers its settings sheet");
+              await page.keyboard.press("Escape");
+            } else {
+              await settingsItem.click();
+              await page.getByRole("dialog").waitFor({ state: "visible" });
+              await page.keyboard.press("Escape");
+              await page.getByRole("dialog").waitFor({ state: "hidden" });
+            }
             if (view === "session-long") {
               const quote = await page.locator("blockquote").first().evaluate((element) => {
                 const css = getComputedStyle(element);
@@ -1646,27 +1928,50 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
               assert.deepEqual(quote, profile.rtl
                 ? { left: "0px", right: "2px", paddingLeft: "0px", paddingRight: "12px" }
                 : { left: "2px", right: "0px", paddingLeft: "12px", paddingRight: "0px" }, "Markdown quote gutter did not follow inline start");
-              const scroller = page.locator("#root div").filter({ has: page.getByText("compiled presentation", { exact: true }) });
-              const scroll = await scroller.evaluateAll((elements) => {
-                const target = elements.find((element) => getComputedStyle(element).overflowY === "auto");
+              const collapsed = await page.getByRole("button", { expanded: false }).filter({ hasText: "Transcript row" }).count();
+              assert.ok(collapsed > 0, "Older responses did not start collapsed");
+              const scroll = await page.getByRole("log", { name: /^Conversation of /u }).evaluate((target) => {
                 if (!(target instanceof HTMLElement)) return null;
                 target.scrollTop = 0;
                 const start = target.scrollTop;
                 target.scrollTop = target.scrollHeight;
                 return { start, end: target.scrollTop, viewport: target.clientHeight, content: target.scrollHeight,
-                  pageHeight: document.documentElement.scrollHeight, screen: innerHeight };
+                  overflow: getComputedStyle(target).overflowY, screen: innerHeight };
               });
-              assert.ok(scroll !== null && scroll.start === 0 && scroll.end > 0 && scroll.content > scroll.viewport);
-              assert.ok(scroll.pageHeight <= scroll.screen + 1, "Long history escaped its bounded transcript scroller");
+              assert.ok(scroll !== null && scroll.start === 0 && scroll.end > 0 && scroll.content > scroll.viewport && scroll.overflow === "auto");
+              assert.ok(scroll.viewport <= scroll.screen * 0.6 + 1, "Long history escaped its bounded conversation scroller");
               assert.ok(await page.getByLabel("Message this session", { exact: true }).isVisible());
             }
           }
           if (view === "settings") {
             assert.ok(await page.getByRole("heading", { name: "Settings", exact: true }).isVisible());
+            const usageHistory = page.locator("#usage");
+            assert.ok(await usageHistory.getByRole("heading", { name: "Usage history", exact: true }).isVisible());
+            assert.ok(await usageHistory.getByText("62% left in the last daily report.", { exact: true }).isVisible());
+            assert.ok(await usageHistory.getByText("The latest report is stale, expired or incomplete; usage unknown.", { exact: true }).isVisible());
+            const report = usageHistory.locator("details").first();
+            await report.locator("summary").click();
+            assert.ok(await report.getByText(/38% used when reported · reset scheduled for/u).isVisible());
+            const automaticEffort = page.getByRole("switch", { name: "Automatic effort", exact: true });
+            assert.equal(await automaticEffort.getAttribute("aria-checked"), "true");
+            await automaticEffort.click();
+            assert.equal(await automaticEffort.getAttribute("aria-checked"), "false");
+            await page.reload();
+            await automaticEffort.waitFor();
+            assert.equal(await automaticEffort.getAttribute("aria-checked"), "false", "Automatic effort disable did not survive reload");
+            await page.goto(`${fixture.origin}/?view=grid`);
+            await page.getByLabel("Start a new session").fill("Run `bun test src/value.test.ts` and report the exit status.");
+            assert.ok(await page.getByText(/Automatic effort is off: Ultra\./u).isVisible());
+            await page.goto(`${fixture.origin}/?view=settings`);
+            await automaticEffort.waitFor();
+            await automaticEffort.click();
+            assert.equal(await automaticEffort.getAttribute("aria-checked"), "true");
+            await page.evaluate((direction) => { document.documentElement.dir = direction; }, profile.rtl ? "rtl" : "ltr");
+            await settle(page);
             assert.ok((await page.getByText("Fixture machine", { exact: true }).count()) > 0);
             assert.ok(await page.getByText("Last reported Codex default", { exact: true }).isVisible());
             assert.ok(await page.getByText(
-              "gpt-5.6-sol / ultra. Reported configuration only, not session state or runtime capability.",
+              "gpt-6-astra / ultra. Reported configuration only, not session state or runtime capability.",
               { exact: true },
             ).isVisible());
           }
@@ -1698,7 +2003,8 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
               else responseOverflow = true;
               return;
             }
-            if (new URL(response.url()).origin !== site.origin || !["stylesheet", "font"].includes(response.request().resourceType())) return;
+            const resourceUrl = new URL(response.url());
+            if (resourceUrl.origin !== site.origin || (!["stylesheet", "font"].includes(response.request().resourceType()) && !siteGraph.textures.includes(resourceUrl.pathname.slice(1)))) return;
             if (responses.length < 64) responses.push({ response, body: captureBrowserResponseBody(response) });
             else responseOverflow = true;
           };
@@ -1707,10 +2013,8 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             if (productRequests.length < 256) productRequests.push(request);
             else responseOverflow = true;
           };
-          page.on("response", capture);
-          page.on("request", captureProduct);
           const settleResources = () => settleBrowserResponseBodies([...responses, ...productResponses].map(({ body }) => body));
-          try {
+          await withBrowserResourceCapture(page, capture, captureProduct, async () => {
             mark(`static-site:${routeLabel}:navigation`);
             const response = await page.goto(`${site.origin}${route.pathname}`);
             assert.ok(response !== null);
@@ -1729,7 +2033,7 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             mark(`static-site:${routeLabel}:font-load`);
             const fonts = await page.evaluate(async () => {
               const faces = [...document.fonts];
-              if (faces.length !== 13) throw new Error("Native font-face inventory is incomplete");
+              if (faces.length !== 14) throw new Error("Native font-face inventory is incomplete");
               await Promise.all(faces.map((face) => face.load()));
               return faces.map((face) => ({ family: face.family, style: face.style, weight: face.weight, status: face.status }));
             });
@@ -1751,7 +2055,7 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             mark(`static-site:${routeLabel}:color-scheme`);
             assert.equal(await page.evaluate(() => matchMedia("(prefers-color-scheme: light)").matches), profile.colorScheme === "light");
             mark(`static-site:${routeLabel}:background`);
-            await defaultPalette(page, profile.forced);
+            await defaultPalette(page, profile.forced, profile.colorScheme ?? "dark", route.pathname === "/preview/");
             mark(`static-site:${routeLabel}:heading-style`);
             assert.ok(await page.locator(route.heading).evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize) > 24));
             mark(`static-site:${routeLabel}:inertness`);
@@ -1783,11 +2087,8 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
                 await page.waitForFunction(() => document.querySelector("figure[data-product-preview] [data-preview-status]")?.textContent === "");
               }
             }
-            if (profile.name === "desktop" && route.pathname === "/docs/reference/") {
-              mark("static-site:docs-reference:appearance-menu");
-              await verifyGuideAppearance(page);
-              evidence.push({ name: "desktop:docs-reference:appearance-menu", values: "light, dark restoration, Escape, and focus passed" });
-            }
+            mark(`static-site:${routeLabel}:material`);
+            evidence.push({ name: `${profile.name}:static-site:${route.path}:material`, values: await verifySiteMaterial(page, route.pathname, profile) });
             assert.equal(responseOverflow, false, "Static resource census exceeded its bound");
             mark(`static-site:${routeLabel}:resource-bytes`);
             await settleResources();
@@ -1804,7 +2105,11 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
               assert.deepEqual(bytes, siteFiles.get(key), "Native resource differs from its retained output identity");
               return { path: key, bytes: bytes.length, sha256: digest(bytes) };
             }));
-            assert.deepEqual(delivered.map(({ path }) => path).sort(), [...siteGraph.stylesheets, ...siteGraph.fonts].sort(), "Native CSS/font linkage was incomplete or redundant");
+            // Only the normal homepage mounts the two immutable textures. The
+            // desktop transparency probe restores the original material before
+            // this census; guides, inert preview and forced colors stay plain.
+            const expectedTextures = route.pathname === "/" && !profile.forced ? siteGraph.textures : [];
+            assert.deepEqual(delivered.map(({ path }) => path).sort(), [...siteGraph.stylesheets, ...siteGraph.fonts, ...expectedTextures].sort(), "Native CSS/font/texture linkage differs from the exact route and media inventory");
             for (const request of productRequests) {
               const url = new URL(request.url()), key = url.pathname.slice(1);
               assert.equal(url.origin, site.origin, "A product frame requested an external resource");
@@ -1832,7 +2137,14 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             }));
             evidence.push({ name: `${profile.name}:static-site:${route.path}:product-resources`, values: { requests: productRequests.length, delivered: productDelivered } });
             evidence.push({ name: `${profile.name}:static-site:${route.path}`, values: { documentSha256: digest(documentBytes), fonts, delivered: delivered.sort((a, b) => a.path.localeCompare(b.path)) } });
-          } finally { page.off("response", capture); page.off("request", captureProduct); }
+          });
+          if (profile.name === "desktop" && route.pathname === "/docs/reference/") {
+            // Persistence reloads the guide. Finish the exact per-document resource
+            // census first so the second document cannot masquerade as duplicates.
+            mark("static-site:docs-reference:appearance-menu");
+            await verifyGuideAppearance(page, profile.colorScheme ?? "dark");
+            evidence.push({ name: "desktop:docs-reference:appearance-menu", values: "light, dark, saved palette reload, System restoration, Escape, and focus passed" });
+          }
         }
         if (profile.name === "desktop") {
           mark("static-site:docs:search");
@@ -1882,7 +2194,7 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
     }
     assert.deepEqual(artifacts(await inventory(join(root, "app/dist"))), artifacts(appFiles));
     assert.deepEqual(artifacts(await inventory(siteRoot, siteFontPaths)), artifacts(siteFiles));
-    for (const [path, bytes] of publicFonts) assert.deepEqual(await ordinary(join(publicFontRoot, "fonts", path)), bytes, "Public font input changed during browser acceptance");
+    await assertSitePublicFontsUnchanged(publicFontRoot, join(root, "site/vendor/marketing-preset"), publicFonts);
     assert.deepEqual(await ordinary(join(root, "package.json")), packageBytes);
     assert.deepEqual(await ordinary(join(root, "bun.lock")), lockBytes);
     assert.deepEqual(await admission.verify(admission, root, run), handoff, "Browser preparation changed during acceptance");
@@ -1912,6 +2224,7 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
         app: artifacts(appFiles), site: artifacts(siteFiles), fixture: fixtureArtifacts,
         appCspSha256: digest(appCsp), siteCspSha256: digest(siteCsp), previewCspSha256: digest(previewCsp), productPreviewCspSha256: digest(productPreviewCsp),
         sitePublicFonts: artifacts(publicFonts),
+        siteMarketingPreset: { sourceCommit: preset.sourceCommit, inputs: artifacts(preset.files), textures: siteGraph.textures },
         fixtureIoAliases: ["@convex-dev/auth/react", ...browserIoModules], productIoAliases: ["@convex-dev/auth/react", ...productIoModules], evidence,
         profileDiagnostics, ...(failure === undefined ? {} : { failure: browserFailureDetails(failure) }),
       };

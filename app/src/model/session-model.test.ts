@@ -6,7 +6,6 @@ import {
   initialSessionModel,
   maximumStreamingCharacters,
   sessionModelReducer,
-  streamingTail,
   type SessionModel,
 } from "./session-model";
 
@@ -351,15 +350,5 @@ describe("derivedTitle", () => {
     const title = derivedTitle("x".repeat(200));
     expect(title.length).toBe(72);
     expect(title.endsWith("…")).toBe(true);
-  });
-});
-
-describe("streamingTail", () => {
-  test("keeps only the last lines", () => {
-    expect(streamingTail("a\nb\nc\nd", 2)).toBe("c\nd");
-  });
-
-  test("returns everything when it already fits", () => {
-    expect(streamingTail("a\nb", 40)).toBe("a\nb");
   });
 });

@@ -263,7 +263,6 @@ import {
   type CodexRuntimePort,
   type CodexSessionObservation,
   type CodexSessionProjection,
-  type DesktopSwitchPort,
   type ProfileAuthority,
   type RuntimeStartReviewOf,
   type SessionRuntimePort,
@@ -1558,7 +1557,6 @@ export class OompaService {
   readonly #claudeProcessLiveness: ClaudeProcessLivenessProbe | undefined;
   readonly #claudeFacts: ClaudeSessionFactTranslator;
   readonly #personalClaudeFacts: ClaudeSessionFactTranslator | undefined;
-  readonly #desktop: DesktopSwitchPort | undefined;
   readonly #cloud: CloudControlPort;
   readonly #daemonAuthority: Pick<DaemonAuthorityFence, "assertCurrent" | "close">;
   readonly #requestStop: () => void;
@@ -1685,7 +1683,6 @@ export class OompaService {
     claudeProcessLiveness?: ClaudeProcessLivenessProbe;
     cloud: CloudControlPort;
     daemonAuthority: Pick<DaemonAuthorityFence, "assertCurrent" | "close">;
-    desktop?: DesktopSwitchPort;
     eventCursors?: SessionEventCursorCodec;
     usageHistoryCursors?: UsageHistoryCursorCodec;
     eventWaiters?: SessionEventWaiters;
@@ -1835,7 +1832,6 @@ export class OompaService {
     );
     this.#workWaiters = input.workWaiters ?? new WorkEventWaiters();
     this.#now = input.now ?? Date.now;
-    this.#desktop = input.desktop;
     this.#requestStop = input.requestStop;
   }
 
@@ -2328,8 +2324,6 @@ export class OompaService {
         }
         case "usage.auto.status":
         case "usage.auto.set": return this.#automaticUsagePolicyCommand(command);
-        case "account.switch": { const profile = this.#store.requireProfile(command.account); return await this.#serialize("desktop-switch", async () => this.#switchAccount(profile.id, command.idempotencyKey, context.signal)); }
-        case "account.switch-recover": return await this.#serialize("desktop-switch", async () => this.#recoverDesktopSwitch(context.signal));
         case "plugin.list": {
           const profile = this.#store.requireProfile(command.account);
           return await this.#serialize(`account:${profile.id}`, async () =>
@@ -10253,32 +10247,12 @@ export class OompaService {
         problems.push("A configured project directory is missing or unsafe. Run `oompa project list`, then restore or repair every listed directory so it is readable, writable, traversable, and canonical.");
       }
     }
-    let desktopRecovery: unknown = { status: "unavailable" };
-    if (this.#desktop !== undefined) {
-      try {
-        desktopRecovery = await this.#fencedEffect(async () => await this.#desktop?.currentRecovery());
-        if (
-          desktopRecovery !== null &&
-          typeof desktopRecovery === "object" &&
-          "status" in desktopRecovery &&
-          desktopRecovery.status === "recovery_required"
-        ) {
-          problems.push("A desktop switch is unresolved. Run `oompa account switch-recover`.");
-        }
-      } catch (error: unknown) {
-        if (error instanceof DaemonAuthoritySafetyError) throw error;
-        const diagnostic = "Desktop switch recovery failed without exposing its runtime diagnostic.";
-        desktopRecovery = { status: "invalid", diagnostic };
-        problems.push(diagnostic);
-      }
-    }
     return {
       healthy: problems.length === 0,
       offline,
       runtime: { bun: Bun.version, requiredBun: "1.3.14", bunReady, codex, platform: process.platform, architecture: process.arch },
       state: { database: "ready", profiles: this.#store.listProfiles().length, projects: projects.length, unsettledMutations: this.#store.listUnsettledMutations().length },
       cloud,
-      desktop: { supportedPlatform: process.platform === "darwin", configured: this.#desktop !== undefined, recovery: desktopRecovery },
       problems,
     };
   }
@@ -12460,34 +12434,6 @@ export class OompaService {
       entries,
       nextCursor,
     });
-  }
-
-  async #switchAccount(selector: string, idempotencyKey: string, signal: AbortSignal): Promise<unknown> {
-    if (this.#desktop === undefined) throw new CommandFailure("UNAVAILABLE", "Desktop account switching is available only on a supported macOS ChatGPT build.");
-    const desktop = this.#desktop;
-    const target = this.#store.requireProfile(selector);
-    if (target.state !== "signed_in") throw new CommandFailure("CONFLICT", "The target account is not signed in.");
-    const result = await this.#fencedEffect(async () => await desktop.switchAccount({
-      idempotencyKey,
-      target: this.#profileAuthority(target, "codex"),
-      signal,
-    }));
-    if (result.status === "recovery_required") {
-      throw new CommandFailure(
-        "RECOVERY_REQUIRED",
-        result.diagnostic ?? "Desktop account switch requires recovery.",
-        { idempotencyKey: result.idempotencyKey, action: "oompa account switch-recover" },
-      );
-    }
-    return result;
-  }
-
-  async #recoverDesktopSwitch(signal: AbortSignal): Promise<unknown> {
-    if (this.#desktop === undefined) {
-      throw new CommandFailure("UNAVAILABLE", "Desktop account switching is available only on a supported macOS ChatGPT build.");
-    }
-    const desktop = this.#desktop;
-    return await this.#fencedEffect(async () => await desktop.recoverSwitch({ signal }));
   }
 
   async #assertCompactProjectionRecoveryReady(
@@ -18114,7 +18060,12 @@ export class OompaService {
           ? undefined
           : await this.#requireUsableProjectRoot(project.rootPath);
         const targetRuntime = this.#sessionRuntime(record.targetAuthority.provider);
-        const requirement = presetRequirementForContract(record.targetPreset, record.targetPresetContract);
+        // The stored target contract is historical data, so the typed lookup is
+        // widened back to "maybe absent" rather than trusted from the type alone.
+        const requirement = presetRequirementForContract(
+          record.targetPreset,
+          record.targetPresetContract,
+        ) as PresetRequirement | undefined;
         if (requirement === undefined) throw new CommandFailure("CONFLICT", "The provider-switch target has no admitted preset contract.");
         targetReview = await this.#fencedRuntimeReview(targetRuntime, async () => await targetRuntime.reviewSessionStart({
           authority: authorityFor(this.#paths, targetProfile as ProfileRecord, record.targetAuthority),

@@ -30,6 +30,8 @@ const commandListUnacknowledgedName = "commands:listUnacknowledgedForRequester" 
 const deviceCommandGetName = "deviceCommands:get" satisfies CloudQuery;
 const deviceCommandListUnacknowledgedName =
   "deviceCommands:listUnacknowledgedForRequester" satisfies CloudQuery;
+const usageListAccountsName = "usage:listAccounts" satisfies CloudQuery;
+const usageListSnapshotsName = "usage:listSnapshots" satisfies CloudQuery;
 
 const registerName = "devices:register" satisfies CloudMutation;
 const beginBindName = "devices:beginBind" satisfies CloudMutation;
@@ -156,6 +158,15 @@ export const deviceCommandListUnacknowledged = makeFunctionReference<
   { limit: number },
   unknown
 >(deviceCommandListUnacknowledgedName);
+
+export const usageListAccounts =
+  makeFunctionReference<"query", { limit: number }, unknown>(usageListAccountsName);
+
+export const usageListSnapshots = makeFunctionReference<
+  "query",
+  { accountPublicId: string; limit: number },
+  unknown
+>(usageListSnapshotsName);
 
 export const registerDevice =
   makeFunctionReference<"mutation", WireRegisterArgs, unknown>(registerName);

@@ -410,8 +410,8 @@ function fixture(): Fixture {
   database.query("INSERT INTO projects(id) VALUES (?)").run(projectId);
   for (const sessionId of [actorSessionId, reviewerSessionId]) {
     database.query(
-      `INSERT INTO sessions(id,profile_id,project_id,preset,fast_enabled,state,canonical_profile_key)
-       VALUES (?,?,?,'high',0,'active','codex:gpt-5.6-sol:max')`,
+      `INSERT INTO sessions(id,profile_id,project_id,preset,fast_enabled,state,preset_contract,canonical_profile_key)
+       VALUES (?,?,?,'high',0,'active',2,'codex:gpt-6-astra:max')`,
     ).run(sessionId, accountId, projectId);
   }
   database.exec(LEGACY_CANONICAL_PROFILE_GUARDS_SQL);
@@ -999,7 +999,7 @@ describe("WorkStore canonical profile runtime", () => {
       test(`writes own Work ${contract}/${preset} identity without a public field`, () => {
         const value = fixture();
         const created = createWork(value, [taskSpec(value, "canonical", { preset })]);
-        if (contract === 2) rewriteWorkPresetContract(value, created.work.id, contract);
+        if (contract === 1) rewriteWorkPresetContract(value, created.work.id, contract);
         setSessionProfile(value, value.actorSessionId, { preset, contract });
         const claimed = claim(value, {
           workId: created.work.id, taskId: created.tasks[0]!.id, revision: created.tasks[0]!.revision,
@@ -1074,7 +1074,7 @@ describe("WorkStore canonical profile runtime", () => {
     ], () => {
       for (const table of ["work_routes", "work_tasks", "work_attempts"] as const) {
         value.database.query(
-          `UPDATE ${table} SET canonical_profile_key='codex:gpt-6-astra:max' WHERE work_id=?`,
+          `UPDATE ${table} SET canonical_profile_key='codex:gpt-5.6-sol:max' WHERE work_id=?`,
         ).run(created.work.id);
       }
     });
@@ -1623,7 +1623,7 @@ describe("WorkStore schema and atomic plans", () => {
     const created = createWork(value);
     expect(value.database.query(
       "SELECT preset_contract FROM works WHERE id=?",
-    ).get(created.work.id)).toEqual({ preset_contract: 1 });
+    ).get(created.work.id)).toEqual({ preset_contract: 2 });
     const page = value.store.events(created.work.id, 0, 20);
     expect(page.events.map((event) => event.body.type)).toEqual(["work.created"]);
     expect(page.events[0]?.sequence).toBe(1);
@@ -1691,8 +1691,8 @@ describe("WorkStore schema and atomic plans", () => {
     expect(() => assertReadonlyWorkSchema(value.database)).not.toThrow();
     value.database.exec("PRAGMA foreign_keys=OFF");
     value.database.query(
-      `INSERT INTO sessions(id,profile_id,project_id,preset,fast_enabled,state,canonical_profile_key)
-       VALUES (?,?,?,'high',0,'active','codex:gpt-5.6-sol:max')`,
+      `INSERT INTO sessions(id,profile_id,project_id,preset,fast_enabled,state,preset_contract,canonical_profile_key)
+       VALUES (?,?,?,'high',0,'active',2,'codex:gpt-6-astra:max')`,
     ).run(createSessionId(), createProfileId(), value.projectId);
     value.database.exec("PRAGMA foreign_keys=ON");
     expect(value.database.query("PRAGMA foreign_key_check").all()).toHaveLength(1);
@@ -1718,8 +1718,8 @@ describe("WorkStore schema and atomic plans", () => {
 
     const freshCoordinatorSessionId = createSessionId();
     value.database.query(
-      `INSERT INTO sessions(id,profile_id,project_id,preset,fast_enabled,state,canonical_profile_key)
-       VALUES (?,?,?,'high',0,'active','codex:gpt-5.6-sol:max')`,
+      `INSERT INTO sessions(id,profile_id,project_id,preset,fast_enabled,state,preset_contract,canonical_profile_key)
+       VALUES (?,?,?,'high',0,'active',2,'codex:gpt-6-astra:max')`,
     ).run(freshCoordinatorSessionId, value.accountId, value.projectId);
     const freshKey = randomUUID();
     const fresh = value.store.apply({
@@ -1825,7 +1825,9 @@ describe("WorkStore schema and atomic plans", () => {
 
   test("rejects a Sol-bound Work row owned by a historical Devin coordinator", () => {
     const value = fixture();
-    createWork(value);
+    const created = createWork(value);
+    // A reduced contract 1 (Sol) Work, not an untouched old-release artifact.
+    rewriteWorkPresetContract(value, created.work.id, 1);
     value.database.exec("DROP TRIGGER work_session_devin_contract_guard");
     setSessionProfile(value, value.actorSessionId, { provider: "devin", preset: "ultra", contract: 2 });
     value.database.exec(WORK_SCHEMA_SQL);
@@ -1926,35 +1928,35 @@ describe("WorkStore schema and atomic plans", () => {
     })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
     expect(() => value.store.apply(operation, operation.idempotencyKey, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
     })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
     expect(counts()).toEqual({ intents: 0, works: 0 });
 
     const applied = value.store.apply(operation, operation.idempotencyKey, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 1,
+      presetContract: 2,
     });
     if (applied.kind !== "work.create") throw new Error("unexpected result");
     expect(value.store.apply(structuredClone(operation), operation.idempotencyKey, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 1,
+      presetContract: 2,
     })).toEqual(applied);
     expect(() => value.store.apply(operation, operation.idempotencyKey, {
       version: WORK_APPLY_REQUEST_LEGACY_VERSION,
     })).toThrow(new WorkStoreError("IDEMPOTENCY_CONFLICT"));
     expect(() => value.store.apply(operation, operation.idempotencyKey, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
     })).toThrow(new WorkStoreError("IDEMPOTENCY_CONFLICT"));
 
     rewriteIntentDigest(value, operation.idempotencyKey, requestDigest(operation));
-    rewriteWorkPresetContract(value, applied.work.id, 2);
+    rewriteWorkPresetContract(value, applied.work.id, 1);
     expect(value.store.apply(operation, operation.idempotencyKey, {
       version: WORK_APPLY_REQUEST_LEGACY_VERSION,
     })).toEqual(applied);
     expect(() => value.store.apply(operation, operation.idempotencyKey, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
     })).toThrow(new WorkStoreError("IDEMPOTENCY_CONFLICT"));
 
     const historicalV2 = {
@@ -1964,18 +1966,18 @@ describe("WorkStore schema and atomic plans", () => {
     } satisfies WorkOperation;
     const historicalResult = value.store.apply(historicalV2, historicalV2.idempotencyKey, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 1,
+      presetContract: 2,
     });
     if (historicalResult.kind !== "work.create") throw new Error("unexpected result");
     rewriteIntentDigest(value, historicalV2.idempotencyKey, requestDigest({
       requestVersion: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
       operation: historicalV2,
     }));
-    rewriteWorkPresetContract(value, historicalResult.work.id, 2);
+    rewriteWorkPresetContract(value, historicalResult.work.id, 1);
     expect(value.store.apply(historicalV2, historicalV2.idempotencyKey, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
     })).toEqual(historicalResult);
 
     const beforeFreshStale = counts();
@@ -1985,7 +1987,7 @@ describe("WorkStore schema and atomic plans", () => {
       clientRef: "source-bound-fresh-stale-v2",
     }, undefined, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
     })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
     expect(counts()).toEqual(beforeFreshStale);
   });
@@ -2084,34 +2086,34 @@ describe("WorkStore schema and atomic plans", () => {
     const applied = value.store.apply(
       reboundOperation,
       reboundOperation.idempotencyKey,
-      { version: WORK_APPLY_REQUEST_VERSION, presetContract: 1 },
+      { version: WORK_APPLY_REQUEST_VERSION, presetContract: 2 },
     );
     if (applied.kind !== "task.addBatch") throw new Error("unexpected result");
     expect(() => value.store.apply(
       reboundOperation,
       reboundOperation.idempotencyKey,
-      { version: WORK_APPLY_REQUEST_VERSION, presetContract: 2 },
+      { version: WORK_APPLY_REQUEST_VERSION, presetContract: 1 },
     )).toThrow(new WorkStoreError("IDEMPOTENCY_CONFLICT"));
 
     // Recreate an immutable Work written by the preceding contract. The exact
     // applied intent remains historical, while any new rebound task must be
     // admitted under the active Work contract.
-    rewriteWorkPresetContract(value, created.work.id, 2);
+    rewriteWorkPresetContract(value, created.work.id, 1);
     assertWorkSchema(value.database);
     expect(value.store.apply(
       structuredClone(reboundOperation),
       reboundOperation.idempotencyKey,
-      { version: WORK_APPLY_REQUEST_VERSION, presetContract: 1 },
+      { version: WORK_APPLY_REQUEST_VERSION, presetContract: 2 },
     )).toEqual(applied);
     rewriteIntentDigest(value, reboundOperation.idempotencyKey, requestDigest({
       requestVersion: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
       operation: reboundOperation,
     }));
     expect(value.store.apply(
       structuredClone(reboundOperation),
       reboundOperation.idempotencyKey,
-      { version: WORK_APPLY_REQUEST_VERSION, presetContract: 2 },
+      { version: WORK_APPLY_REQUEST_VERSION, presetContract: 1 },
     )).toEqual(applied);
 
     const taskCount = value.database.query(
@@ -2131,11 +2133,11 @@ describe("WorkStore schema and atomic plans", () => {
     })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
     expect(() => value.store.apply(freshHigh, undefined, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
     })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
     expect(() => value.store.apply(freshHigh, undefined, {
       version: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 1,
+      presetContract: 2,
     })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
     expect(value.database.query(
       "SELECT COUNT(*) AS count FROM work_tasks WHERE work_id=?",
@@ -2380,31 +2382,31 @@ describe("WorkStore claims, fences, and prepared effects", () => {
   test("refuses a claim when the session and immutable work preset contracts differ", () => {
     const value = fixture();
     const created = createWork(value);
-    setSessionProfile(value, value.actorSessionId, { contract: 2 });
+    setSessionProfile(value, value.actorSessionId, { contract: 1 });
     expect(() => claim(value, {
       workId: created.work.id,
       taskId: created.tasks[0]!.id,
       revision: created.tasks[0]!.revision,
     })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
 
-    setSessionProfile(value, value.actorSessionId, { contract: 1 });
+    setSessionProfile(value, value.actorSessionId, { contract: 2 });
     expect(claim(value, {
       workId: created.work.id,
       taskId: created.tasks[0]!.id,
       revision: created.tasks[0]!.revision,
     }).attempt.fence).toBe(1);
-    expect(() => setSessionProfile(value, value.actorSessionId, { contract: 2 }))
+    expect(() => setSessionProfile(value, value.actorSessionId, { contract: 1 }))
       .toThrow("WORK_SESSION_ATTEMPT_AUTHORITY");
   });
 
-  test("reopens, authorizes, and settles an established contract-2 Codex Work dispatch", () => {
+  test("reopens, authorizes, and settles an established contract-1 Codex Work dispatch", () => {
     const value = fixture();
     const created = createWork(value);
 
     // Shape the preceding contract and its matching canonical provenance.
     // This remains a reduced fixture, not an untouched historical artifact.
-    rewriteWorkPresetContract(value, created.work.id, 2);
-    setSessionProfile(value, value.actorSessionId, { provider: "codex", preset: "high", contract: 2 });
+    rewriteWorkPresetContract(value, created.work.id, 1);
+    setSessionProfile(value, value.actorSessionId, { provider: "codex", preset: "high", contract: 1 });
     assertWorkSchema(value.database);
 
     const reopened = new WorkStore(value.database, {
@@ -2419,7 +2421,7 @@ describe("WorkStore claims, fences, and prepared effects", () => {
     expect(reopened.snapshot(created.work.id).work.id).toBe(created.work.id);
     expect(value.database.query(
       "SELECT preset_contract FROM works WHERE id=?",
-    ).get(created.work.id)).toEqual({ preset_contract: 2 });
+    ).get(created.work.id)).toEqual({ preset_contract: 1 });
 
     const claimed = claim(reopenedValue, {
       workId: created.work.id,
@@ -2781,11 +2783,16 @@ describe("WorkStore claims, fences, and prepared effects", () => {
       .toThrow(new WorkStoreError("MEMBER_NOT_FOUND"));
     expect(value.database.query("SELECT COUNT(*) AS count FROM work_signals").get())
       .toEqual({ count: 1 });
-    expect(() => setSessionProfile(value, value.actorSessionId, { provider: "devin", preset: "ultra", contract: 2 }))
+    // The frozen Devin contract is 2; only a contract-1 Work contradicts it.
+    // Keep that independent storage guard covered with a reduced historical Work.
+    const historical = fixture();
+    const historicalWork = createWork(historical);
+    rewriteWorkPresetContract(historical, historicalWork.work.id, 1);
+    expect(() => setSessionProfile(historical, historical.actorSessionId, { provider: "devin", preset: "ultra", contract: 2 }))
       .toThrow("WORK_DEVIN_PRESET_CONTRACT_MISMATCH");
-    expect(value.database.query(
+    expect(historical.database.query(
       "SELECT provider_v39,preset_contract FROM sessions WHERE id=?",
-    ).get(value.actorSessionId)).toEqual({ provider_v39: "codex", preset_contract: 1 });
+    ).get(historical.actorSessionId)).toEqual({ provider_v39: "codex", preset_contract: 2 });
   });
 
   test("fences provider identity and rechecks it before Codex task dispatch", () => {

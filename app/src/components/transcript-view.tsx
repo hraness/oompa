@@ -6,7 +6,7 @@ import { ChevronIcon } from "./icons";
 import { StaticMarkdown, StreamingMarkdown } from "../markdown/markdown";
 import type { AttachmentManifestEntry } from "../model/attachments";
 import { turnSummaryLine } from "../model/session-view";
-import type { TranscriptEntry } from "../model/transcript";
+import { latestAssistantKey, summaryLine, type TranscriptEntry } from "../model/transcript";
 import { transcriptStyles } from "./transcript-view.stylex";
 
 type UserMessageActor = Extract<TranscriptEntry, { kind: "user" }>["actor"];
@@ -29,6 +29,28 @@ const ClosedMessage = memo(function ClosedMessage(
   { text }: Readonly<{ text: string }>,
 ): ReactNode {
   return <StaticMarkdown text={text} />;
+});
+
+/**
+ * A closed assistant message folded to its first line. Every response except
+ * the newest starts this way, so a long history is a list of one-line
+ * summaries the reader scrolls and opens in place.
+ */
+const CollapsedMessage = memo(function CollapsedMessage({
+  onOpen,
+  text,
+}: Readonly<{ onOpen: () => void; text: string }>): ReactNode {
+  return (
+    <button
+      aria-expanded={false}
+      {...stylex.props(transcriptStyles.collapsed)}
+      onClick={onOpen}
+      type="button"
+    >
+      <ChevronIcon open={false} />
+      <span {...stylex.props(transcriptStyles.collapsedText)}>{summaryLine(text)}</span>
+    </button>
+  );
 });
 
 /**
@@ -107,35 +129,14 @@ export function ThinkingBlock({ text }: Readonly<{ text: string }>): ReactNode {
 
 export type TranscriptViewProps = Readonly<{
   entries: readonly TranscriptEntry[];
+  /**
+   * Closed responses the reader opened. The newest response is always open,
+   * and a streaming one cannot be folded while it grows.
+   */
+  expanded?: ReadonlySet<string>;
+  onExpand?: (key: string) => void;
   thinkingText: string;
 }>;
-
-function renderEntry(entry: TranscriptEntry): ReactNode {
-  switch (entry.kind) {
-    case "user":
-      return (
-        <UserBubble
-          actor={entry.actor}
-          attachments={entry.attachments}
-          key={entry.key}
-          text={entry.text}
-        />
-      );
-    case "turn_summary":
-      return (
-        <TurnMarker
-          filesTouched={entry.filesTouched}
-          gitActions={entry.gitActions}
-          key={entry.key}
-          runtimeMs={entry.runtimeMs}
-        />
-      );
-    case "assistant":
-      return entry.streaming
-        ? <StreamingMarkdown key={entry.key} text={entry.text} />
-        : <ClosedMessage key={entry.key} text={entry.text} />;
-  }
-}
 
 /**
  * The transcript.
@@ -145,10 +146,50 @@ function renderEntry(entry: TranscriptEntry): ReactNode {
  * produced no text yet. It renders nothing at all when the session has
  * show-thinking off, which is the default.
  */
-export function TranscriptView({ entries, thinkingText }: TranscriptViewProps): ReactNode {
+export function TranscriptView({
+  entries,
+  expanded,
+  onExpand,
+  thinkingText,
+}: TranscriptViewProps): ReactNode {
   const streamingIndex = entries
     .findIndex((entry) => entry.kind === "assistant" && entry.streaming);
+  const newest = latestAssistantKey(entries);
   const items: ReactNode[] = [];
+  const renderEntry = (entry: TranscriptEntry): ReactNode => {
+    switch (entry.kind) {
+      case "user":
+        return (
+          <UserBubble
+            actor={entry.actor}
+            attachments={entry.attachments}
+            key={entry.key}
+            text={entry.text}
+          />
+        );
+      case "turn_summary":
+        return (
+          <TurnMarker
+            filesTouched={entry.filesTouched}
+            gitActions={entry.gitActions}
+            key={entry.key}
+            runtimeMs={entry.runtimeMs}
+          />
+        );
+      case "assistant":
+        if (entry.streaming) return <StreamingMarkdown key={entry.key} text={entry.text} />;
+        if (entry.key === newest || expanded === undefined || expanded.has(entry.key)) {
+          return <ClosedMessage key={entry.key} text={entry.text} />;
+        }
+        return (
+          <CollapsedMessage
+            key={entry.key}
+            onOpen={() => { onExpand?.(entry.key); }}
+            text={entry.text}
+          />
+        );
+    }
+  };
   entries.forEach((entry, index) => {
     if (index === streamingIndex) items.push(<ThinkingBlock key="thinking" text={thinkingText} />);
     items.push(renderEntry(entry));

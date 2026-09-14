@@ -18,7 +18,7 @@ type CacheEntry = Readonly<{
  * Decrypted compact history, cached for the life of the tab and nowhere else.
  * The cache is keyed by session and account key version so a key rotation or a
  * sign-out with a different account never serves stale plaintext, and it is
- * cleared whenever custody locks.
+ * cleared whenever the account key is dropped.
  */
 const cache = new Map<string, CacheEntry>();
 

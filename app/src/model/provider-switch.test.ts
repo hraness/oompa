@@ -61,7 +61,7 @@ describe("the payload", () => {
     expect(built({ provider: "claude" }))
       .toEqual({ kind: setProviderCommandKind, provider: "claude" });
     expect(built({ provider: "codex" }))
-      .toEqual({ kind: "set_provider", presetContract: 1, provider: "codex" });
+      .toEqual({ kind: "set_provider", presetContract: 2, provider: "codex" });
   });
 
   test("carries a preset only when one was chosen", () => {
@@ -84,7 +84,7 @@ describe("the payload", () => {
     expect(built({ provider: "codex", preset: defaultSessionPresetForProvider("codex") }))
       .toEqual(buildDefaultSetProviderPayload("codex"));
     expect(buildDefaultSetProviderPayload("codex"))
-      .toEqual({ kind: "set_provider", preset: "ultra", presetContract: 1, provider: "codex" });
+      .toEqual({ kind: "set_provider", preset: "ultra", presetContract: 2, provider: "codex" });
     expect(buildDefaultSetProviderPayload("claude"))
       .toEqual({ kind: "set_provider", preset: "fable-max", provider: "claude" });
   });

@@ -2,9 +2,9 @@
 
 `@hraness/oompa` supplies the `oompa` command and local daemon. It manages isolated Codex and Claude Code profiles, durable sessions and command records, and optional encrypted sync. Provider tools own authentication and execution; Oompa does not broker model access.
 
-Local CLI v0.8.0 is a release candidate, not an admitted artifact; v0.7.1 remains the fully admitted public artifact. Current daemon and hosted command-writer rollout remains blocked on capacity.
+Local CLI v0.8.2 is a release candidate, not an admitted artifact; v0.8.1 remains the admitted canonical GitHub artifact. Current daemon and hosted command-writer rollout remains blocked on capacity.
 
-[CLI reference](https://oompa.dev/docs/reference/) · [Availability](https://oompa.dev/docs/status/)
+[CLI reference](https://oompa.app/docs/reference/) · [Availability](https://oompa.app/docs/status/)
 
 ## Requirements
 
@@ -14,23 +14,23 @@ Use Bun 1.3.14. Codex execution supports macOS and Linux; Claude Code execution 
 
 Use the exact tagged installer for the artifact you intend to install. It checks the release identity and source digests before installation. Do not replace its command with a moving package tag.
 
-> This release candidate is not yet admitted. The v0.8.0 install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v0.7.1; use its immutable installation notes for the existing artifact. [Admitted release installation notes](https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install).
+> This release candidate is not yet admitted. The v0.8.2 install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v0.8.1; use its immutable GitHub release assets for the existing artifact. The v0.8.1 npm mirror is not admitted. [Admitted GitHub release assets](https://github.com/hraness/oompa/releases/tag/v0.8.1).
 
-The v0.8.0 candidate is not yet admitted. For the admitted v0.7.1 artifact, use its [immutable README](https://github.com/hraness/oompa/tree/v0.7.1#get-started).
+The v0.8.2 candidate is not yet admitted. For the admitted v0.8.1 artifact, use its [verified installation notes](https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact).
 
-Only after immutable GitHub release admission, install and verify the v0.8.0 candidate CLI artifact. This does not start the daemon:
+Only after immutable GitHub release admission, install and verify the v0.8.2 candidate CLI artifact. This does not start the daemon:
 
 ```sh
-test "$(unset BUN_OPTIONS NODE_OPTIONS LD_AUDIT LD_LIBRARY_PATH LD_ORIGIN_PATH LD_PRELOAD DYLD_FALLBACK_FRAMEWORK_PATH DYLD_FALLBACK_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_IMAGE_SUFFIX DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_ROOT_PATH DYLD_VERSIONED_FRAMEWORK_PATH DYLD_VERSIONED_LIBRARY_PATH && curl -fsSL --connect-timeout 10 --max-time 60 --max-filesize 524288 --retry 3 --retry-delay 1 --retry-max-time 60 --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/hraness/oompa/v0.8.0/src/install-preflight-runtime.ts | command bun --no-env-file --config=/dev/null -e 'const n=["BUN_OPTIONS","NODE_OPTIONS","LD_AUDIT","LD_LIBRARY_PATH","LD_ORIGIN_PATH","LD_PRELOAD","DYLD_FALLBACK_FRAMEWORK_PATH","DYLD_FALLBACK_LIBRARY_PATH","DYLD_FRAMEWORK_PATH","DYLD_IMAGE_SUFFIX","DYLD_INSERT_LIBRARIES","DYLD_LIBRARY_PATH","DYLD_ROOT_PATH","DYLD_VERSIONED_FRAMEWORK_PATH","DYLD_VERSIONED_LIBRARY_PATH"],x=process.execArgv;const c=x.filter(v=>v==="-c"||v.startsWith("--config"));if(n.some(k=>process.env[k]!==undefined)||x.filter(v=>v==="--no-env-file").length!==1||c.length!==1||c[0]!=="--config=/dev/null"||x.some(v=>v.startsWith("-r")||v==="--preload"||v.startsWith("--preload=")||v==="--require"||v.startsWith("--require=")||v==="--import"||v.startsWith("--import=")||v==="--env-file"||v.startsWith("--env-file=")))throw new Error("The tagged Oompa preflight requires a neutral Bun stage zero.");const[a,h]=process.argv.slice(1);const r=Bun.stdin.stream().getReader(),q=[];let z=0;try{for(;;){const o=await r.read();if(o.done)break;z+=o.value.byteLength;if(z>524288)throw new Error("The tagged Oompa preflight exceeds its byte limit.");q.push(o.value)}}finally{r.releaseLock()}const b=new Uint8Array(z);let p=0;for(const v of q){b.set(v,p);p+=v.byteLength}const d=new Bun.CryptoHasher("sha256").update(b).digest("hex");if(d!==h)throw new Error("The tagged Oompa preflight digest is invalid.");const j=new Bun.Transpiler({loader:"ts",target:"bun"}).transformSync(b);const u=URL.createObjectURL(new Blob([j],{type:"text/javascript"}));try{const m=await import(u);await m.installOompaRelease(a);process.stdout.write(`${m.OOMPA_INSTALL_SUCCESS}\n`);}finally{URL.revokeObjectURL(u)}' -- https://github.com/hraness/oompa/releases/download/v0.8.0/hraness-oompa-0.8.0.tgz 77ec0042b78e5014d11fe044867c41e3818553e85be78d61bbc9671e0b980f7a)" = hra-install-safe
+test "$(unset BUN_OPTIONS NODE_OPTIONS LD_AUDIT LD_LIBRARY_PATH LD_ORIGIN_PATH LD_PRELOAD DYLD_FALLBACK_FRAMEWORK_PATH DYLD_FALLBACK_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_IMAGE_SUFFIX DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_ROOT_PATH DYLD_VERSIONED_FRAMEWORK_PATH DYLD_VERSIONED_LIBRARY_PATH && curl -fsSL --connect-timeout 10 --max-time 60 --max-filesize 524288 --retry 3 --retry-delay 1 --retry-max-time 60 --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/hraness/oompa/v0.8.2/src/install-preflight-runtime.ts | command bun --no-env-file --config=/dev/null -e 'const n=["BUN_OPTIONS","NODE_OPTIONS","LD_AUDIT","LD_LIBRARY_PATH","LD_ORIGIN_PATH","LD_PRELOAD","DYLD_FALLBACK_FRAMEWORK_PATH","DYLD_FALLBACK_LIBRARY_PATH","DYLD_FRAMEWORK_PATH","DYLD_IMAGE_SUFFIX","DYLD_INSERT_LIBRARIES","DYLD_LIBRARY_PATH","DYLD_ROOT_PATH","DYLD_VERSIONED_FRAMEWORK_PATH","DYLD_VERSIONED_LIBRARY_PATH"],x=process.execArgv;const c=x.filter(v=>v==="-c"||v.startsWith("--config"));if(n.some(k=>process.env[k]!==undefined)||x.filter(v=>v==="--no-env-file").length!==1||c.length!==1||c[0]!=="--config=/dev/null"||x.some(v=>v.startsWith("-r")||v==="--preload"||v.startsWith("--preload=")||v==="--require"||v.startsWith("--require=")||v==="--import"||v.startsWith("--import=")||v==="--env-file"||v.startsWith("--env-file=")))throw new Error("The tagged Oompa preflight requires a neutral Bun stage zero.");const[a,h]=process.argv.slice(1);const r=Bun.stdin.stream().getReader(),q=[];let z=0;try{for(;;){const o=await r.read();if(o.done)break;z+=o.value.byteLength;if(z>524288)throw new Error("The tagged Oompa preflight exceeds its byte limit.");q.push(o.value)}}finally{r.releaseLock()}const b=new Uint8Array(z);let p=0;for(const v of q){b.set(v,p);p+=v.byteLength}const d=new Bun.CryptoHasher("sha256").update(b).digest("hex");if(d!==h)throw new Error("The tagged Oompa preflight digest is invalid.");const j=new Bun.Transpiler({loader:"ts",target:"bun"}).transformSync(b);const u=URL.createObjectURL(new Blob([j],{type:"text/javascript"}));try{const m=await import(u);await m.installOompaRelease(a);process.stdout.write(`${m.OOMPA_INSTALL_SUCCESS}\n`);}finally{URL.revokeObjectURL(u)}' -- https://github.com/hraness/oompa/releases/download/v0.8.2/hraness-oompa-0.8.2.tgz aea03d881a0a6354963d8c66f8db780891fabebd29174a8cd5386142ee58e915)" = hra-install-safe
 ```
 
 ```sh
 oompa doctor --offline
 ```
 
-> **Before initialization:** Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v0.7.1 daemon or the v0.8.0 candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.
+> **Before initialization:** Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v0.8.1 daemon or the v0.8.2 candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.
 
-Continue with the [setup guide](https://oompa.dev/docs/start/). For an existing installation, use the [ordered update runbook](https://oompa.dev/docs/status/#install-and-update).
+Continue with the [setup guide](https://oompa.app/docs/start/). For an existing installation, use the [ordered update runbook](https://oompa.app/docs/status/#install-and-update).
 
 ## CLI usage
 
@@ -53,7 +53,7 @@ Read the [privacy policy](https://github.com/hraness/oompa/blob/main/PRIVACY.md)
 
 The npm archive contains CLI and daemon source, this package README, the license, and third-party notices. Website assets and website-authored content are not package inputs. The package has no install lifecycle scripts; runtime dependencies are exact public registry versions.
 
-An interrupted installer must be recovered using its exact originating release. Do not edit or delete its durable intent, receipt, staging directory, or previous installation. Follow the [ordered update runbook](https://oompa.dev/docs/status/#install-and-update) and stop if exact recovery cannot be established.
+An interrupted installer must be recovered using its exact originating release. Do not edit or delete its durable intent, receipt, staging directory, or previous installation. Follow the [ordered update runbook](https://oompa.app/docs/status/#install-and-update) and stop if exact recovery cannot be established.
 
 ## Project
 

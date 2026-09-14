@@ -27,12 +27,10 @@ type OompaInstallationCommon = Readonly<{
 
 export type OompaInstallation = OompaInstallationCommon & (
   | Readonly<{
-      desktopSwitching: true;
       expectedHomeDirectory: null;
       kind: "production";
     }>
   | Readonly<{
-      desktopSwitching: false;
       expectedHomeDirectory: string;
       kind: "live_acceptance";
     }>
@@ -55,7 +53,6 @@ export function createProductionInstallation(): OompaInstallation {
       mcpOauth: "file",
     },
     createSecretCustody: () => new GenerationalSecretCustody(paths),
-    desktopSwitching: true,
     documentsDirectory: join(homedir(), "Documents"),
     expectedHomeDirectory: null,
     kind: "production",

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -378,18 +378,21 @@ const createFixture = async (wrapLifecycle?: (
   };
 };
 
+function ownedMemoryCoordinatorTask<T>(run: () => Promise<T>): Promise<T> {
+  // Register ownership before setup or proof starts. Every request in these
+  // cases is awaited, so teardown joins the raw task before closing storage,
+  // including work that settles after a hook or test deadline.
+  const task = Promise.resolve().then(run);
+  ownedCaseJoins.push(Promise.allSettled([task]).then(() => undefined));
+  // Return the observed task itself so a timed-out hook cannot leave an
+  // additional async wrapper with an unhandled late rejection.
+  return task;
+}
+
 function ownedMemoryCoordinatorCase(
   runCase: (value: Awaited<ReturnType<typeof createFixture>>) => Promise<void>,
 ): Promise<void> {
-  // Register ownership before setup starts. Every request in these cases is
-  // awaited, so joining the raw case also joins work after a test deadline.
-  const setup = Promise.resolve().then(() => createFixture());
-  const caseTask = setup.then(runCase);
-  ownedCaseJoins.push(Promise.allSettled([setup, caseTask]).then(() => undefined));
-  // Observation prevents a timeout from leaving an unhandled rejection; the
-  // unmodified promise still reports the original failure to the test runner.
-  void caseTask.catch(() => undefined);
-  return caseTask;
+  return ownedMemoryCoordinatorTask(async () => await runCase(await createFixture()));
 }
 
 const operationInput = (index: number, label: string) => ({
@@ -499,132 +502,146 @@ describe("Oompa Oh memory coordinator integration", () => {
       .toBeNull();
   });
 
-  test("remembers, queries, explains, shares by project, and never overwrites a conflict", async () => {
-    const value = await createFixture();
-    const author = value.session(value.firstProject, "Author");
-    const peer = value.session(value.firstProject, "Project peer");
-    const outsider = value.session(value.secondProject, "Other project");
-    const memory = page();
+  describe("coupled project memory proof", () => {
+    let fixture: ReturnType<typeof createFixture> | undefined;
+    beforeEach(() => {
+      // Real database preparation has its own bounded phase; the complete
+      // remember/query/share/conflict proof retains one five-second deadline.
+      fixture = ownedMemoryCoordinatorTask(() => createFixture());
+      return fixture;
+    }, 5_000);
 
-    const remembered = await value.runtime.coordinator.remember({
-      actorSessionId: author.id,
-      ...operationInput(1, "remember-alpha"),
-      value: memory,
-    });
-    expect(remembered).toMatchObject({
-      ok: true,
-      replay: false,
-      submission: { kind: "remember", state: "applied" },
-      page: { key: memory.key },
-    });
+    test("remembers, queries, explains, shares by project, and never overwrites a conflict", () => {
+      const setup = fixture;
+      if (setup === undefined) throw new Error("Owned memory fixture is not ready.");
+      return ownedMemoryCoordinatorTask(async () => {
+        const value = await setup;
+        const author = value.session(value.firstProject, "Author");
+        const peer = value.session(value.firstProject, "Project peer");
+        const outsider = value.session(value.secondProject, "Other project");
+        const memory = page();
 
-    const listed = await value.runtime.coordinator.query({
-      actorSessionId: author.id,
-      value: { mode: "list" },
-    }) as { queryId: string; rows: readonly Record<string, unknown>[] };
-    expect(listed.rows).toEqual([
-      expect.objectContaining({
-        key: memory.key,
-        lane: "working",
-        provenance: expect.objectContaining({ verification: "local-ledger-verified" }),
-      }),
-    ]);
-    await expect(value.runtime.coordinator.explain({
-      actorSessionId: author.id,
-      value: { queryId: listed.queryId, row: 0 },
-    })).resolves.toMatchObject({
-      ok: true,
-      queryId: listed.queryId,
-      row: 0,
-      explanation: expect.objectContaining({ resultSha256: expect.any(String) }),
-    });
+        const remembered = await value.runtime.coordinator.remember({
+          actorSessionId: author.id,
+          ...operationInput(1, "remember-alpha"),
+          value: memory,
+        });
+        expect(remembered).toMatchObject({
+          ok: true,
+          replay: false,
+          submission: { kind: "remember", state: "applied" },
+          page: { key: memory.key },
+        });
 
-    await expect(value.runtime.coordinator.query({
-      actorSessionId: author.id,
-      value: { key: memory.key, mode: "get" },
-    })).resolves.toMatchObject({
-      ok: true,
-      mode: "get",
-      rows: [expect.objectContaining({
-        bodyChunk: memory.body,
-        key: memory.key,
-        lane: "working",
-      })],
-    });
-    await expect(value.runtime.coordinator.query({
-      actorSessionId: author.id,
-      value: { mode: "search", text: "alpha durable" },
-    })).resolves.toMatchObject({
-      ok: true,
-      matchedTokens: ["alpha", "durable"],
-      rows: [expect.objectContaining({ key: memory.key, lane: "working" })],
-    });
+        const listed = await value.runtime.coordinator.query({
+          actorSessionId: author.id,
+          value: { mode: "list" },
+        }) as { queryId: string; rows: readonly Record<string, unknown>[] };
+        expect(listed.rows).toEqual([
+          expect.objectContaining({
+            key: memory.key,
+            lane: "working",
+            provenance: expect.objectContaining({ verification: "local-ledger-verified" }),
+          }),
+        ]);
+        await expect(value.runtime.coordinator.explain({
+          actorSessionId: author.id,
+          value: { queryId: listed.queryId, row: 0 },
+        })).resolves.toMatchObject({
+          ok: true,
+          queryId: listed.queryId,
+          row: 0,
+          explanation: expect.objectContaining({ resultSha256: expect.any(String) }),
+        });
 
-    const shared = await value.runtime.coordinator.share({
-      actorSessionId: author.id,
-      ...operationInput(2, "share-alpha"),
-      value: { key: memory.key, reason: "Project-level architectural invariant" },
-    }) as { share: { recordSha256: string } };
-    expect(shared).toMatchObject({
-      ok: true,
-      replay: false,
-      share: { key: memory.key, status: "adopted" },
-      submission: { kind: "share", state: "applied" },
-    });
+        await expect(value.runtime.coordinator.query({
+          actorSessionId: author.id,
+          value: { key: memory.key, mode: "get" },
+        })).resolves.toMatchObject({
+          ok: true,
+          mode: "get",
+          rows: [expect.objectContaining({
+            bodyChunk: memory.body,
+            key: memory.key,
+            lane: "working",
+          })],
+        });
+        await expect(value.runtime.coordinator.query({
+          actorSessionId: author.id,
+          value: { mode: "search", text: "alpha durable" },
+        })).resolves.toMatchObject({
+          ok: true,
+          matchedTokens: ["alpha", "durable"],
+          rows: [expect.objectContaining({ key: memory.key, lane: "working" })],
+        });
 
-    await expect(value.runtime.coordinator.query({
-      actorSessionId: peer.id,
-      value: { key: memory.key, mode: "get" },
-    })).resolves.toMatchObject({
-      ok: true,
-      rows: [expect.objectContaining({
-        bodyChunk: memory.body,
-        key: memory.key,
-        lane: "canonical",
-      })],
-    });
-    await expect(value.runtime.coordinator.query({
-      actorSessionId: outsider.id,
-      value: { key: memory.key, mode: "get" },
-    })).resolves.toMatchObject({ ok: true, rows: [] });
+        const shared = await value.runtime.coordinator.share({
+          actorSessionId: author.id,
+          ...operationInput(2, "share-alpha"),
+          value: { key: memory.key, reason: "Project-level architectural invariant" },
+        }) as { share: { recordSha256: string } };
+        expect(shared).toMatchObject({
+          ok: true,
+          replay: false,
+          share: { key: memory.key, status: "adopted" },
+          submission: { kind: "share", state: "applied" },
+        });
 
-    const conflicting = page({
-      body: "A peer proposed a different owner, which must not replace canonical memory implicitly.",
-      summary: "Conflicting beta ownership",
-      title: "Beta memory authority",
-    });
-    const peerRemembered = await value.runtime.coordinator.remember({
-      actorSessionId: peer.id,
-      ...operationInput(3, "remember-conflict"),
-      value: conflicting,
-    }) as { page: { recordSha256: string } };
-    const conflict = await value.runtime.coordinator.share({
-      actorSessionId: peer.id,
-      ...operationInput(4, "share-conflict"),
-      value: { key: conflicting.key, reason: "Attempted implicit replacement" },
-    });
-    expect(conflict).toMatchObject({
-      code: "MEMORY_SHARE_CONFLICT",
-      ok: false,
-      conflict: {
-        canonicalRecordSha256: shared.share.recordSha256,
-        key: memory.key,
-        nominatedRecordSha256: peerRemembered.page.recordSha256,
-      },
-      submission: { kind: "share", state: "failed" },
-    });
+        await expect(value.runtime.coordinator.query({
+          actorSessionId: peer.id,
+          value: { key: memory.key, mode: "get" },
+        })).resolves.toMatchObject({
+          ok: true,
+          rows: [expect.objectContaining({
+            bodyChunk: memory.body,
+            key: memory.key,
+            lane: "canonical",
+          })],
+        });
+        await expect(value.runtime.coordinator.query({
+          actorSessionId: outsider.id,
+          value: { key: memory.key, mode: "get" },
+        })).resolves.toMatchObject({ ok: true, rows: [] });
 
-    const freshPeer = value.session(value.firstProject, "Fresh project peer");
-    await expect(value.runtime.coordinator.query({
-      actorSessionId: freshPeer.id,
-      value: { key: memory.key, mode: "get" },
-    })).resolves.toMatchObject({
-      rows: [expect.objectContaining({
-        bodyChunk: memory.body,
-        lane: "canonical",
-        recordSha256: shared.share.recordSha256,
-      })],
-    });
+        const conflicting = page({
+          body: "A peer proposed a different owner, which must not replace canonical memory implicitly.",
+          summary: "Conflicting beta ownership",
+          title: "Beta memory authority",
+        });
+        const peerRemembered = await value.runtime.coordinator.remember({
+          actorSessionId: peer.id,
+          ...operationInput(3, "remember-conflict"),
+          value: conflicting,
+        }) as { page: { recordSha256: string } };
+        const conflict = await value.runtime.coordinator.share({
+          actorSessionId: peer.id,
+          ...operationInput(4, "share-conflict"),
+          value: { key: conflicting.key, reason: "Attempted implicit replacement" },
+        });
+        expect(conflict).toMatchObject({
+          code: "MEMORY_SHARE_CONFLICT",
+          ok: false,
+          conflict: {
+            canonicalRecordSha256: shared.share.recordSha256,
+            key: memory.key,
+            nominatedRecordSha256: peerRemembered.page.recordSha256,
+          },
+          submission: { kind: "share", state: "failed" },
+        });
+
+        const freshPeer = value.session(value.firstProject, "Fresh project peer");
+        await expect(value.runtime.coordinator.query({
+          actorSessionId: freshPeer.id,
+          value: { key: memory.key, mode: "get" },
+        })).resolves.toMatchObject({
+          rows: [expect.objectContaining({
+            bodyChunk: memory.body,
+            lane: "canonical",
+            recordSha256: shared.share.recordSha256,
+          })],
+        });
+      });
+    }, 5_000);
   });
 
   test("durably refuses an oversized canonical share before changing its head", async () => {

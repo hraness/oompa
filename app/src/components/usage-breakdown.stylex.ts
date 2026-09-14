@@ -1,0 +1,86 @@
+import * as stylex from "@stylexjs/stylex";
+
+export const usageBreakdownStyles = stylex.create({
+  account: {
+    borderBottomColor: "var(--color-line)",
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.5rem",
+    paddingBottom: "0.75rem",
+    paddingLeft: "0.75rem",
+    paddingRight: "0.75rem",
+    paddingTop: "0.75rem",
+  },
+  accountHeader: {
+    alignItems: "baseline",
+    display: "flex",
+    flexWrap: "wrap",
+    columnGap: "0.5rem",
+    rowGap: 0,
+  },
+  accountTitle: {
+    fontSize: "0.875rem",
+    fontWeight: 600,
+    lineHeight: "1.25rem",
+  },
+  limit: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.25rem",
+  },
+  limitHeader: {
+    alignItems: "center",
+    display: "flex",
+    gap: "0.5rem",
+  },
+  limitName: {
+    fontSize: "0.75rem",
+    fontWeight: 600,
+    lineHeight: "1rem",
+  },
+  meter: {
+    flexShrink: 0,
+    height: "0.625rem",
+    width: "8rem",
+  },
+  outlook: {
+    fontSize: "0.875rem",
+    lineHeight: "1.25rem",
+    marginBottom: 0,
+    marginLeft: 0,
+    marginRight: 0,
+    marginTop: 0,
+    overflowWrap: "normal",
+  },
+  quiet: {
+    color: "var(--color-ink-muted)",
+    fontSize: "0.75rem",
+    lineHeight: "1rem",
+    marginBottom: 0,
+    marginLeft: 0,
+    marginRight: 0,
+    marginTop: 0,
+    overflowWrap: "normal",
+  },
+  windowFacts: {
+    color: "var(--color-ink-muted)",
+    fontSize: "0.75rem",
+    fontVariantNumeric: "tabular-nums",
+    lineHeight: "1rem",
+  },
+  windowLabel: {
+    color: "var(--color-ink-muted)",
+    fontSize: "0.75rem",
+    lineHeight: "1rem",
+    minWidth: "5rem",
+  },
+  windowRow: {
+    alignItems: "center",
+    display: "flex",
+    flexWrap: "wrap",
+    columnGap: "0.5rem",
+    rowGap: "0.125rem",
+  },
+});

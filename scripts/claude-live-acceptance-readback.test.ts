@@ -501,12 +501,14 @@ const fixture = async (registerCleanup: (cleanup: ReadbackCleanup) => void = (cl
     observeProcess: (observation: () => void) => { processObservation = observation; } };
 };
 
-const startOnlyFixture = async () => {
-  const root = await realpath(await mkdtemp("/tmp/oompa-clrb-start-"));
+const startOnlyFixture = async (registerCleanup: (cleanup: ReadbackCleanup) => void = (cleanup) => { cleanups.push(cleanup); }) => {
+  const temporaryRoot = await mkdtemp("/tmp/oompa-clrb-start-");
+  registerCleanup(async () => { await rm(temporaryRoot, { recursive: true }); });
+  const root = await realpath(temporaryRoot);
   const paths = resolveStatePaths({ rootDirectory: root });
   await initializeStatePaths(paths);
   const store = new StateStore(paths);
-  cleanups.push(async () => { store.close(); await rm(root, { recursive: true }); });
+  registerCleanup(async () => { store.close(); });
   const projectRoot = join(root, "project");
   await mkdir(projectRoot, { mode: 0o700 });
   const project = await store.createProject("Start recovery", projectRoot, true);
@@ -564,37 +566,66 @@ describe("independent Claude private readback", () => {
     await expect(f.oracle().recoverStartedSessionScope(f.input)).rejects.toThrow("claude_live_acceptance_readback_refused");
   });
 
-  test("recovers only exact direct-applied start scope before and after process release", async () => {
-    const f = await startOnlyFixture(); const started = f.apply();
-    expect(f.providerAuthority.processGeneration).not.toBe(f.profile.processGeneration);
-    expect(f.store.readSessionClaudeProcessAuthority(started.session.id)).toMatchObject({
-      profileGeneration: f.profile.processGeneration, providerAuthority: f.providerAuthority, state: "bound",
-    });
-    const expected = { sessionId: started.session.id, profileGeneration: f.providerAuthority.processGeneration };
-    const first = f.oracle();
-    const scope = await first.recoverStartedSessionScope(f.input);
-    expect(scope).toEqual(expected);
-    expect(Object.isFrozen(scope)).toBe(true);
-    await expect(first.recoverStartedSessionScope(f.input)).rejects.toThrow("claude_live_acceptance_readback_refused");
-    started.release();
-    expect(f.store.readSessionClaudeProcessAuthority(started.session.id, true)).toMatchObject({
-      profileGeneration: f.profile.processGeneration, providerAuthority: f.providerAuthority, state: "released",
-    });
-    const stopped = f.oracle();
-    expect(await stopped.recoverStartedSessionScope(f.input)).toEqual(expected);
-    expect(scope).not.toHaveProperty("processNotLive");
-    expect(scope).not.toHaveProperty("soleRemember");
+  describe("coupled start-scope recovery", () => {
+    let prepared: Readonly<{ owner: ReturnType<typeof createOwnedReadbackCase>; fixture: Awaited<ReturnType<typeof startOnlyFixture>> }> | undefined;
+    beforeEach(() => {
+      prepared = undefined;
+      const owner = createOwnedReadbackCase();
+      ownedReadbackCases.push(owner);
+      // Keep fresh database setup separate from the complete before/after
+      // recovery proof, which retains one five-second test deadline.
+      return runOwnedReadbackSetup(owner, () => startOnlyFixture(owner.registerCleanup), (value) => {
+        prepared = { owner, fixture: value };
+      });
+    }, 5_000);
+
+    test("recovers only exact direct-applied start scope before and after process release", () => {
+      if (prepared === undefined) throw new Error("Owned start-scope fixture is not ready.");
+      const { owner, fixture: f } = prepared;
+      return owner.run(async () => {
+        const started = f.apply();
+        expect(f.providerAuthority.processGeneration).not.toBe(f.profile.processGeneration);
+        expect(f.store.readSessionClaudeProcessAuthority(started.session.id)).toMatchObject({
+          profileGeneration: f.profile.processGeneration, providerAuthority: f.providerAuthority, state: "bound",
+        });
+        const expected = { sessionId: started.session.id, profileGeneration: f.providerAuthority.processGeneration };
+        const first = f.oracle();
+        const scope = await owner.request(() => first.recoverStartedSessionScope(f.input));
+        expect(scope).toEqual(expected);
+        expect(Object.isFrozen(scope)).toBe(true);
+        await owner.request(async () => {
+          await expect(first.recoverStartedSessionScope(f.input)).rejects.toThrow("claude_live_acceptance_readback_refused");
+        });
+        started.release();
+        expect(f.store.readSessionClaudeProcessAuthority(started.session.id, true)).toMatchObject({
+          profileGeneration: f.profile.processGeneration, providerAuthority: f.providerAuthority, state: "released",
+        });
+        const stopped = f.oracle();
+        expect(await owner.request(() => stopped.recoverStartedSessionScope(f.input))).toEqual(expected);
+        expect(scope).not.toHaveProperty("processNotLive");
+        expect(scope).not.toHaveProperty("soleRemember");
+      });
+    }, 5_000);
   });
 
-  test("lost-start scope refuses foreign key/profile/project, extra fields, and changed generation", async () => {
-    const f = await startOnlyFixture(); const started = f.apply();
-    const otherProfile = f.store.createProfile("Other scope");
-    await mkdir(join(f.paths.root, "other-project"), { mode: 0o700 });
-    const otherProject = await f.store.createProject("Other project", join(f.paths.root, "other-project"), false);
-    for (const input of [{ ...f.input, startIdempotencyKey: randomUUID() },
-      { ...f.input, profileId: otherProfile.id }, { ...f.input, projectId: otherProject.id }, { ...f.input, extra: true }]) {
+  test.each(["foreign key", "foreign profile", "foreign project", "extra fields"] as const)(
+    "lost-start scope refuses %s", async (mismatch) => {
+      const f = await startOnlyFixture(); f.apply();
+      const otherProfile = f.store.createProfile("Other scope");
+      await mkdir(join(f.paths.root, "other-project"), { mode: 0o700 });
+      const otherProject = await f.store.createProject("Other project", join(f.paths.root, "other-project"), false);
+      const input = {
+        "foreign key": { ...f.input, startIdempotencyKey: randomUUID() },
+        "foreign profile": { ...f.input, profileId: otherProfile.id },
+        "foreign project": { ...f.input, projectId: otherProject.id },
+        "extra fields": { ...f.input, extra: true },
+      }[mismatch];
       await expect(f.oracle().recoverStartedSessionScope(input)).rejects.toThrow("claude_live_acceptance_readback_refused");
-    }
+    },
+  );
+
+  test("lost-start scope refuses changed generation after process release", async () => {
+    const f = await startOnlyFixture(); const started = f.apply();
     started.release();
     f.store.advanceProviderAccountProcessGeneration({ profileId: f.profile.id, provider: "claude",
       expectedProcessGeneration: f.providerAuthority.processGeneration + 1 });

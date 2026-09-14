@@ -6,8 +6,10 @@ import { join } from "node:path";
 
 import {
   claudeAccountDocumentPath,
+  readClaudeAccountMetadataIdentity,
   readClaudeAccountProjection,
   spawnClaudeAuthStatusProbe,
+  type ClaudeAuthStatusProbe,
 } from "./account";
 import { CLAUDE_PIN, CLAUDE_PIN_EFFORT, CLAUDE_PIN_MODEL, CLAUDE_PIN_NATIVE_FALLBACK_CAPABILITY } from "./pin";
 import type { PinnedClaudeRuntime } from "./runtime";
@@ -114,6 +116,36 @@ describe("Claude account projection", () => {
       .toThrow("must be absolute");
   });
 
+  test("the metadata-only reader returns normalized scalars without authentication or document fields", async () => {
+    const root = await mkdtemp(join(tmpdir(), "oompa-claude-metadata-"));
+    try {
+      for (const configHome of ["personal", "isolated"] as const) {
+        const configDir = join(root, configHome);
+        await mkdir(configDir, { mode: 0o700 });
+        const input = { configDir, configHome };
+        expect(await readClaudeAccountMetadataIdentity(input)).toBeNull();
+        const accountPath = claudeAccountDocumentPath(configDir, configHome);
+        await writeFile(accountPath, JSON.stringify({
+          ...accountMetadata(), unrelatedConfiguration: "fixture-only",
+        }), { mode: 0o600 });
+        const identity = await readClaudeAccountMetadataIdentity(input);
+        expect(identity).toEqual({
+          accountUuid: "account-a", email: "account-a@example.test", organizationUuid: "organization-a",
+        });
+        expect(Object.isFrozen(identity)).toBeTrue();
+        await writeFile(accountPath, JSON.stringify(accountMetadata({ accountUuid: "x".repeat(321) })));
+        await expect(readClaudeAccountMetadataIdentity(input)).rejects.toMatchObject({ code: "PROTOCOL_ERROR" });
+        await writeFile(accountPath, JSON.stringify(accountMetadata()));
+        await chmod(accountPath, 0o644);
+        await expect(readClaudeAccountMetadataIdentity(input)).rejects.toMatchObject({ code: "AUTHORITY_STALE" });
+      }
+      await expect(readClaudeAccountMetadataIdentity({ configDir: "relative", configHome: "isolated" }))
+        .rejects.toMatchObject({ code: "INVALID_INPUT" });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   test("fences a stable pre-status-post identity and projects account organization metadata", async () => {
     const calls: string[] = [];
     const statusInputs: unknown[] = [];
@@ -163,6 +195,60 @@ describe("Claude account projection", () => {
     });
 
     expect(projection).toEqual({ signedIn: false });
+  });
+
+  test.each([
+    ["personal", false], ["personal", true], ["isolated", false], ["isolated", true],
+  ] as const)("latches the original metadata profile across status (%s, changed=%s)", async (configHome, changedOriginal) => {
+    const root = await mkdtemp(join(tmpdir(), "oompa-claude-account-latch-"));
+    const configDir = join(root, "original"); const otherDir = join(root, "replacement");
+    const otherHome = configHome === "personal" ? "isolated" : "personal";
+    try {
+      await mkdir(configDir, { mode: 0o700 }); await mkdir(otherDir, { mode: 0o700 });
+      const originalPath = claudeAccountDocumentPath(configDir, configHome);
+      await writeFile(originalPath, JSON.stringify(accountMetadata()), { mode: 0o600 });
+      await writeFile(claudeAccountDocumentPath(otherDir, otherHome), JSON.stringify(accountMetadata({
+        accountUuid: changedOriginal ? "account-a" : "account-b",
+      })), { mode: 0o600 });
+      const entered = Promise.withResolvers<Parameters<ClaudeAuthStatusProbe>[0]>();
+      const finish = Promise.withResolvers<undefined>();
+      const probeAuthStatus: ClaudeAuthStatusProbe = async (observed) => {
+        entered.resolve(observed); await finish.promise;
+        return { loggedIn: true, authentication: "claude_ai" };
+      };
+      const input = { configDir, configHome, runtime, signal: new AbortController().signal, probeAuthStatus };
+      const completion = readClaudeAccountProjection(input).then(
+        (projection) => ({ kind: "resolved" as const, projection }),
+        (error: unknown) => ({ kind: "rejected" as const, error }),
+      );
+      try {
+        const observed = await Promise.race([entered.promise, completion.then(() => { throw new Error("status fixture was not reached"); })]);
+        expect(observed).toMatchObject({ configDir, configHome });
+        input.configDir = otherDir; input.configHome = otherHome;
+        if (changedOriginal) await writeFile(originalPath, JSON.stringify(accountMetadata({ accountUuid: "account-b" })));
+        finish.resolve(undefined);
+        const outcome = await completion;
+        if (changedOriginal) expect(outcome).toMatchObject({ kind: "rejected", error: { code: "AUTHORITY_STALE" } });
+        else expect(outcome).toMatchObject({ kind: "resolved", projection: { signedIn: true, accountId: "account-a" } });
+      } finally { finish.resolve(undefined); await completion; }
+    } finally { await rm(root, { force: true, recursive: true }); }
+  });
+
+  test("latches the probe profile before an injected metadata reader yields", async () => {
+    const paths: string[] = []; const probes: unknown[] = [];
+    const input = {
+      configDir: "/synthetic/original", configHome: "isolated" as "isolated" | "personal", runtime, signal: new AbortController().signal,
+      readMetadata: async (path: string) => {
+        paths.push(path); input.configDir = "/synthetic/replacement"; input.configHome = "personal";
+        return accountMetadata();
+      },
+      probeAuthStatus: async (observed: Parameters<ClaudeAuthStatusProbe>[0]) => {
+        probes.push(observed); return { loggedIn: true, authentication: "claude_ai" };
+      },
+    };
+    await expect(readClaudeAccountProjection(input)).resolves.toMatchObject({ accountId: "account-a" });
+    expect(paths).toEqual(["/synthetic/original/.claude.json", "/synthetic/original/.claude.json"]);
+    expect(probes).toEqual([{ configDir: "/synthetic/original", configHome: "isolated", runtime, signal: input.signal }]);
   });
 
   test("rejects an identity swap across the protected status read", async () => {

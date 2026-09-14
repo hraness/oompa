@@ -995,7 +995,6 @@ describe("source-only live acceptance isolation", () => {
       const installationB = createAcceptanceInstallation(layout.descriptors.b);
       expect(installationA.kind).toBe("live_acceptance");
       expect(installationA.cloudEnvironment).toEqual({ HRA_CONVEX_URL: "" });
-      expect(installationA.desktopSwitching).toBe(false);
       expect(installationA.credentialStorePreflight).toEqual({
         cliAuth: "file",
         cwd: layout.descriptors.a.documentsDirectory,

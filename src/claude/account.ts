@@ -32,7 +32,8 @@ const AUTH_STATUS_TIMEOUT_MS = 3_000;
 const ACCOUNT_IDENTITY_MAX_BYTES = 320;
 const encoder = new TextEncoder();
 
-type ClaudeAccountIdentity = Readonly<{
+/** Cached scalar metadata only; this does not establish authentication. */
+export type ClaudeAccountMetadataIdentity = Readonly<{
   accountUuid: string | null;
   email: string | null;
   organizationUuid: string | null;
@@ -58,6 +59,20 @@ export function claudeAccountDocumentPath(
 }
 
 /**
+ * Reads only normalized identity scalars through the existing bounded,
+ * no-follow metadata reader. This is cached metadata, not a signed-in status
+ * or credential-principal observation. The underlying document stays private.
+ */
+export async function readClaudeAccountMetadataIdentity(input: Readonly<{
+  configDir: string;
+  configHome: ClaudeConfigurationHome;
+}>): Promise<ClaudeAccountMetadataIdentity | null> {
+  return parseAccountIdentity(await readAccountMetadataDocument(
+    claudeAccountDocumentPath(input.configDir, input.configHome),
+  ));
+}
+
+/**
  * Proves a currently authenticated Claude account without reading a token.
  * `claude auth status --json` supplies current sign-in state; two no-follow
  * reads of the scalar-only account metadata fence an identity change across
@@ -73,18 +88,22 @@ export async function readClaudeAccountProjection(input: Readonly<{
   probeAuthStatus?: ClaudeAuthStatusProbe;
 }>): Promise<ClaudeAccountProjection> {
   input.signal.throwIfAborted();
-  const accountPath = claudeAccountDocumentPath(input.configDir, input.configHome);
-  const readMetadata = input.readMetadata ?? readAccountMetadataDocument;
+  const metadataInput = Object.freeze({ configDir: input.configDir, configHome: input.configHome });
+  const accountPath = claudeAccountDocumentPath(metadataInput.configDir, metadataInput.configHome);
+  const readMetadata = input.readMetadata;
+  const readIdentity = readMetadata === undefined
+    ? () => readClaudeAccountMetadataIdentity(metadataInput)
+    : async () => parseAccountIdentity(await readMetadata(accountPath));
   const probeAuthStatus = input.probeAuthStatus ?? spawnClaudeAuthStatusProbe;
-  const before = parseAccountIdentity(await readMetadata(accountPath));
+  const before = await readIdentity();
   const status = parseAuthStatus(await probeAuthStatus({
-    configDir: input.configDir,
-    configHome: input.configHome,
+    configDir: metadataInput.configDir,
+    configHome: metadataInput.configHome,
     runtime: input.runtime,
     signal: input.signal,
   }));
   input.signal.throwIfAborted();
-  const after = parseAccountIdentity(await readMetadata(accountPath));
+  const after = await readIdentity();
   if (!sameAccountIdentity(before, after)) {
     throw new ClaudeError(
       "AUTHORITY_STALE",
@@ -200,7 +219,7 @@ function parseAuthStatus(value: unknown): Readonly<{
   });
 }
 
-function parseAccountIdentity(value: unknown): ClaudeAccountIdentity | null {
+function parseAccountIdentity(value: unknown): ClaudeAccountMetadataIdentity | null {
   if (value === null) return null;
   if (!isRecord(value)) {
     throw new ClaudeError("PROTOCOL_ERROR", "Claude account metadata was not an object.");
@@ -241,8 +260,8 @@ function hasAsciiControlCharacter(value: string): boolean {
 }
 
 function sameAccountIdentity(
-  left: ClaudeAccountIdentity | null,
-  right: ClaudeAccountIdentity | null,
+  left: ClaudeAccountMetadataIdentity | null,
+  right: ClaudeAccountMetadataIdentity | null,
 ): boolean {
   return left?.accountUuid === right?.accountUuid
     && left?.email === right?.email

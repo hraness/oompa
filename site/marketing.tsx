@@ -17,6 +17,7 @@ import { ProductPreview } from "./product-preview.tsx";
 import { productHeroClassName, mobileHeaderFlowClassName } from "./marketing.stylex.ts";
 import { sitePresentationClasses, type SitePresentationSlot } from "./presentation.stylex.ts";
 import { SiteAppearanceMenu } from "./appearance-menu.tsx";
+import { WonkaArtifact } from "./wonka-artifact.tsx";
 
 const classes = (hook: string, ...slots: readonly SitePresentationSlot[]): string =>
   [hook, sitePresentationClasses(...slots)].filter(Boolean).join(" ");
@@ -38,10 +39,10 @@ function inlineContent(content: readonly InlineContent[], styleLinks: boolean): 
 export function renderMarketingHeader(content: PublicContent, currentPath: string): string {
   return renderToStaticMarkup(
     <MarketingSiteHeader
-      className={mobileHeaderFlowClassName()}
+      className={`${mobileHeaderFlowClassName()} hraness-material-chrome${currentPath === "/" ? " hraness-marketing-header-surface" : ""}`}
       trailing={<SiteAppearanceMenu />}
       action={{ emphasis: "primary", href: content.links.app, label: "Open Oompa" }}
-      brand={content.productName}
+      brand={<><span aria-hidden="true">🟠</span> {content.productName}</>}
       brandHref="/"
       links={[
         { href: "/#product-preview", label: "Product", current: currentPath === "/" },
@@ -62,15 +63,14 @@ export function renderMarketingPage(content: PublicContent): string {
           { ...content.hero.primaryAction, emphasis: "primary" },
           { ...content.hero.secondaryAction, emphasis: "secondary" },
         ]}
-        align="center"
+        align="start"
         boundary={content.hero.boundary}
-        className={productHeroClassName()}
-        eyebrow={content.hero.eyebrow}
+        className={`${productHeroClassName()} hraness-material-wall`}
         frame={<ProductPreview />}
         heading={content.hero.heading}
         headingId="oompa-title"
         name={content.productName}
-        notice={<p className={sitePresentationClasses("installNote")}><strong>New machine setup is temporarily paused.</strong> This release candidate is not yet admitted, and current daemon and hosted command-writer rollout remains blocked on capacity. <a href="/docs/status/">Check current availability</a></p>}
+        notice={<><WonkaArtifact /><p className={sitePresentationClasses("installNote")}><strong>New machine setup is temporarily paused.</strong> This release candidate is not yet admitted, and current daemon and hosted command-writer rollout remains blocked on capacity. <a href="/docs/status/">Check current availability</a></p></>}
         summary={content.hero.summary}
         tone="paper"
       />

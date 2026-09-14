@@ -29,6 +29,7 @@ export function initializeOompaAppearance(document: Document) {
   try { storage = document.defaultView?.localStorage ?? null; } catch { /* Appearance remains available in memory. */ }
   return initDesignPalette({
     document,
+    defaultPreference: { palette: "paper", mode: "system" },
     legacyStorageKey: null,
     storage: oompaAppearanceStorage(storage),
     storageKey: oompaAppearanceStorageKey,

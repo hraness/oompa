@@ -36,6 +36,7 @@ function machine(
     daemonVersion: "0.5.0",
     defaultApprovalMode: "manual",
     defaultPreset: "ultra",
+    defaultProjectPublicId: null,
     deviceCommandsAllowed: true,
     devicePublicId: `device-${label}`,
     deviceStatus: "active",

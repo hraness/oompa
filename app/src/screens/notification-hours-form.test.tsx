@@ -29,6 +29,7 @@ const convexClient = {
 
 await mock.module("convex/react", () => ({
   useConvex: () => convexClient,
+  useQueries: () => ({}),
   usePaginatedQuery: () => ({
     loadMore: () => undefined,
     results: [],
@@ -85,6 +86,7 @@ const machine: MachineView = {
   daemonVersion: "0.6.1",
   defaultApprovalMode: "auto:all",
   defaultPreset: "ultra",
+  defaultProjectPublicId: null,
   deviceCommandsAllowed: true,
   devicePublicId: "device_daemon01",
   deviceStatus: "active",

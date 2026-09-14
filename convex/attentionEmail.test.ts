@@ -72,14 +72,15 @@ describe("Oompa attention email body and payload", () => {
         "Oompa needs your attention",
         "",
         "Open Oompa to review:",
-        `- Command approval: https://app.oompa.dev/#/session/${sessionPublicId}_0`,
-        `- File change approval: https://app.oompa.dev/#/session/${sessionPublicId}_1`,
-        `- Permission approval: https://app.oompa.dev/#/session/${sessionPublicId}_2`,
-        `- User input: https://app.oompa.dev/#/session/${sessionPublicId}_3`,
-        `- MCP elicitation: https://app.oompa.dev/#/session/${sessionPublicId}_4`,
+        `- Command approval: https://app.oompa.app/#/session/${sessionPublicId}_0`,
+        `- File change approval: https://app.oompa.app/#/session/${sessionPublicId}_1`,
+        `- Permission approval: https://app.oompa.app/#/session/${sessionPublicId}_2`,
+        `- User input: https://app.oompa.app/#/session/${sessionPublicId}_3`,
+        `- MCP elicitation: https://app.oompa.app/#/session/${sessionPublicId}_4`,
       ].join("\n"),
       version: oompaAttentionEmailBodyVersion,
     });
+    expect(oompaAttentionEmailBodyVersion).toBe(3);
     expect(payload).toEqual({
       from: oompaAttentionEmailFrom,
       subject: oompaAttentionEmailSubject,
@@ -175,14 +176,41 @@ describe("Oompa attention email body and payload", () => {
     const restored = parseOompaAttentionEmailBody(JSON.parse(JSON.stringify(stored)));
     expect(restored).toEqual(stored);
     expect(Object.isFrozen(restored)).toBe(true);
+    expect(buildOompaAttentionEmailBody([{ interactionKind: "user_input", sessionPublicId }], 2)).toEqual(stored);
+    expect(buildOompaAttentionEmailPayload({ body: stored, recipient })).toEqual({
+      from: "Oompa attention <notifications@news.hraness.com>",
+      subject: "Oompa needs your attention",
+      text: stored.text,
+      to: [recipient],
+    });
 
     for (const invalid of [
       { ...stored, extra: true },
       { ...stored, version: 1 },
+      { ...stored, version: 3 },
       { ...stored, text: `${stored.text}\n` },
       { ...stored, text: stored.text.replace("app.oompa.dev", "app.hra.sh") },
+      { ...stored, text: stored.text.replace("app.oompa.dev", "app.oompa.app") },
       { ...stored, text: stored.text.replace("app.oompa.dev", "attacker.example") },
       { ...stored, text: stored.text.replace(sessionPublicId, "short") },
+    ]) expect(parseOompaAttentionEmailBody(invalid)).toBeNull();
+  });
+
+  test("strictly restores v3 and refuses another version's destination", () => {
+    const stored = {
+      text: ["Oompa needs your attention", "", "Open Oompa to review:",
+        `- User input: https://app.oompa.app/#/session/${sessionPublicId}`].join("\n"),
+      version: 3 as const,
+    };
+    const restored = parseOompaAttentionEmailBody(JSON.parse(JSON.stringify(stored)));
+    expect(restored).toEqual(stored);
+    expect(Object.isFrozen(restored)).toBe(true);
+    expect(buildOompaAttentionEmailBody([{ interactionKind: "user_input", sessionPublicId }])).toEqual(stored);
+    for (const invalid of [
+      { ...stored, extra: true }, { ...stored, version: 1 }, { ...stored, version: 2 }, { ...stored, version: 4 },
+      { ...stored, text: stored.text.replace("app.oompa.app", "app.oompa.dev") },
+      { ...stored, text: stored.text.replace("app.oompa.app", "app.hra.sh") },
+      { ...stored, text: stored.text.replace("app.oompa.app", "attacker.example") },
     ]) expect(parseOompaAttentionEmailBody(invalid)).toBeNull();
   });
 });
@@ -337,10 +365,17 @@ describe("Oompa attention email transport", () => {
     expect(body).not.toHaveProperty("reply_to");
   });
 
-  test("sends a restored v1 body byte-identically across same-key retries", async () => {
-    const storedJson = JSON.stringify(buildOompaAttentionEmailBody([
-      { interactionKind: "permission_approval", sessionPublicId },
-    ]));
+  test.each([1, 2, 3] as const)("sends a restored v%i body byte-identically across same-key retries", async (version) => {
+    const grammar = {
+      1: { from: "HRA attention <notifications@news.hraness.com>", subject: "HRA needs your attention",
+        review: "Open HRA to review:", sessionUrl: "https://app.hra.sh/#/session/" },
+      2: { from: "Oompa attention <notifications@news.hraness.com>", subject: "Oompa needs your attention",
+        review: "Open Oompa to review:", sessionUrl: "https://app.oompa.dev/#/session/" },
+      3: { from: "Oompa attention <notifications@news.hraness.com>", subject: "Oompa needs your attention",
+        review: "Open Oompa to review:", sessionUrl: "https://app.oompa.app/#/session/" },
+    }[version];
+    const text = [grammar.subject, "", grammar.review, `- Permission approval: ${grammar.sessionUrl}${sessionPublicId}`].join("\n");
+    const storedJson = JSON.stringify({ text, version });
     const body: OompaAttentionEmailBody | null = parseOompaAttentionEmailBody(
       JSON.parse(storedJson),
     );
@@ -373,8 +408,8 @@ describe("Oompa attention email transport", () => {
       .resolves.toEqual({ kind: "retryable", reason: "concurrent_idempotency" });
     await expect(sendOompaAttentionEmail(input, options))
       .resolves.toEqual({ kind: "accepted", providerMessageId });
-    expect(requestBodies).toHaveLength(2);
-    expect(requestBodies[1]).toBe(requestBodies[0]);
+    const expectedPayload = JSON.stringify({ from: grammar.from, subject: grammar.subject, text, to: [recipient] });
+    expect(requestBodies).toEqual([expectedPayload, expectedPayload]);
     expect(requestKeys).toEqual([idempotencyKey, idempotencyKey]);
     expect((JSON.parse(requestBodies[0] ?? "") as { text: string }).text).toBe(body.text);
   });

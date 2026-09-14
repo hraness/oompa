@@ -83,8 +83,8 @@ test("native menus change the shared preference, follow external changes, and re
   const palette = document.querySelector<HTMLSelectElement>("[data-oompa-palette]")!;
   const mode = document.querySelector<HTMLSelectElement>("[data-oompa-mode]")!;
   try {
-    expect(palette.value).toBe("catppuccin");
-    expect(mode.value).toBe("dark");
+    expect(palette.value).toBe("paper");
+    expect(mode.value).toBe("system");
     palette.value = "gruvbox";
     palette.dispatchEvent(new parsed.window.Event("change", { bubbles: true }));
     mode.value = "light";

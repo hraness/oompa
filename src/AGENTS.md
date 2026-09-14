@@ -7,7 +7,6 @@
 - `domain/` owns identifiers, presets, projections, state transitions, encryption envelopes, and command outcomes.
 - `storage/` owns SQLite migrations, repositories, secret custody, state paths, and facts-memory directory custody.
 - `cloud/` owns the optional Convex client, sync projections, device enrollment, execution leases, and remote commands.
-- `desktop/` owns the explicit macOS ChatGPT account-switch state machine.
 
 # Guidelines
 
@@ -21,4 +20,4 @@
 - Force both pinned Codex credential stores to file mode at the process boundary and prove their effective values before account, plugin, or session effects.
 - Preserve stdout for requested data. Send diagnostics to stderr. Never print secrets, provider payloads, environment values, or raw local paths in cloud-facing output.
 - Bound lines, frames, pages, bytes, timers, retries, queues, and retained records.
-- Keep runtime imports flowing one way: `domain` -> `storage` -> `daemon` -> `cli`, `cloud`, `codex`, `desktop`. Adapters reach the daemon through `import type` of `daemon/ports.ts`. `eslint.config.mjs` enforces the per-directory rule and `scripts/check-import-cycles.ts` proves zero file-level cycles; move a shared shape into `domain/` instead of importing upward.
+- Keep runtime imports flowing one way: `domain` -> `storage` -> `daemon` -> `cli`, `cloud`, `codex`. Adapters reach the daemon through `import type` of `daemon/ports.ts`. `eslint.config.mjs` enforces the per-directory rule and `scripts/check-import-cycles.ts` proves zero file-level cycles; move a shared shape into `domain/` instead of importing upward.

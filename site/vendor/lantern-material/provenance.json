@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": 1,
+  "source": {
+    "repository": "https://github.com/hraness/design-kit",
+    "commit": "0e089bc18f9a0409f0e74b1fb7192f468956e386",
+    "export": "@hraness/design-kit/lantern-material.css"
+  },
+  "files": {
+    "lantern-material.css": {
+      "path": "src/lantern-material.css",
+      "sha256": "003034ac332f392a16950495ad4967a1ba78c61eda8035aa914cd4da18a70f1e"
+    },
+    "check.mjs": {
+      "path": "scripts/check-lantern-material-snapshot.mjs",
+      "sha256": "b3136bef0a28000c34b3dcc8ee1b890c29b0d0c26fec6895913e20532ff894ba"
+    },
+    "check.d.mts": {
+      "path": "scripts/check-lantern-material-snapshot.d.mts",
+      "sha256": "2f11fe7e67e6904fd097bcb227d2286df4215b32800f7aca7e44d0e881641db2"
+    },
+    "LICENSE": {
+      "path": "LICENSE",
+      "sha256": "763eaf6783097cac7303f10321b33ffc6a88c35845ba1e592b6a750e4568c5e0"
+    }
+  }
+}

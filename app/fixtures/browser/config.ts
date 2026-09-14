@@ -12,6 +12,7 @@ export const browserIoModules = Object.freeze([
   "app/src/data/registry.ts",
   "app/src/data/session-heads.ts",
   "app/src/data/session-model-hook.ts",
+  "app/src/data/usage.ts",
 ]);
 
 export function browserIoPlugin(root: string): Plugin {

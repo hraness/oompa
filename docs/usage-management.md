@@ -47,4 +47,10 @@ If a response is lost, replay the exact original command, including its key and 
 
 Effective Codex disable suppresses new automatic reset-credit dispatches, including retries. An uncertain existing attempt retains its original key and remains recovery-pending. Disabling after durable reset admission does not cancel that provider operation or discard its result. Usage observation continues.
 
-These controls do not yet provide automatic account movement, managed-send forwarding, or the planned browser usage view. Claude native fallback remains unavailable without its separate pinned live-acceptance proof. Existing explicit account selection is unchanged.
+These controls do not yet provide automatic account movement or managed-send forwarding. Claude native fallback remains unavailable without its separate pinned live-acceptance proof. Existing explicit account selection is unchanged.
+
+## Browser usage history
+
+The grid's Usage history link opens daily Codex reports in Settings. Each machine archives at most one report per account every 24 hours. Reports for the same Codex account are grouped across machines; this does not establish current subscription capacity. The summary uses only reports no older than two hours with unexpired, complete windows. Missing quota details, a full capped limit list or a full account page leave coverage unknown. The legacy archive's `unlimited` bit can mean missing quota details, so it never proves full capacity. If any included account is unknown, the combined percentage is unknown. Dated expandable reports retain older window values and their absolute scheduled reset instants.
+
+The legacy archive does not carry reset credits or trustworthy source-specific throughput. Claude usage is unavailable in this hosted feed. The app states those limits and does not infer live capacity, idle activity, forecasts or surplus from daily samples. A separate current-usage integration remains planned for both providers, including Claude's last-observed-turn freshness. The browser only reads; it never spends credits or changes an account.

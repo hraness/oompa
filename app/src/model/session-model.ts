@@ -263,10 +263,3 @@ export function sessionModelReducer(
       return model;
   }
 }
-
-/** The last `lines` lines of the streaming text, for the card tail. */
-export function streamingTail(text: string, lines: number): string {
-  if (lines < 1) return "";
-  const split = text.split("\n");
-  return split.length <= lines ? text : split.slice(split.length - lines).join("\n");
-}

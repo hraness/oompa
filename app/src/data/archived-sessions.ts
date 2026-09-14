@@ -22,7 +22,7 @@ function metadataKey(head: SessionHead): string {
 
 /**
  * The decrypted metadata for a page of heads. Plaintext lives in this hook's
- * state and nowhere else: it is dropped when custody locks, because the account
+ * state and nowhere else: it is dropped with the account key, because the account
  * key going away re-runs the effect with a null key.
  */
 export function useSessionMetadata(heads: readonly SessionHead[]): SessionMetadataMap {

@@ -29,6 +29,9 @@ describe("public appearance delivery", () => {
   test("public pages expose one native header menu and a blocking external bootstrap", () => {
     for (const html of [renderSiteHtml(), renderPrivacyHtml(), ...Object.values(renderDocsPages())]) {
       const { document } = parseHTML(html);
+      expect(document.documentElement.dataset.hranessTheme).toBe("paper");
+      expect(document.documentElement.dataset.palette).toBe("paper");
+      expect(document.documentElement.dataset.theme).toBe("light");
       const menus = document.querySelectorAll("details[data-oompa-appearance]");
       expect(menus.length).toBe(1);
       const menu = menus[0]!;
@@ -38,6 +41,8 @@ describe("public appearance delivery", () => {
       expect([...palettes].map((option) => option.getAttribute("value"))).toEqual([...designPalettes]);
       expect([...palettes].map((option) => option.textContent)).toEqual(designPalettes.map((palette) => designPaletteLabels[palette]));
       expect(menu.querySelectorAll("select[data-oompa-mode] option").length).toBe(3);
+      expect(menu.querySelector("select[data-oompa-palette] option[selected]")?.getAttribute("value")).toBe("paper");
+      expect(menu.querySelector("select[data-oompa-mode] option[selected]")?.getAttribute("value")).toBe("system");
       const bootstrap = document.head.querySelector('script[src="/appearance.js"]');
       expect(bootstrap).not.toBeNull();
       expect(bootstrap?.hasAttribute("async")).toBe(false);

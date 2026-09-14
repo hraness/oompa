@@ -1,13 +1,45 @@
+import type { Page } from "playwright-core";
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { assertAppColorScheme, assertDefaultButtonPresentation, assertDefaultPalette, assertKeyboardFocusStrip, assertNativeModalFocus, assertProductPreviewObservation, assetContentType, assetPath, boundedBrowserOperation, browserExecutableSha256, browserFailureDetails, captureBrowserResponseBody, installBrowserServiceWorkerRefusal, inventory, loadedStylesheetControl, productionCsp, settleBrowserResponseBodies, siteFoundationFontPaths, siteProductionCsp, siteStylesheetPaths, snapshotProductPreview, snapshotStaticSite, waitForClosedProductPreview } from "./app-browser";
+import { restoreSiteMaterialMedia, readSiteMaterial, assertSiteMaterialPaint, assertAppColorScheme, assertSitePublicFontsUnchanged, assertDefaultButtonPresentation, assertDefaultPalette, assertKeyboardFocusStrip, assertNativeModalFocus, assertProductPreviewObservation, assetContentType, assetPath, boundedBrowserOperation, browserExecutableSha256, browserFailureDetails, captureBrowserResponseBody, installBrowserServiceWorkerRefusal, inventory, loadedStylesheetControl, productionCsp, settleBrowserResponseBodies, siteFoundationFontPaths, siteFoundationResourcePaths, siteProductionCsp, siteStylesheetPaths, snapshotProductPreview, snapshotStaticSite, waitForClosedProductPreview, withBrowserResourceCapture } from "./app-browser";
 import { browserIoModules } from "../app/fixtures/browser/config";
 
 describe("browser response lifetime", () => {
+  test("keeps duplicate responses inside one census and detaches before a subsequent document", async () => {
+    const page = new EventEmitter();
+    let requests = 0, responses = 0, unrelatedResponses = 0;
+    page.on("response", () => { unrelatedResponses += 1; });
+    const collected = Promise.withResolvers<undefined>();
+    const census = withBrowserResourceCapture(page, () => { responses += 1; }, () => { requests += 1; }, async () => {
+      page.emit("request"); page.emit("response"); page.emit("response");
+      await collected.promise;
+      expect(responses).toBe(2);
+    });
+    await Promise.resolve();
+    expect(page.listenerCount("request")).toBe(1);
+    collected.resolve(undefined);
+    await census;
+    page.emit("request"); page.emit("response");
+    expect({ requests, responses, unrelatedResponses }).toEqual({ requests: 1, responses: 2, unrelatedResponses: 3 });
+    expect(page.listenerCount("request")).toBe(0);
+    expect(page.listenerCount("response")).toBe(1);
+  });
+
+  test("detaches a failed document census before propagating its exact error", async () => {
+    const page = new EventEmitter();
+    const failure = new Error("Document resource mismatch");
+    await expect(withBrowserResourceCapture(page, () => undefined, () => undefined, async () => {
+      throw failure;
+    })).rejects.toBe(failure);
+    expect(page.listenerCount("request")).toBe(0);
+    expect(page.listenerCount("response")).toBe(0);
+  });
+
   test("captures immediately and settles bytes before the caller can discard a document", async () => {
     const received = Promise.withResolvers<Buffer>();
     const events: string[] = [];
@@ -147,27 +179,42 @@ function staticSiteFixture(sanitized = false) {
   const fontNames = [
     ...["Light", "LightItalic", "Book", "BookItalic", "Medium", "MediumItalic", "Semibold", "SemiboldItalic", "Bold", "BoldItalic", "Black", "BlackItalic"]
       .map((cut) => `nebula-sans/NebulaSans-${cut}.woff2`),
-    "geist-mono/GeistMono[wght].woff2",
+    "geist-mono/GeistMono[wght].woff2", "instrument-serif/instrument-serif-latin-400.woff2",
   ];
   const publicFonts = new Map(fontNames.map((path) => [path, Buffer.from(`public:${path}`)]));
   const foundation = "graphs/foundation/assets/foundation-testhash.css";
   const fontPaths = fontNames.map((path, index) => `graphs/foundation/assets/${path.split("/").at(-1)!.replace(".woff2", `-testhash${index}.woff2`).replace("[wght]", sanitized ? "_wght_" : "[wght]")}`);
-  const css = fontPaths.map((path, index) => `@font-face{font-family:"Fixture ${index}";src:url("./${path.split("/").at(-1)}") format("woff2")}`).join("");
+  const texturePaths = ["graphs/foundation/assets/grain-fixture.svg", "graphs/foundation/assets/cells-fixture.svg"];
+  const attributions = [
+    ["fonts/instrument-serif/OFL.txt", "fonts/instrument-serif/OFL.txt"],
+    ["fonts/instrument-serif/UPSTREAM.md", "fonts/instrument-serif/UPSTREAM.md"],
+    ["marketing-preset/LICENSE", "LICENSE"],
+    ["marketing-preset/marketing-assets/UPSTREAM.md", "marketing-assets/UPSTREAM.md"],
+  ] as const;
+  const preset = new Map<string, Buffer>([
+    ["fonts/instrument-serif/instrument-serif-latin-400.woff2", publicFonts.get("instrument-serif/instrument-serif-latin-400.woff2")!],
+    ["marketing-assets/grain.svg", Buffer.from("<svg>grain</svg>")],
+    ["marketing-assets/cells.svg", Buffer.from("<svg>cells</svg>")],
+    ...attributions.map(([, path]) => [path, Buffer.from(`canonical:${path}`)] as const),
+  ]);
+  const css = fontPaths.map((path, index) => `@font-face{font-family:"Fixture ${index}";src:url("./${path.split("/").at(-1)}") format("woff2")}`).join("") + `:root{--grain:url("./grain-fixture.svg");--cells:url("./cells-fixture.svg")}.field{background-image:var(--grain),var(--cells)}.wall{background-image:url("./grain-fixture.svg"),url("./cells-fixture.svg")}`;
   const appearance = '<script src="/appearance.js"></script>';
   const menu = '<header><details data-oompa-appearance><summary>Appearance</summary></details></header>';
-  const html = Buffer.from(`<!doctype html><html data-palette="catppuccin" data-theme="dark"><head><link rel="stylesheet" href="/${foundation}"><link rel="stylesheet" href="/stylex.css">${appearance}</head><body>${menu}<h1 class="x123">Fixture</h1></body></html>`);
-  const inertHtml = Buffer.from(html.toString().replace(appearance, "").replace(menu, ""));
+  const html = Buffer.from(`<!doctype html><html data-hraness-theme="paper" data-palette="paper" data-theme="light"><head><link rel="stylesheet" href="/${foundation}"><link rel="stylesheet" href="/stylex.css">${appearance}</head><body>${menu}<h1 class="x123">Fixture</h1></body></html>`);
+  const inertHtml = Buffer.from(html.toString().replace(appearance, "").replace(menu, "").replace('data-palette="paper"', 'data-palette="catppuccin"').replace('data-theme="light"', 'data-theme="dark"').replace(' data-hraness-theme="paper"', ""));
   const files = new Map<string, Buffer>([
     ["index.html", html], ["privacy/index.html", html], ["preview/index.html", inertHtml],
     ...docsRoutes.map((path) => [`${path}/index.html`, html] as const),
     ...productFixture(),
     [foundation, Buffer.from(css)], ["stylex.css", Buffer.from("@layer components.hraness-stylex{.x123{font-size:40px}}")],
     ...fontPaths.map((path, index) => [path, Buffer.from(`public:${fontNames[index]}`)] as const),
+    ...texturePaths.map((path, index) => [path, preset.get(index === 0 ? "marketing-assets/grain.svg" : "marketing-assets/cells.svg")!] as const),
+    ...attributions.map(([path, source]) => [path, preset.get(source)!] as const),
     ...["analytics.js", "appearance.js", "site.js", "favicon.svg", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
       ".well-known/security.txt", ".well-known/hra.json", "fonts/nebula-sans/LICENSE.txt", "fonts/nebula-sans/PROVENANCE.md",
       "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md", ...docsRoutes.map((path) => `${path}/index.md`)].map((path) => [path, Buffer.from(`support:${path}`)] as const),
   ]);
-  return { files, publicFonts, foundation, fontPaths, css, html };
+  return { files, publicFonts, preset, foundation, fontPaths, texturePaths, attributions, css, html };
 }
 
 describe("static site graph acceptance", () => {
@@ -176,27 +223,27 @@ describe("static site graph acceptance", () => {
       for (const mutate of [
         (html: string) => html.replace('<script src="/appearance.js"></script>', ""),
         (html: string) => html.replace('src="/appearance.js"', 'defer src="/appearance.js"'),
-        (html: string) => html.replace('data-palette="catppuccin"', 'data-palette="other"'),
-        (html: string) => html.replace('data-theme="dark"', 'data-theme="light"'),
+        (html: string) => html.replace(/data-palette="(?:paper|catppuccin)"/u, 'data-palette="other"'),
+        (html: string) => html.replace(/data-theme="(?:light|dark)"/u, 'data-theme="other"'),
         (html: string) => html.replace("data-oompa-appearance", "data-unbound-appearance"),
       ]) {
         const fixture = staticSiteFixture();
         fixture.files.set(path, Buffer.from(mutate(fixture.html.toString())));
-        expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+        expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
       }
     }
   });
   test("requires the exact appearance bootstrap without admitting other scripts", () => {
     const fixture = staticSiteFixture();
     fixture.files.delete("appearance.js");
-    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
     fixture.files.set("appearance.js", Buffer.from("classic bootstrap"));
     fixture.files.set("other.js", Buffer.from("unregistered script"));
-    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
   });
 
   test("keeps inert preview and opaque product policies distinct with exact credential-free CORS", () => {
-    const siteCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'self'; frame-src 'self' https://challenges.cloudflare.com";
+    const siteCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'self'; frame-src 'self'";
     const previewCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'none'";
     const productPreviewCsp = `${exampleCsp}; frame-ancestors 'self'`;
     const config = (site: string, preview: string) => ({ headers: [
@@ -228,12 +275,13 @@ describe("static site graph acceptance", () => {
     expect(() => siteProductionCsp(config(siteCsp.replace("frame-src 'self'", "frame-src"), previewCsp))).toThrow();
   });
 
-  test("derives the same two-sheet join and all thirteen fonts from actual output bytes", () => {
+  test("derives the same two-sheet join and all fourteen fonts from actual output bytes", () => {
     for (const sanitized of [false, true]) {
       const fixture = staticSiteFixture(sanitized);
-      const graph = snapshotStaticSite(fixture.files, fixture.publicFonts);
+      const graph = snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset);
       expect(graph.stylesheets).toEqual([fixture.foundation, "stylex.css"]);
       expect(graph.fonts).toEqual([...fixture.fontPaths].sort());
+      expect(graph.textures).toEqual([...fixture.texturePaths].sort());
       expect(graph.routes.map(({ pathname }) => pathname)).toEqual([
         "/", "/privacy/", "/preview/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/",
       ]);
@@ -249,7 +297,7 @@ describe("static site graph acceptance", () => {
     for (const path of ["index.html", "privacy/index.html", "preview/index.html", ...docsRoutes.map((path) => `${path}/index.html`)]) {
       const fixture = staticSiteFixture();
       fixture.files.delete(path);
-      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
     }
     const mutations = [
       (html: string) => html.replace("/stylex.css", "/styles.css"),
@@ -269,18 +317,18 @@ describe("static site graph acceptance", () => {
     }
     const fixture = staticSiteFixture();
     fixture.files.set("extra/index.html", fixture.html);
-    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
   });
 
   test("rejects private graphs, extra CSS, missing/redundant fonts and wrong installed identities", () => {
     for (const extra of ["styles.css", "graphs/renderer/entries/render.js", "graphs/foundation/receipt.json", "stylex-complete.json", "renderer.js", "source.ts", "extra.woff2", "extra.woff"]) {
       const fixture = staticSiteFixture();
       fixture.files.set(extra, Buffer.from("unexpected"));
-      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
     }
     const missingLicense = staticSiteFixture();
     missingLicense.files.delete("fonts/geist-mono/OFL.txt");
-    expect(() => snapshotStaticSite(missingLicense.files, missingLicense.publicFonts)).toThrow();
+    expect(() => snapshotStaticSite(missingLicense.files, missingLicense.publicFonts, missingLicense.preset)).toThrow();
     for (const mutation of ["missing", "changed", "wrong-input", "missing-input"] as const) {
       const fixture = staticSiteFixture();
       const path = fixture.fontPaths[0]!;
@@ -288,8 +336,84 @@ describe("static site graph acceptance", () => {
       else if (mutation === "changed") fixture.files.set(path, Buffer.from("altered"));
       else if (mutation === "wrong-input") fixture.publicFonts.set("nebula-sans/NebulaSans-Light.woff2", Buffer.from("different installed font"));
       else fixture.publicFonts.delete("nebula-sans/NebulaSans-Light.woff2");
-      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
     }
+  });
+
+  test("binds both texture outputs, the editorial font and each attribution to canonical snapshot bytes", () => {
+    for (const mutation of ["missing", "extra", "changed", "duplicate", "wrong-input", "missing-input", "font-input", "font-output"] as const) {
+      const fixture = staticSiteFixture();
+      if (mutation === "missing") fixture.files.delete(fixture.texturePaths[0]!);
+      if (mutation === "extra") fixture.files.set("graphs/foundation/assets/extra.svg", Buffer.from("<svg/>"));
+      if (mutation === "changed") fixture.files.set(fixture.texturePaths[0]!, Buffer.from("<svg>changed</svg>"));
+      if (mutation === "duplicate") fixture.files.set(fixture.texturePaths[1]!, fixture.files.get(fixture.texturePaths[0]!)!);
+      if (mutation === "wrong-input") fixture.preset.set("marketing-assets/grain.svg", Buffer.from("<svg>wrong source</svg>"));
+      if (mutation === "missing-input") fixture.preset.delete("marketing-assets/cells.svg");
+      if (mutation === "font-input") fixture.preset.set("fonts/instrument-serif/instrument-serif-latin-400.woff2", Buffer.from("wrong canonical font"));
+      if (mutation === "font-output") fixture.files.set(fixture.fontPaths.at(-1)!, Buffer.from("wrong emitted font"));
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
+    }
+    for (const [publicPath, sourcePath] of staticSiteFixture().attributions) {
+      for (const target of ["public", "source"] as const) {
+        const fixture = staticSiteFixture();
+        (target === "public" ? fixture.files : fixture.preset).set(target === "public" ? publicPath : sourcePath, Buffer.from("changed license"));
+        expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow("attribution");
+      }
+      expect(assetContentType(publicPath)).toMatch(/^text\/plain/u);
+    }
+    for (const path of ["marketing-preset/other.md", "marketing-preset/private/LICENSE"]) {
+      const fixture = staticSiteFixture(); fixture.files.set(path, Buffer.from("unapproved"));
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
+      expect(assetContentType(path)).toBe("application/octet-stream");
+    }
+  });
+
+  test("postflight revalidates thirteen installed fonts and the vendor-only editorial face at their original roots", async () => {
+    const directory = await realpath(await mkdtemp(join(tmpdir(), "site-font-origins-")));
+    const installed = join(directory, "installed"), vendor = join(directory, "vendor");
+    const fixture = staticSiteFixture();
+    const source = (path: string) => join(path.startsWith("instrument-serif/") ? vendor : installed, "fonts", path);
+    try {
+      for (const [path, bytes] of fixture.publicFonts) {
+        await mkdir(dirname(source(path)), { recursive: true });
+        await writeFile(source(path), bytes);
+      }
+      // The old kit intentionally has no editorial font; both source families
+      // must still be revalidated and neither may substitute the other's bytes.
+      await expect(assertSitePublicFontsUnchanged(installed, vendor, fixture.publicFonts)).resolves.toBeUndefined();
+      for (const path of ["nebula-sans/NebulaSans-Light.woff2", "instrument-serif/instrument-serif-latin-400.woff2"]) {
+        await writeFile(source(path), "changed after browser run");
+        await expect(assertSitePublicFontsUnchanged(installed, vendor, fixture.publicFonts)).rejects.toThrow("Public font input changed");
+        await writeFile(source(path), fixture.publicFonts.get(path)!);
+      }
+      fixture.publicFonts.set("../unowned.woff2", Buffer.from("escape"));
+      await expect(assertSitePublicFontsUnchanged(installed, vendor, fixture.publicFonts)).rejects.toThrow();
+    } finally { await rm(directory, { recursive: true }); }
+  });
+
+  test("requires four texture references with exactly two uses of each physical asset", () => {
+    const fixture = staticSiteFixture();
+    expect(siteFoundationResourcePaths(fixture.foundation, Buffer.from(fixture.css))).toEqual({
+      fonts: [...fixture.fontPaths].sort(), textures: [...fixture.texturePaths].sort(),
+    });
+    for (const css of [
+      fixture.css.replace('.wall{background-image:url("./grain-fixture.svg"),url("./cells-fixture.svg")}', ""),
+      fixture.css.replace('url("./grain-fixture.svg")', "none"),
+      fixture.css.replace('url("./grain-fixture.svg")', 'url("./cells-fixture.svg")'),
+      fixture.css.replaceAll('./grain-fixture.svg', './cells-fixture.svg'),
+      fixture.css + '.extra{background-image:url("./grain-fixture.svg")}',
+    ]) expect(() => siteFoundationResourcePaths(fixture.foundation, Buffer.from(css))).toThrow();
+  });
+
+  test("keeps texture URL spelling and substitution closed in token-valued CSS", () => {
+    const fixture = staticSiteFixture();
+    for (const bad of ["https://outside.invalid/grain.svg", "//outside.invalid/grain.svg", "../grain.svg", "./../grain.svg", "./grain.svg?x", "./grain.svg#x", "./%2e%2e/grain.svg", "./cells-fixture.svg"]) {
+      expect(() => siteFoundationFontPaths(fixture.foundation, Buffer.from(fixture.css.replace("./grain-fixture.svg", bad)))).toThrow();
+    }
+    for (const rule of [
+      '.x{--remote:"https://outside.invalid/a.svg";background:image-set(var(--remote) 1x)}',
+      '.x{--remote:"https://outside.invalid/a.svg";--field:image-set(var(--remote) 1x);background:var(--field)}',
+    ]) expect(() => siteFoundationFontPaths(fixture.foundation, Buffer.from(fixture.css + rule))).toThrow();
   });
 
   test("rejects remote/data/import/local sources, duplicate faces and URL traversal aliases", () => {
@@ -308,7 +432,7 @@ describe("static site graph acceptance", () => {
     expect(siteFoundationFontPaths(fixture.foundation, Buffer.from(fixture.css.replace("[wght]", "%5Bwght%5D")))).toEqual([...fixture.fontPaths].sort());
     for (const css of ['@import "other.css";', '.x{background:url("data:image/svg+xml,example")}']) {
       fixture.files.set("stylex.css", Buffer.from(css));
-      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
     }
   });
 
@@ -334,9 +458,9 @@ describe("static site graph acceptance", () => {
     ];
     for (const rule of resourceRules) {
       const fixture = staticSiteFixture();
-      expect(() => siteFoundationFontPaths(fixture.foundation, Buffer.from(fixture.css + rule))).toThrow("non-font URL");
+      expect(() => siteFoundationFontPaths(fixture.foundation, Buffer.from(fixture.css + rule))).toThrow("texture URLs");
       fixture.files.set("stylex.css", Buffer.from(rule));
-      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow("unexpected asset URL");
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow("unexpected asset URL");
     }
   });
 
@@ -346,7 +470,7 @@ describe("static site graph acceptance", () => {
     fixture.files.set(fixture.foundation, Buffer.from(fixture.css + inertRules));
     fixture.files.set("stylex.css", Buffer.from(inertRules));
     expect(siteFoundationFontPaths(fixture.foundation, fixture.files.get(fixture.foundation)!)).toEqual([...fixture.fontPaths].sort());
-    expect(snapshotStaticSite(fixture.files, fixture.publicFonts).fonts).toEqual([...fixture.fontPaths].sort());
+    expect(snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset).fonts).toEqual([...fixture.fontPaths].sort());
   });
 
   test("parsed resource inventories reject CSS parser warnings in both stylesheets", () => {
@@ -354,7 +478,7 @@ describe("static site graph acceptance", () => {
     const fixture = staticSiteFixture();
     expect(() => siteFoundationFontPaths(fixture.foundation, Buffer.from(fixture.css + invalid))).toThrow();
     fixture.files.set("stylex.css", Buffer.from(invalid));
-    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
   });
 
   test("requires all six Markdown guides and admits their MIME without opening arbitrary Markdown publication", () => {
@@ -362,11 +486,11 @@ describe("static site graph acceptance", () => {
       const fixture = staticSiteFixture();
       expect(assetContentType(`${path}/index.md`)).toBe("text/markdown; charset=utf-8");
       fixture.files.delete(`${path}/index.md`);
-      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
     }
     const fixture = staticSiteFixture();
     fixture.files.set("docs/private.md", Buffer.from("not published"));
-    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
     expect(assetContentType("docs/private.md")).toBe("application/octet-stream");
   });
 });
@@ -378,7 +502,7 @@ describe("separate closed product example generation", () => {
     expect(product.stylesheets).toEqual(["examples/app/graphs/client/assets/foundation-fixture.css", "examples/app/stylex.css"]);
     expect(product.scripts).toEqual(["examples/app/graphs/client/assets/main-fixture.js"]);
     const fixture = staticSiteFixture();
-    expect(snapshotStaticSite(fixture.files, fixture.publicFonts).product).toEqual(product);
+    expect(snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset).product).toEqual(product);
     expect(assetPath("/examples/app/?view=overview")).toBeNull();
     expect(assetPath("/examples/app/")).toBe("examples/app/index.html");
     expect(assetPath("/examples/app/graphs/client/assets/main-fixture.js")).toBe("examples/app/graphs/client/assets/main-fixture.js");
@@ -391,11 +515,11 @@ describe("separate closed product example generation", () => {
     }
     for (const path of ["examples/app/stylex-complete.json", "examples/app/source.ts", "examples/app/graphs/client/receipt.json", "examples/app/graphs/client/assets/private.ts", "examples/app/graphs/client/assets/font.woff2", "examples/app/extra/index.html", "examples/app/extra.css", "examples/app/graphs/client/assets/extra.css", "examples/app/graphs/renderer/assets/renderer.js"]) {
       const fixture = staticSiteFixture(); fixture.files.set(path, Buffer.from("extra"));
-      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+      expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
     }
     const fixture = staticSiteFixture();
     fixture.files.set("examples/other.js", Buffer.from("extra"));
-    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts)).toThrow();
+    expect(() => snapshotStaticSite(fixture.files, fixture.publicFonts, fixture.preset)).toThrow();
   });
 
   test("refuses escaped resources, shell changes and inline or active presentation", () => {
@@ -461,7 +585,7 @@ describe("separate closed product example generation", () => {
 });
 
 test("default palette assertions retain semantic roles and respect native forced colors", () => {
-  const sample = { palette: "catppuccin", theme: "dark", primary: "#92bafa", foreground: "#dbe1f7", background: "rgb(30, 30, 46)" };
+  const sample = { palette: "paper", theme: "dark", primary: "#8fb0ff", foreground: "#f5f2ed", background: "rgb(18, 16, 15)" };
   const forced = { ...sample, primary: "Highlight", foreground: "CanvasText", background: "Canvas" };
   expect(() => assertDefaultPalette(sample, false)).not.toThrow();
   expect(() => assertDefaultPalette(forced, true)).not.toThrow();
@@ -471,6 +595,15 @@ test("default palette assertions retain semantic roles and respect native forced
     expect(() => assertDefaultPalette({ ...sample, [field]: "wrong" }, false)).toThrow();
     if (field !== "background") expect(() => assertDefaultPalette({ ...forced, [field]: "wrong" }, true)).toThrow();
   }
+});
+
+test("palette acceptance distinguishes the light OS default from the fixed dark preview", () => {
+  const light = { palette: "paper", theme: "light", primary: "#1e5ae1", foreground: "#1c1917", background: "rgb(248, 247, 244)" };
+  const preview = { palette: "catppuccin", theme: "dark", primary: "#92bafa", foreground: "#dbe1f7", background: "rgb(30, 30, 46)" };
+  expect(() => assertDefaultPalette(light, false, { palette: "paper", mode: "light" })).not.toThrow();
+  expect(() => assertDefaultPalette(preview, false, { palette: "catppuccin", mode: "dark" })).not.toThrow();
+  expect(() => assertDefaultPalette(preview, false, { palette: "paper", mode: "light" })).toThrow();
+  expect(() => assertDefaultPalette(light, false, { palette: "catppuccin", mode: "dark" })).toThrow();
 });
 
 test("offset focus contrast uses the exposed surface and composites native alpha colors", () => {
@@ -633,12 +766,12 @@ describe("loaded stylesheet negative control", () => {
 });
 
 describe("browser acceptance boundaries", () => {
-  test("requires exact authored dark for ordinary profiles, including a light OS preference", () => {
+  test("requires the product System default to follow each ordinary OS profile", () => {
     for (const colorScheme of ["dark", "light"] as const) {
       const profile = { forced: false, colorScheme };
-      const sample = { forced: false, colorScheme: "dark", forcedColorAdjust: "auto" };
+      const sample = { forced: false, colorScheme, forcedColorAdjust: "auto" };
       expect(() => assertAppColorScheme(sample, profile)).not.toThrow();
-      for (const invalid of ["light", "light dark", "dark light", "only dark", "normal", undefined]) {
+      for (const invalid of [colorScheme === "light" ? "dark" : "light", "light dark", "dark light", "only dark", "normal", undefined]) {
         expect(() => assertAppColorScheme({ ...sample, colorScheme: invalid }, profile)).toThrow();
       }
     }
@@ -833,8 +966,176 @@ describe("browser acceptance boundaries", () => {
     expect(() => productionCsp({ headers: [] }, "/(.*)")).toThrow();
   });
   test("fixture replacement ownership is limited to IO", () => {
-    expect(browserIoModules).toHaveLength(8);
+    expect(browserIoModules).toHaveLength(9);
     expect(browserIoModules.every((path) => /^app\/src\/(data|custody)\//u.test(path))).toBe(true);
     expect(browserIoModules.some((path) => /\/(components|screens|model)\/|\.stylex/u.test(path))).toBe(false);
+  });
+});
+
+
+describe("native website Lantern material acceptance", () => {
+  const paint = (background: string, ink = "rgb(28, 25, 23)", image = "none", backdrop = "none", size = "auto") => ({ background, ink, image, backdrop, size });
+  const fixture = (home: boolean, opaque: boolean, viewportWidth = 1280) => {
+    const chrome = paint("rgb(255, 254, 250)", undefined, "none", opaque ? "none" : "blur(20px) saturate(1.1)");
+    const pane = paint("rgb(255, 254, 250)");
+    const choice = paint("rgb(250, 244, 228)");
+    const cells = viewportWidth <= 760 ? 576 : 768;
+    const wall = paint("rgb(248, 247, 244)", undefined, opaque ? "none" : 'url("https://site.invalid/graphs/foundation/assets/grain-fixture.svg"), url("https://site.invalid/graphs/foundation/assets/cells-fixture.svg"), radial-gradient(white, transparent), linear-gradient(110deg, white, transparent)', "none", `64px 64px, ${cells}px ${cells}px, 100% 100%, 100% 100%`);
+    return { material: "lantern", preset: home ? "editorial" : null, origin: "https://site.invalid", viewportWidth, walls: home ? 1 : 0, fields: 0, header: chrome,
+      panes: [pane], wall: home ? wall : null, selected: home ? [choice] : [], disclosures: home ? [choice] : [],
+      references: { chrome, pane, choice, wall } };
+  };
+  test("native material waits for every real transition after frame settlement", async () => {
+    const first = Promise.withResolvers<undefined>(), last = Promise.withResolvers<undefined>();
+    const events: string[] = [], sample = fixture(true, false);
+    let evaluations = 0, frames = 0;
+    const page = { evaluate: (callback: () => unknown) => {
+      evaluations += 1;
+      if (evaluations > 1) { events.push("sample"); return Promise.resolve(sample); }
+      const result: unknown = runInNewContext(`(${callback.toString()})();`, {
+        document: { fonts: { ready: Promise.resolve() }, querySelectorAll: (selector: string) => {
+          expect(selector).toContain(".hraness-marketing-question[open] > summary");
+          return [first, last].map((transition, index) => ({ getAnimations: () => {
+            events.push(`flush-${index}`); return [{ finished: transition.promise }];
+          } }));
+        } },
+        requestAnimationFrame: (callback: () => void) => { frames += 1; queueMicrotask(callback); },
+      });
+      return result;
+    } } as unknown as Page;
+    const observation = readSiteMaterial(page);
+    await new Promise<void>((done) => { setImmediate(done); });
+    expect(frames).toBe(2);
+    expect(events).toEqual(["flush-0", "flush-1"]);
+    first.resolve(undefined);
+    await new Promise<void>((done) => { setImmediate(done); });
+    expect(events).not.toContain("sample");
+    last.resolve(undefined);
+    await expect(observation).resolves.toBe(sample);
+    expect(events).toEqual(["flush-0", "flush-1", "sample"]);
+  });
+  test("a cancelled native transition refuses the material sample", async () => {
+    const transition = Promise.withResolvers<undefined>(), failure = new Error("Native transition was cancelled");
+    let evaluations = 0;
+    const page = { evaluate: (callback: () => unknown) => {
+      evaluations += 1;
+      if (evaluations > 1) return Promise.resolve(fixture(true, false));
+      const result: unknown = runInNewContext(`(${callback.toString()})();`, {
+        document: { fonts: { ready: Promise.resolve() }, querySelectorAll: () => [
+          { getAnimations: () => [{ finished: transition.promise }] },
+        ] },
+        requestAnimationFrame: (callback: () => void) => { queueMicrotask(callback); },
+      });
+      return result;
+    } } as unknown as Page;
+    const observation = readSiteMaterial(page);
+    const rejected = observation.catch((error: unknown) => error);
+    await new Promise<void>((done) => { setImmediate(done); });
+    transition.reject(failure);
+    expect(await rejected).toBe(failure);
+    expect(evaluations).toBe(1);
+  });
+  test("native material paint is read only after rendering settles", async () => {
+    const rendered = Promise.withResolvers<undefined>();
+    const sample = fixture(true, false);
+    let evaluations = 0;
+    const page = { evaluate: () => {
+      evaluations += 1;
+      return evaluations === 1 ? rendered.promise : Promise.resolve(sample);
+    } } as unknown as Page;
+    const observation = readSiteMaterial(page);
+    await Promise.resolve();
+    expect(evaluations).toBe(1);
+    rendered.resolve(undefined);
+    await expect(observation).resolves.toBe(sample);
+    expect(evaluations).toBe(2);
+  });
+  test("failed rendering settlement refuses the material sample", async () => {
+    const failure = new Error("Native rendering did not settle");
+    let evaluations = 0;
+    const page = { evaluate: () => { evaluations += 1; return Promise.reject(failure); } } as unknown as Page;
+    await expect(readSiteMaterial(page)).rejects.toBe(failure);
+    expect(evaluations).toBe(1);
+  });
+  test("temporary media session detaches before the complete original profile is restored and sampled", async () => {
+    for (const colorScheme of ["light", "dark"] as const) for (const reduced of [false, true]) for (const forced of [false, true]) {
+      const detached = Promise.withResolvers<undefined>();
+      const events: string[] = [];
+      const expected: Parameters<Page["emulateMedia"]>[0] = { colorScheme, reducedMotion: reduced ? "reduce" : "no-preference", forcedColors: forced ? "active" : "none" };
+      let media: Parameters<Page["emulateMedia"]>[0] = { colorScheme: colorScheme === "dark" ? "light" : "dark" };
+      const restored = restoreSiteMaterialMedia({ emulateMedia: async (options) => {
+        events.push("restore"); media = options;
+      } }, { detach: () => { events.push("detach"); return detached.promise; } }, { colorScheme, reduced, forced })
+        .then(() => { events.push("sample"); return media; });
+      await Promise.resolve();
+      expect(events).toEqual(["detach"]);
+      detached.resolve(undefined);
+      await expect(restored).resolves.toEqual(expected);
+      expect(events).toEqual(["detach", "restore", "sample"]);
+    }
+  });
+  test("media restoration failure refuses the restored paint observation", async () => {
+    for (const stage of ["detach", "restore"] as const) {
+      const failure = new Error(`Native media ${stage} failed`);
+      const events: string[] = [];
+      await expect(restoreSiteMaterialMedia({ emulateMedia: async () => {
+        events.push("restore"); throw failure;
+      } }, { detach: async () => {
+        events.push("detach"); if (stage === "detach") throw failure;
+      } }, { reduced: false, forced: false }).then(() => { events.push("sample"); }))
+        .rejects.toBe(failure);
+      expect(events).toEqual(stage === "detach" ? ["detach"] : ["detach", "restore"]);
+    }
+  });
+  test("retains exact canonical surfaces in normal and opaque modes without applying editorial type to guides", () => {
+    for (const home of [true, false]) for (const opaque of [true, false]) {
+      expect(() => assertSiteMaterialPaint(fixture(home, opaque), home, opaque)).not.toThrow();
+    }
+  });
+  test("requires native grain/cell order and responsive frequency even if the reference shares a bad value", () => {
+    for (const width of [390, 760, 761, 1440]) {
+      const sample = fixture(true, false, width);
+      expect(() => assertSiteMaterialPaint(sample, true, false)).not.toThrow();
+      for (const patch of [
+        { image: "repeating-linear-gradient(90deg, white, transparent), repeating-linear-gradient(0deg, white, transparent), radial-gradient(white, transparent)" },
+        { image: sample.wall!.image.replace(/url\("[^"\n]+"\), /u, "") },
+        { image: sample.wall!.image.replace("grain-fixture.svg", "cells-fixture.svg") },
+        { image: sample.wall!.image.replace("https://site.invalid", "https://outside.invalid") },
+        { image: sample.wall!.image.replace("grain-fixture.svg", "grain-fixture.svg?other=1") },
+        { image: sample.wall!.image.replace("grain-fixture.svg", "grain-fixture.svg#other") },
+        { image: sample.wall!.image.replace("/graphs/foundation/assets/grain-", "/other/grain-") },
+        { image: sample.wall!.image.replace(", radial-gradient(white, transparent)", "") },
+        { image: sample.wall!.image + ", linear-gradient(white, transparent)" },
+        { size: `64px 64px, ${width <= 760 ? 768 : 576}px ${width <= 760 ? 768 : 576}px, 100% 100%, 100% 100%` },
+        { size: sample.wall!.size.replace("64px 64px", "96px 96px") },
+      ]) {
+        const wall = { ...sample.wall!, ...patch };
+        expect(() => assertSiteMaterialPaint({ ...sample, wall, references: { ...sample.references, wall } }, true, false)).toThrow();
+      }
+      for (const patch of [{ viewportWidth: 0 }, { viewportWidth: 760.5 }, { origin: "https://site.invalid/path" }]) {
+        expect(() => assertSiteMaterialPaint({ ...sample, ...patch }, true, false)).toThrow();
+      }
+    }
+  });
+
+  test("rejects lost scopes, compiled paint overrides and missing native selected/disclosure observations", () => {
+    const sample = fixture(true, false);
+    const baseWall = sample.references.wall;
+    for (const patch of [
+      { material: null }, { preset: null }, { walls: 0 }, { fields: 1 },
+      { header: { ...sample.header, backdrop: "blur(14px) saturate(1.4)" } },
+      { header: { ...sample.header, background: "transparent" } },
+      { panes: [{ ...sample.references.pane, background: "transparent" }] },
+      { panes: [{ ...sample.references.pane, ink: "transparent" }] },
+      { selected: [] }, { selected: [sample.references.choice, sample.references.choice] }, { disclosures: [] },
+      { selected: [{ ...sample.references.choice, ink: "transparent" }] },
+      { disclosures: [{ ...sample.references.choice, background: "transparent" }] },
+      { wall: { ...baseWall, image: "none" } },
+    ]) expect(() => assertSiteMaterialPaint({ ...sample, ...patch }, true, false)).toThrow();
+    expect(() => assertSiteMaterialPaint({ ...fixture(false, false), preset: "editorial" }, false, false)).toThrow();
+    expect(() => assertSiteMaterialPaint({ ...fixture(false, false), wall: sample.wall }, false, false)).toThrow();
+    const opaque = fixture(true, true);
+    expect(() => assertSiteMaterialPaint({ ...opaque, header: sample.header }, true, true)).toThrow();
+    expect(() => assertSiteMaterialPaint({ ...opaque, wall: sample.wall }, true, true)).toThrow();
   });
 });

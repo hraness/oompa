@@ -15,8 +15,7 @@ async function compiledCss(file: string): Promise<string> {
 test("the shared hero receives compact outer spacing through the public compiler", async () => {
   const css = await compiledCss("marketing.stylex.ts");
   expect(css).toContain(":is(header)");
-  expect(css).toContain("padding-top:clamp(2rem,4vw,3.5rem)");
-  expect(css).toContain("padding-bottom:2rem");
+  expect(css).toContain("padding-block:var(--hraness-marketing-hero-space,3.5rem4rem)");
   expect(css).toContain("gap:clamp(1.5rem,3vw,2.5rem)");
 });
 

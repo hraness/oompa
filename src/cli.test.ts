@@ -65,7 +65,7 @@ import {
   type ProtectedInteractionDetailDocument,
 } from "./domain/interactions";
 import type { RootStatus } from "./domain/observation";
-import { claudeAccountLoginAbandonCommand, usageForGroup } from "./cli/parser";
+import { claudeAccountLoginAbandonCommand, claudeAccountLoginCommand, usageForGroup } from "./cli/parser";
 import { renderProtectedInteractionDetail } from "./cli/render";
 import {
   DAEMON_PROTOCOL,
@@ -841,8 +841,8 @@ describe("CLI entry point", () => {
     }
   });
 
-  test("startup refuses live or unknown Claude custody during a staged revocation", async () => {
-    for (const [index, liveness] of (["live", "unknown"] as const).entries()) {
+  for (const [index, liveness] of (["live", "unknown"] as const).entries()) {
+    test(`startup refuses ${liveness} Claude custody during a staged revocation`, async () => {
       const value = await stagedClaudeStartupRecoveryFixture(
         liveness,
         61_001 + index,
@@ -883,8 +883,8 @@ describe("CLI entry point", () => {
         value.store.close();
         await rm(value.runRoot, { force: true, recursive: true });
       }
-    }
-  });
+    });
+  }
 
   test("startup releases proven-dead Claude custody before advancing daemon generation", async () => {
     const value = await stagedClaudeStartupRecoveryFixture("not-live", 61_003);
@@ -3656,7 +3656,6 @@ describe("CLI entry point", () => {
     const privatePayload = "message-private-sentinel";
     const commands = [
       ["account", "logout", "personal", "--json"],
-      ["account", "switch", "personal", "--json"],
       ["session", "start", "personal", "--json"],
       ["session", "start", "personal", "--provider", "claude", "--json"],
       ["session", "send", "session-1", privatePayload, "--json"],
@@ -3869,7 +3868,7 @@ describe("CLI entry point", () => {
     }
   });
 
-  test("preflights Claude even across a signed-in-to-grant race and completes the exact attempt", async () => {
+  test.each(["provider_default", "owner_manual"] as const)("preflights Claude and completes the exact attempt with %s", async (browserMode) => {
     const { installation, runRoot } = await upgradeFixture("claude-account-login");
     const accountId = `acct_${"1".repeat(32)}` as const;
     const attemptId = `attempt_${"2".repeat(32)}` as const;
@@ -3885,6 +3884,7 @@ describe("CLI entry point", () => {
         "Personal",
         "--provider",
         "claude",
+        ...(browserMode === "owner_manual" ? ["--manual-browser"] : []),
         "--idempotency-key",
         idempotencyKey,
       ], captured.output, {
@@ -3929,7 +3929,9 @@ describe("CLI entry point", () => {
             version: 1 as const,
           };
         },
-        runClaudeForegroundLogin: async ({ configDir, stdio }) => {
+        runClaudeForegroundLogin: async ({ configDir, stdio, browserMode: launchMode }) => {
+          expect(launchMode).toBe(browserMode);
+          expect(captured.read().stderr.includes("Claude login for Oompa profile Personal.")).toBe(browserMode === "owner_manual");
           loginConfigDir = configDir;
           expect(stdio).toEqual({ stderr: 2, stdin: 0, stdout: 1 });
           return { state: "joined", exitCode: 0, interruptedBy: null };
@@ -3952,7 +3954,11 @@ describe("CLI entry point", () => {
       expect(preflights).toBe(2);
       expect((await lstat(loginConfigDir)).mode & 0o077).toBe(0);
       expect(captured.read()).toEqual({
-        stderr: "",
+        stderr: browserMode === "owner_manual"
+          ? "Claude login for Oompa profile Personal.\n"
+            + "Close all prior private/incognito windows, then open one fresh private window; keep normal browser sessions unchanged.\n"
+            + "Copy Claude's printed link unchanged into that window. Check the intended account before approving sign-in.\n"
+          : "",
         stdout: "Claude Code is signed in for Personal.\n",
       });
     } finally {
@@ -4105,7 +4111,7 @@ describe("CLI entry point", () => {
     }
   });
 
-  test("short-circuits exact Claude recovery status before runtime preflight", async () => {
+  test.each(["provider_default", "owner_manual"] as const)("short-circuits exact Claude recovery before runtime preflight with %s", async (browserMode) => {
     const { installation, runRoot } = await upgradeFixture("claude-account-recovery");
     const accountId = `acct_${"7".repeat(32)}` as const;
     const attemptId = `attempt_${"8".repeat(32)}` as const;
@@ -4121,7 +4127,8 @@ describe("CLI entry point", () => {
     const commands: LocalCommand[] = [];
     try {
       expect(await main([
-        "account", "login", accountId, "--provider", "claude", "--idempotency-key", key,
+        "account", "login", accountId, "--provider", "claude", "--idempotency-key", "00000000-0000-4000-8000-000000000399",
+        ...(browserMode === "owner_manual" ? ["--manual-browser"] : []),
       ], captured.output, {
         installation,
         interactive: true,
@@ -4154,6 +4161,9 @@ describe("CLI entry point", () => {
       })).toBe(7);
       expect(commands).toEqual([{ account: accountId, kind: "account.show", provider: "claude" }]);
       expect(captured.read().stderr).toContain(abandonCommand);
+      expect(captured.read().stderr).toContain(claudeAccountLoginCommand(accountId, key, browserMode));
+      expect(captured.read().stderr).not.toContain("00000000-0000-4000-8000-000000000399");
+      expect(captured.read().stderr).not.toContain("Close all prior private");
     } finally {
       await rm(runRoot, { force: true, recursive: true });
     }
@@ -4434,7 +4444,7 @@ describe("CLI entry point", () => {
     }
   });
 
-  test("completes a typed spawn failure and preserves exact recovery on unproved exit or completion failure", async () => {
+  test.each(["provider_default", "owner_manual"] as const)("completes typed spawn failure or retains exact Claude recovery with %s", async (browserMode) => {
     for (const mode of ["spawn", "timeout", "protocol", "unjoined"] as const) {
       const completionFailure = mode !== "spawn";
       const { installation, runRoot } = await upgradeFixture(`claude-complete-${mode}`);
@@ -4451,12 +4461,14 @@ describe("CLI entry point", () => {
       try {
         const exit = await main([
           "account", "login", accountId, "--provider", "claude", "--idempotency-key", key,
+          ...(browserMode === "owner_manual" ? ["--manual-browser"] : []),
         ], captured.output, {
           installation,
           interactive: true,
           isTerminalDescriptor: () => true,
           resolveClaudeRuntime: async () => cliClaudeRuntime,
-          runClaudeForegroundLogin: async () => {
+          runClaudeForegroundLogin: async ({ browserMode: launchMode }) => {
+            expect(launchMode).toBe(browserMode);
             if (mode === "unjoined") throw new ClaudeError("TIMEOUT", "Native child exit remains unproved.");
             return completionFailure
               ? { state: "joined", exitCode: 0, interruptedBy: null }
@@ -4517,6 +4529,7 @@ describe("CLI entry point", () => {
               : { state: "not_started", reason: "spawn_failed" },
           });
         }
+        expect(captured.read().stderr).toContain(claudeAccountLoginCommand(accountId, completionFailure ? key : undefined, browserMode));
         if (completionFailure) {
           expect(exit).toBe(7);
           expect(JSON.stringify(captured.read())).toContain(attemptId);
@@ -4533,7 +4546,7 @@ describe("CLI entry point", () => {
     }
   });
 
-  test("holds terminal-signal custody across prepare grant and daemon completion", async () => {
+  test.each(["provider_default", "owner_manual"] as const)("holds Claude terminal-signal custody across prepare and completion with %s", async (browserMode) => {
     for (const phase of ["during_prepare", "during_completion"] as const) {
       const { installation, runRoot } = await upgradeFixture(`claude-grant-signal-${phase}`);
       const digit = phase === "during_prepare" ? "1" : "2";
@@ -4550,13 +4563,15 @@ describe("CLI entry point", () => {
       try {
         const exit = await main([
           "account", "login", accountId, "--provider", "claude", "--idempotency-key", key,
+          ...(browserMode === "owner_manual" ? ["--manual-browser"] : []),
         ], captured.output, {
           installation,
           interactive: true,
           isTerminalDescriptor: () => true,
           claudeLoginSignalSource: signalSource,
           resolveClaudeRuntime: async () => cliClaudeRuntime,
-          runClaudeForegroundLogin: async () => {
+          runClaudeForegroundLogin: async ({ browserMode: launchMode }) => {
+            expect(launchMode).toBe(browserMode);
             foregroundCalls += 1;
             return { state: "joined", exitCode: 0, interruptedBy: null };
           },
@@ -4691,7 +4706,7 @@ describe("CLI entry point", () => {
     }
   });
 
-  test("refuses non-terminal Claude login before starting provider auth", async () => {
+  test.each(["provider_default", "owner_manual"] as const)("refuses non-terminal Claude login before auth with %s", async (browserMode) => {
     const captured = capture();
     let providerCalls = 0;
     expect(await main([
@@ -4700,6 +4715,7 @@ describe("CLI entry point", () => {
       "Personal",
       "--provider",
       "claude",
+      ...(browserMode === "owner_manual" ? ["--manual-browser"] : []),
       "--json",
     ], captured.output, {
       interactive: false,
@@ -4713,7 +4729,7 @@ describe("CLI entry point", () => {
     expect(JSON.parse(captured.read().stdout)).toMatchObject({
       error: {
         code: "INTERACTION_REQUIRED",
-        details: { nextCommand: expect.stringMatching(/^oompa account login Personal --provider claude --idempotency-key [0-9a-f-]{36}$/u) },
+        details: { nextCommand: expect.stringMatching(new RegExp(`^oompa account login Personal --provider claude${browserMode === "owner_manual" ? " --manual-browser" : ""} --idempotency-key [0-9a-f-]{36}$`, "u")) },
       },
       ok: false,
     });
@@ -6499,6 +6515,27 @@ describe("CLI entry point", () => {
           return {};
         },
         handleManagedHostToolResponseWritten: () => { invoked = true; },
+      },
+    })).rejects.toThrow("Daemon acceptance hooks are restricted to live acceptance.");
+    expect(invoked).toBeFalse();
+  });
+
+  test("rejects the personal Claude restart proof outside live acceptance before effects", async () => {
+    const installation = createProductionInstallation();
+    let invoked = false;
+    const touched = () => { invoked = true; };
+    await expect(runDaemon(installation, {
+      liveAcceptancePersonalClaudeProof: {
+        executablePath: "/fixture/never-executed-claude",
+        environment: {},
+        beginDaemonGeneration: touched,
+        assertRuntimeRequest: touched,
+        runtimeAdmitted: touched,
+        runtimeFailed: touched,
+        prepareLaunch: () => { touched(); throw new Error("No process launch is admitted."); },
+        observeWrites: () => { touched(); return { userWriteAttempts: 0, acceptedUserWrites: 0, acknowledgmentWithheld: false }; },
+        closeAdmission: touched,
+        closeDaemonGeneration: async () => { touched(); },
       },
     })).rejects.toThrow("Daemon acceptance hooks are restricted to live acceptance.");
     expect(invoked).toBeFalse();

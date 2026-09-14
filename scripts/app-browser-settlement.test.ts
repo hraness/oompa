@@ -101,6 +101,9 @@ test("frame identity cannot repeat, regress, be nonfinite or omit one consecutiv
     [{ frame: 3, sample: expected, ignored: true }, { frame: 4, sample: expected }]]) {
     expect(() => advanceStylesheetSettlement(state, value, expected, false)).toThrow();
   }
+  expect(() => advanceStylesheetSettlement(initialStylesheetSettlement(),
+    [{ frame: 7, sample: expected }, { frame: 7, sample: expected }], expected, false))
+    .toThrow("previous=null, pair=[7,7]");
 });
 
 test("delayed exact restoration succeeds without changing CSS and disarms all controller resources", async () => {
@@ -248,6 +251,87 @@ test("the browser probe samples adjacent RAF callbacks and cleans timers without
     if (prior === undefined) Reflect.deleteProperty(globalThis, "document");
     else Object.defineProperty(globalThis, "document", prior);
   }
+});
+
+async function browserFrameProbe(timestamps: readonly number[], samples: readonly typeof expected[] = [], expire = false) {
+  const prior = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const callbacks: FrameRequestCallback[] = [];
+  let timeout: () => void = () => { throw new Error("Missing frame-probe deadline"); };
+  let cleared = 0, cancelled = 0, checks = 0, layouts = 0, delivered = 0;
+  let sample = expected;
+  const document = {};
+  const target = { isConnected: true, ownerDocument: document, getBoundingClientRect: () => { layouts += 1; } };
+  const view = {
+    setTimeout: (callback: () => void) => { timeout = callback; return 1; },
+    clearTimeout: () => { cleared += 1; }, cancelAnimationFrame: () => { cancelled += 1; },
+    requestAnimationFrame: (callback: FrameRequestCallback) => { callbacks.push(callback); return callbacks.length; },
+    getComputedStyle: () => ({ display: sample.display, minHeight: sample.height, paddingLeft: sample.padding,
+      borderTopWidth: sample.border, fontSize: sample.font }),
+  };
+  Object.assign(document, { defaultView: view, fonts: { ready: Promise.resolve() } });
+  Object.defineProperty(globalThis, "document", { configurable: true, value: document });
+  try {
+    const pending = readRestoredStyleFramePair({ assertRestored: () => { checks += 1; }, sampleTarget: target as unknown as Element },
+      { foundation: false, remainingMs: 50 });
+    await Promise.resolve();
+    for (const [index, timestamp] of timestamps.entries()) {
+      const callback = callbacks[index];
+      if (callback === undefined) break;
+      sample = samples[index] ?? expected;
+      delivered += 1; callback(timestamp);
+    }
+    if (expire) timeout();
+    let value: unknown, error: Error | undefined;
+    try { value = await pending; } catch (cause) {
+      if (!(cause instanceof Error)) throw new Error("Unexpected frame-probe rejection", { cause });
+      error = cause;
+    }
+    return { value, error, cleared, cancelled, checks, layouts, delivered, scheduled: callbacks.length };
+  } finally {
+    if (prior === undefined) Reflect.deleteProperty(globalThis, "document");
+    else Object.defineProperty(globalThis, "document", prior);
+  }
+}
+
+test("repeated browser timestamps discard the old sample and require a fresh adjacent increasing pair", async () => {
+  const probe = await browserFrameProbe([7, 7, 8], [expected, disabled, expected]);
+  expect(probe.error).toBeUndefined();
+  expect(probe.value).toEqual(pair(7, disabled, expected));
+  expect(advanceStylesheetSettlement(initialStylesheetSettlement(), probe.value, expected, false).phase).toBe("waiting");
+  expect({ delivered: probe.delivered, scheduled: probe.scheduled, checks: probe.checks, layouts: probe.layouts,
+    cleared: probe.cleared, cancelled: probe.cancelled }).toEqual({ delivered: 3, scheduled: 3, checks: 6, layouts: 3, cleared: 1, cancelled: 1 });
+});
+
+test("bounded repeated timestamp prefixes never invent increasing evidence or carry discarded styles", async () => {
+  await fc.assert(fc.asyncProperty(fc.integer({ min: 0, max: 1_000_000 }), fc.integer({ min: 1, max: 16 }),
+    fc.boolean(), fc.boolean(), async (timestamp, repeats, firstMatches, secondMatches) => {
+      const first = firstMatches ? expected : disabled, second = secondMatches ? expected : disabled;
+      const probe = await browserFrameProbe([...Array<number>(repeats).fill(timestamp), timestamp + 1],
+        [...Array<typeof expected>(repeats - 1).fill(expected), first, second]);
+      expect(probe.error).toBeUndefined(); expect(probe.value).toEqual(pair(timestamp, first, second));
+      expect(probe.delivered).toBe(repeats + 1);
+      expect(advanceStylesheetSettlement(initialStylesheetSettlement(), probe.value, expected, false).phase === "settled")
+        .toBe(firstMatches && secondMatches);
+      expect(probe.cleared).toBe(1); expect(probe.cancelled).toBe(1);
+    }), { seed: 0x51f7, numRuns: 80 });
+});
+
+test("invalid or regressing callback times remain failures and repeated times retain deadline and callback limits", async () => {
+  for (const timestamp of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const probe = await browserFrameProbe([timestamp]);
+    expect(probe.error?.message).toBe("Invalid stylesheet callback timestamp: nonfinite or negative");
+    expect(probe.value).toBeUndefined(); expect(probe.cleared).toBe(1); expect(probe.cancelled).toBe(1);
+  }
+  const regressed = await browserFrameProbe([7, 6]);
+  expect(regressed.error?.message).toBe("Stylesheet callback timestamp regressed: previous=7, current=6");
+  expect(regressed.value).toBeUndefined(); expect(regressed.scheduled).toBe(2);
+  const expired = await browserFrameProbe([7, 7], [], true);
+  expect(expired.error?.message).toBe("Stylesheet frame probe exceeded its remaining deadline");
+  expect(expired.value).toBeUndefined(); expect(expired.cleared).toBe(1); expect(expired.cancelled).toBe(1);
+  const exhausted = await browserFrameProbe(Array<number>(4097).fill(7));
+  expect(exhausted.error?.message).toBe("Stylesheet frame probe exhausted its callback bound");
+  expect(exhausted.value).toBeUndefined(); expect(exhausted.delivered).toBe(4097); expect(exhausted.scheduled).toBe(4097);
+  expect(exhausted.layouts).toBe(4096); expect(exhausted.cleared).toBe(1); expect(exhausted.cancelled).toBe(1);
 });
 
 test("browser probe expiry, font rejection and target drift stop their own RAF/timer work", async () => {

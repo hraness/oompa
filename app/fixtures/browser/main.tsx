@@ -2,10 +2,9 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as stylex from "@stylexjs/stylex";
 import { SignInScreen } from "../../src/auth/sign-in-screen";
-import { LockScreen } from "../../src/custody/lock-screen";
 import { EnrollmentScreen } from "../../src/custody/enrollment-screen";
 import { GridScreen } from "../../src/screens/grid-screen";
-import { SessionScreen } from "../../src/screens/session-screen";
+import { SessionCard } from "../../src/components/session-card";
 import { SettingsScreen } from "../../src/screens/settings-screen";
 import { Button } from "../../src/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../src/components/ui/card";
@@ -57,16 +56,32 @@ function Primitives() {
   </Card>;
 }
 
+const noOrdering = {
+  arranged: false,
+  canMoveLeft: false,
+  canMoveRight: false,
+  dragging: false,
+  dropTarget: false,
+  onDragStart: () => undefined,
+  onMove: () => undefined,
+  onReset: () => undefined,
+} as const;
+
+function SingleCard() {
+  return <div {...stylex.props(fixtureStyles.single)}>
+    <SessionCard head={browserHead} onSummary={() => undefined} ordering={noOrdering} />
+  </div>;
+}
+
 function Fixture() {
   const view = new URLSearchParams(location.search).get("view");
   switch (view) {
     case "signin": return <SignInScreen />;
-    case "locked": return <LockScreen />;
     case "enrollment": return <EnrollmentScreen />;
-    case "grid": return <GridScreen selectedSessionId={null} onSelect={() => undefined} />;
+    case "grid": return <GridScreen />;
     case "session":
     case "session-long":
-    case "retired": return <SessionScreen sessionPublicId={browserHead.publicId} />;
+    case "retired": return <SingleCard />;
     case "settings": return <SettingsScreen onBack={() => undefined} />;
     case "primitives": return <Primitives />;
     case null:

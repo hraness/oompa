@@ -30,6 +30,7 @@ import {
 import { assertPublicSensitiveText, assertPublicText } from "./public-text-policy";
 import {
   assertPseudoTerminalSuccess,
+  createPseudoTerminalGroupCleanup,
   observePseudoTerminalCleanup,
   PTY_BEGIN_MARKER,
   pseudoTerminalScriptArguments,
@@ -367,7 +368,7 @@ describe("Git history generated hunk metadata", () => {
     const git = async (...arguments_: readonly string[]) => requireHistoryFixtureGitOutput(
       await runHistoryFixtureGit(root, arguments_, remaining()),
     );
-    const title = "The isolated product demos on oompa.dev incorporate MIT-licensed `@hraness/direct` v0.7.0.";
+    const title = "The isolated product demos on oompa.app incorporate MIT-licensed `@hraness/direct` v0.7.0.";
     const before = `${title}\n\n\n\n\n before\n before\n before\n old\n`;
     try {
       await initializeHistoryFixture(root, before, git);
@@ -481,7 +482,7 @@ describe("Git hunk section scope projection", () => {
 
   test("scans complete real Git history when a public package is truncated in a generated heading", async () => {
     const root = resolve(await mkdtemp(join(tmpdir(), "oompa-history-section-")));
-    const heading = "The isolated product demos on oompa.dev incorporate MIT-licensed `@hraness/direct`.";
+    const heading = "The isolated product demos on oompa.app incorporate MIT-licensed `@hraness/direct`.";
     const before = `${heading}\n${"\n".repeat(8)}before\n`;
     try {
       await initializeHistoryFixture(root, before);
@@ -1499,6 +1500,139 @@ describe("installed package generic command ownership", () => {
 });
 
 describe("installed package pseudo-terminal acceptance", () => {
+  test.each(["signal", "probe"] as const)("resolves a transient %s EPERM only after disappearance proof", async (deniedOperation) => {
+    const denied = Object.assign(new Error("group exit transition"), { code: "EPERM" });
+    const events: string[] = [];
+    let now = 0;
+    const cleanup = createPseudoTerminalGroupCleanup({
+      groupIds: () => [23456, 23457],
+      signal: (groupId, signal) => {
+        events.push(`${String(groupId)}:${signal}`);
+        if (groupId === 23456 && deniedOperation === "signal") throw denied;
+        return true;
+      },
+      exists: (groupId) => {
+        events.push(`${String(groupId)}:probe`);
+        if (groupId === 23457 || now > 0) return false;
+        if (deniedOperation === "probe") throw denied;
+        return true;
+      },
+      now: () => now,
+      sleep: async (milliseconds) => { now += milliseconds; },
+    });
+    cleanup.signalOwnedGroups("SIGTERM");
+    expect(events).toEqual(["23456:SIGTERM", "23457:SIGTERM"]);
+    expect(() => cleanup.assertGroupsGone()).toThrow();
+    expect(await cleanup.waitForGroupsGone(400)).toBe(true);
+    expect(now).toBe(20);
+    expect(() => cleanup.assertGroupsGone()).not.toThrow();
+    expect(events).toEqual([
+      "23456:SIGTERM", "23457:SIGTERM", "23456:probe", "23457:probe", "23456:probe",
+    ]);
+    // A reused number must never be probed or signalled after its absence was proved.
+    const collectedEvents = [...events];
+    cleanup.signalOwnedGroups("SIGKILL");
+    expect(await cleanup.waitForGroupsGone(800)).toBe(true);
+    expect(events).toEqual(collectedEvents);
+  });
+
+  test("persistent EPERM exhausts the existing bounded phases and still collects the other group", async () => {
+    const denied = Object.assign(new Error("group permission remains denied"), { code: "EPERM" });
+    const signals: string[] = [];
+    let now = 0;
+    const cleanup = createPseudoTerminalGroupCleanup({
+      groupIds: () => [23456, 23457],
+      signal: (groupId, signal) => {
+        signals.push(`${String(groupId)}:${signal}`);
+        if (groupId === 23456) throw denied;
+        return true;
+      },
+      exists: (groupId) => {
+        if (groupId === 23456) throw denied;
+        return false;
+      },
+      now: () => now,
+      sleep: async (milliseconds) => { now += milliseconds; },
+    });
+    cleanup.signalOwnedGroups("SIGTERM");
+    expect(await cleanup.waitForGroupsGone(400)).toBe(false);
+    expect(now).toBe(420);
+    cleanup.signalOwnedGroups("SIGKILL");
+    expect(await cleanup.waitForGroupsGone(800)).toBe(false);
+    expect(now).toBe(1_240);
+    expect(signals).toEqual(["23456:SIGTERM", "23457:SIGTERM", "23456:SIGKILL"]);
+    const result = await observePseudoTerminalCleanup(Promise.resolve().then(() => cleanup.assertGroupsGone()));
+    expect(result).toEqual({ status: "rejected", reason: denied });
+  });
+
+  test("a successful presence probe cannot resolve a previous signal denial", async () => {
+    const denied = Object.assign(new Error("signal denied"), { code: "EPERM" });
+    let now = 0;
+    let present = true;
+    const cleanup = createPseudoTerminalGroupCleanup({
+      groupIds: () => [23456],
+      signal: () => { throw denied; },
+      exists: () => present,
+      now: () => now,
+      sleep: async (milliseconds) => { now += milliseconds; },
+    });
+    cleanup.signalOwnedGroups("SIGTERM");
+    expect(await cleanup.waitForGroupsGone(20)).toBe(false);
+    expect(await observePseudoTerminalCleanup(Promise.resolve().then(() => cleanup.assertGroupsGone())))
+      .toEqual({ status: "rejected", reason: denied });
+    present = false;
+    expect(await cleanup.waitForGroupsGone(20)).toBe(true);
+    expect(() => cleanup.assertGroupsGone()).not.toThrow();
+  });
+
+  test.each(["signal", "probe"] as const)("retains an unexpected %s failure after attempting every owned group", async (failedOperation) => {
+    const failed = Object.assign(new Error("unexpected group operation failure"), { code: "EIO" });
+    const signals: string[] = [];
+    let now = 0;
+    let killed = false;
+    const cleanup = createPseudoTerminalGroupCleanup({
+      groupIds: () => [23456, 23457],
+      signal: (groupId, signal) => {
+        signals.push(`${String(groupId)}:${signal}`);
+        if (groupId === 23456 && failedOperation === "signal") throw failed;
+        if (groupId === 23457 && signal === "SIGKILL") killed = true;
+        return true;
+      },
+      exists: (groupId) => {
+        if (groupId === 23456) {
+          if (failedOperation === "probe" && now === 0) throw failed;
+          return false;
+        }
+        return !killed;
+      },
+      now: () => now,
+      sleep: async (milliseconds) => { now += milliseconds; },
+    });
+    cleanup.signalOwnedGroups("SIGTERM");
+    expect(await cleanup.waitForGroupsGone(400)).toBe(false);
+    cleanup.signalOwnedGroups("SIGKILL");
+    expect(await cleanup.waitForGroupsGone(800)).toBe(true);
+    expect(signals).toEqual(["23456:SIGTERM", "23457:SIGTERM", "23457:SIGKILL"]);
+    expect(await observePseudoTerminalCleanup(Promise.resolve().then(() => cleanup.assertGroupsGone())))
+      .toEqual({ status: "rejected", reason: failed });
+  });
+
+  test("retires a group after signal ESRCH without probing or signalling its number again", async () => {
+    const signals: number[] = [];
+    const cleanup = createPseudoTerminalGroupCleanup({
+      groupIds: () => [23456, 23457],
+      signal: (groupId) => { signals.push(groupId); return false; },
+      exists: () => { throw new Error("An absent group's numeric identity has been reused."); },
+      now: () => 0,
+      sleep: async () => { throw new Error("No groups remain to await."); },
+    });
+    cleanup.signalOwnedGroups("SIGTERM");
+    expect(await cleanup.waitForGroupsGone(400)).toBe(true);
+    cleanup.signalOwnedGroups("SIGKILL");
+    expect(() => cleanup.assertGroupsGone()).not.toThrow();
+    expect(signals).toEqual([23456, 23457]);
+  });
+
   test("waits for the complete authority line across every stdout split", () => {
     const marker = "__OOMPA_PTY_AUTHORITY_fixture__";
     for (const ending of ["\n", "\r\n"] as const) {

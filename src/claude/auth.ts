@@ -1,3 +1,4 @@
+import { accessSync, constants, lstatSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
 import { z } from "zod";
@@ -101,8 +102,34 @@ export interface ClaudeLoginSignalSource {
   remove(signal: ClaudeLoginSignal, listener: () => void): void;
 }
 
+export type ClaudeLoginBrowserMode = "provider_default" | "owner_manual";
+
+/** Local presentation only; this does not admit an account, child or recovery attempt. */
+export function resolveClaudeLoginBrowserMode(
+  value: unknown,
+  platform: NodeJS.Platform = process.platform,
+): ClaudeLoginBrowserMode {
+  const mode = value === undefined ? "provider_default" : value;
+  if (mode !== "provider_default" && mode !== "owner_manual") {
+    throw new ClaudeError("INVALID_INPUT", "Claude login browser mode is invalid.");
+  }
+  if (mode === "owner_manual") {
+    if (platform !== "darwin" && platform !== "linux") {
+      throw new ClaudeError("INVALID_INPUT", "Claude manual-browser login requires a supported POSIX host.");
+    }
+    try {
+      if (!lstatSync("/usr/bin/true").isFile()) throw new Error("Fixed opener is not a regular file.");
+      accessSync("/usr/bin/true", constants.X_OK);
+    } catch {
+      throw new ClaudeError("INVALID_INPUT", "Claude manual-browser login requires the fixed system opener.");
+    }
+  }
+  return mode;
+}
+
 export interface RunClaudeForegroundLoginOptions {
   readonly configDir: string;
+  readonly browserMode?: ClaudeLoginBrowserMode;
   readonly signal: AbortSignal;
   readonly stdio: Readonly<{ stderr: number; stdin: number; stdout: number }>;
   readonly environment?: Readonly<Record<string, string | undefined>>;
@@ -501,13 +528,18 @@ const descriptor = (value: number): number => {
 
 /**
  * Runs Claude's own subscription login in the foreground. Oompa supplies only
- * the isolated directory and terminal descriptors; Claude owns every prompt,
+ * the isolated directory, terminal descriptors and optional fixed browser
+ * suppression; Claude owns every prompt,
  * URL, code, and credential write. The result is deliberately only a process
  * outcome—callers re-read `auth status` before claiming sign-in.
  */
 export async function runClaudeForegroundLogin(
   options: RunClaudeForegroundLoginOptions,
 ): Promise<ClaudeForegroundLoginResult> {
+  // Capture presentation and profile before any resolver await. The browser mode
+  // cannot change the already selected account or acquire a new launch grant.
+  const browserMode = resolveClaudeLoginBrowserMode(options.browserMode);
+  const configDir = options.configDir;
   const forceJoinDeadlineMs = boundedMilliseconds(
     options.forceJoinDeadlineMs ?? PROCESS_FORCE_JOIN_DEADLINE_MS,
     "Claude foreground login forced join deadline",
@@ -536,7 +568,7 @@ export async function runClaudeForegroundLogin(
     let runtime: PinnedClaudeRuntime;
     try {
       runtime = options.runtime ?? await (options.resolveRuntime ?? resolvePinnedClaudeRuntime)({
-        configDir: options.configDir,
+        configDir,
         environment,
         signal: options.signal,
       });
@@ -560,8 +592,9 @@ export async function runClaudeForegroundLogin(
       };
     }
     const childEnvironment = allowlistedEnvironment(environment);
-    childEnvironment.CLAUDE_CONFIG_DIR = options.configDir;
+    childEnvironment.CLAUDE_CONFIG_DIR = configDir;
     childEnvironment.NO_COLOR = "1";
+    if (browserMode === "owner_manual") childEnvironment.BROWSER = "/usr/bin/true";
     let child: ClaudeForegroundLoginProcess;
     try {
       child = (options.processFactory ?? spawnForegroundLoginProcess)({

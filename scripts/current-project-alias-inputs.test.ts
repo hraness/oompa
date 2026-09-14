@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 const plan = {
-  schemaVersion: 1, kind: "current-project-canonical-alias", alias: "oompa.dev", version: "0.1.0",
+  schemaVersion: 1, kind: "current-project-canonical-alias", alias: "oompa.app", version: "0.1.0",
   idempotencyKey: "00000000-0000-4000-8000-000000000001",
   repository: { id: 1343008607, name: "hraness/oompa" },
   vercel: {

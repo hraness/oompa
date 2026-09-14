@@ -228,6 +228,9 @@ import {
   type ProviderUsageComponent,
   type ProviderUsageComponentKind,
   type ProviderUsageObservationV2,
+  type CodexQuotaUsage,
+  type ClaudeQuotaUsage,
+  type ClaudeAccountingUsage,
   type UsageProvider,
 } from "../domain/provider-usage";
 import {
@@ -857,6 +860,82 @@ export type ProviderUsageSourceMetadata = Readonly<{
         Readonly<{ overrides: Readonly<AutomaticUsagePolicyConfiguration["overrides"]> }> }>
     | Readonly<{ state: "unavailable"; reason: "configuration_unavailable" }>;
 }>;
+
+type FrozenUsageFact<T> = T extends readonly (infer U)[] ? readonly FrozenUsageFact<U>[]
+  : T extends object ? { readonly [K in keyof T]: FrozenUsageFact<T[K]> } : T;
+type UsageFactUnavailable = Readonly<{ state: "unavailable";
+  reason: "not_observed" | "source_unavailable" | "identity_unavailable" | "authority_mismatch"
+    | "snapshot_conflict" | "representation_limit" }>;
+type UsageFactProvenance = Pick<ProviderUsageComponent, "authority" | "source" | "turn"
+  | "observationRevision" | "sourceEventDigest" | "componentDigest" | "observedAt" | "receivedAt">;
+type RetainedUsageFact<T> = UsageFactUnavailable | FrozenUsageFact<{
+  state: "observed"; provenance: UsageFactProvenance; data: T;
+}>;
+type UsageResetFacts = Readonly<{
+  currentIdentity: UsageFactUnavailable | FrozenUsageFact<{ state: "known"; accountFingerprint: string;
+    policy: AccountRateLimitResetPolicyRecord; lastAttempt: AccountRateLimitResetAttemptRecord | null }>;
+  pending: UsageFactUnavailable | Readonly<{ state: "none" }>
+    | FrozenUsageFact<{ state: "retained"; attempt: AccountRateLimitResetAttemptRecord;
+        identityRelation: "current" | "different" | "unavailable" }>;
+}>;
+
+/** Private cached evidence only. No freshness, dispatch, or publication authority. */
+export type ProviderUsageSourceFacts = Readonly<{ state: "unavailable"; reason: "snapshot_conflict" }>
+  | Readonly<{
+      state: "cached"; provider: UsageProvider; metadata: ProviderUsageSourceMetadata;
+      quota: RetainedUsageFact<Omit<CodexQuotaUsage, "resetCreditsAvailable"> & { resetCreditsAvailable: number | null } | ClaudeQuotaUsage>;
+      accounting: RetainedUsageFact<ClaudeAccountingUsage> | Readonly<{ state: "unavailable"; reason: "not_projected" }>;
+      reset: UsageResetFacts | Readonly<{ state: "unavailable"; reason: "provider_unsupported" }>;
+    }>;
+
+// A read budget, not a retention rule. Any overflow refuses the complete reset
+// view; the existing identity/window index bounds the source-local scan itself.
+export const PROVIDER_USAGE_RESET_FACT_CANDIDATE_LIMIT = 128;
+const unavailableUsageFact = (reason: UsageFactUnavailable["reason"]): UsageFactUnavailable =>
+  Object.freeze({ state: "unavailable", reason });
+function freezeUsageFact<T>(value: T): FrozenUsageFact<T> {
+  if (typeof value === "object" && value !== null) {
+    for (const child of Object.values(value)) freezeUsageFact(child);
+    Object.freeze(value);
+  }
+  return value as FrozenUsageFact<T>;
+}
+const usageFactProvenance = (component: ProviderUsageComponent): UsageFactProvenance => ({
+  authority: component.authority, source: component.source, turn: component.turn,
+  observationRevision: component.observationRevision, sourceEventDigest: component.sourceEventDigest,
+  componentDigest: component.componentDigest, observedAt: component.observedAt, receivedAt: component.receivedAt,
+});
+// Column names are fixed repository literals. A corrupt scalar must not turn
+// a bounded row count into an unbounded value crossing the SQLite boundary.
+const usageFactColumns = (text: readonly (readonly [string, number])[], numeric: readonly string[], table = ""): string => [
+  ...text.map(([name, max]) => `CASE WHEN typeof(${table}${name})='text' AND length(CAST(${table}${name} AS BLOB))<=${max}
+    THEN ${table}${name} WHEN ${table}${name} IS NULL THEN NULL ELSE x'00' END AS ${name}`),
+  ...numeric.map((name) => `CASE WHEN typeof(${table}${name}) IN ('integer','real') THEN ${table}${name} ELSE NULL END AS ${name}`),
+].join(",");
+const usageAccountAuthorityFactPredicate = `length(CAST(provider_account_id AS BLOB))<=80
+  AND length(CAST(profile_id AS BLOB))<=80 AND length(CAST(provider AS BLOB))<=5
+  AND length(CAST(provenance AS BLOB))<=80 AND typeof(binding_generation) IN ('integer','real')
+  AND (process_generation IS NULL OR typeof(process_generation) IN ('integer','real'))
+  AND typeof(recorded_at) IN ('integer','real')`;
+const usageTurnAuthorityFactColumns = usageFactColumns([
+  ["provider_account_id", 80], ["profile_id", 80], ["provider", 6],
+], ["binding_generation", "process_generation"], "authority.");
+const usageReceiptFactColumns = usageFactColumns([
+  ["idempotency_key", 64], ["component", 10], ["provider_account_id", 80], ["profile_id", 80], ["provider", 6],
+  ["session_id", 80], ["turn_id", 800], ["source", 24], ["source_event_digest", 64], ["component_digest", 64],
+], ["binding_generation", "process_generation", "observation_revision", "observed_at", "received_at", "recorded_at"]);
+const usageResetAttemptFactColumns = usageFactColumns([
+  ["idempotency_key", 36], ["profile_id", 80], ["account_fingerprint", 64], ["state", 14],
+  ["outcome", 15], ["local_resolution", 24],
+], ["attempt_sequence", "origin_process_generation", "current_process_generation", "weekly_window_resets_at",
+  "observed_used_percent", "created_at", "updated_at"]);
+const usageResetAuthorityFactColumns = usageFactColumns([
+  ["idempotency_key", 36], ["provider_account_id", 80], ["profile_id", 80], ["provider", 5],
+  ["policy_account_fingerprint", 64], ["provenance", 80],
+], ["process_generation", "binding_generation", "policy_revision", "policy_weekly_window_resets_at", "recorded_at"]);
+const usageResetRebindFactColumns = usageFactColumns([
+  ["idempotency_key", 36], ["account_fingerprint", 64],
+], ["sequence", "from_process_generation", "to_process_generation", "created_at"]);
 
 const unavailableUsageSourceMetadata: ProviderUsageSourceMetadata = Object.freeze({
   source: Object.freeze({ state: "unavailable", reason: "snapshot_conflict" }),
@@ -23779,6 +23858,252 @@ export class StateStore {
     }
   }
 
+  /** One cached read snapshot; never refreshes, repairs, evaluates or publishes. */
+  readProviderUsageSourceFacts(input: unknown): ProviderUsageSourceFacts {
+    try {
+      const snapshot = snapshotForeignJson(input);
+      if (!snapshot.ok) throw new Error("PROVIDER_USAGE_FACT_INPUT_INVALID");
+      const request = providerUsageSourceRequestSchema.parse(snapshot.value);
+      return this.#database.transaction((): ProviderUsageSourceFacts => {
+        // Nested read transactions retain this snapshot, including when a
+        // second connection commits between metadata and observation reads.
+        const metadata = this.readProviderUsageSourceMetadata(request);
+        const quota = request.provider === "codex"
+          ? this.#readCodexUsageQuotaFact(metadata.source)
+          : this.#readClaudeUsageFact(metadata.source, "quota");
+        const accounting = request.provider === "codex"
+          ? { state: "unavailable", reason: "not_projected" } as const
+          : this.#readClaudeUsageFact(metadata.source, "accounting");
+        const reset = request.provider === "codex"
+          ? this.#readUsageResetFacts(request.providerAccountId, metadata.source)
+          : { state: "unavailable", reason: "provider_unsupported" } as const;
+        return freezeUsageFact({ state: "cached", provider: request.provider, metadata, quota, accounting, reset });
+      })();
+    } catch {
+      return Object.freeze({ state: "unavailable", reason: "snapshot_conflict" });
+    }
+  }
+
+  #readCodexUsageQuotaFact(source: ProviderUsageSourceMetadata["source"]): RetainedUsageFact<
+    Omit<CodexQuotaUsage, "resetCreditsAvailable"> & { resetCreditsAvailable: number | null }
+  > {
+    if (source.state !== "cached" || source.provider !== "codex") return unavailableUsageFact("source_unavailable");
+    if (source.identity.state !== "cached") return unavailableUsageFact(source.identity.reason);
+    try {
+      // Do not filter by identity, JSON fields or sidecars before choosing the
+      // newest raw row. An invalid selected row must not expose older quota.
+      const raw = this.#database.query(`SELECT ${usageFactColumns([], ["source_revision", "observed_at"])},
+          CASE WHEN length(CAST(digest AS BLOB))=64 THEN digest ELSE NULL END AS digest,
+          length(CAST(payload_json AS BLOB)) AS payload_bytes,
+          CASE WHEN length(CAST(payload_json AS BLOB))<=${USAGE_LOCAL_SNAPSHOT_MAX_BYTES}
+            THEN CAST(payload_json AS BLOB) ELSE NULL END AS payload
+        FROM usage_snapshots WHERE profile_id=? ORDER BY usage_snapshots.source_revision DESC LIMIT 1`).get(source.profileId);
+      if (raw === null) return unavailableUsageFact("not_observed");
+      const row = z.object({ source_revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        observed_at: unixMillisecondsSchema, digest: sha256Schema,
+        payload_bytes: z.number().int().nonnegative(), payload: z.instanceof(Uint8Array).nullable() }).strict().parse(raw);
+      if (row.payload_bytes > USAGE_LOCAL_SNAPSHOT_MAX_BYTES) return unavailableUsageFact("representation_limit");
+      if (row.payload === null || row.payload.byteLength !== row.payload_bytes) throw new Error("USAGE_FACT_BYTES_INVALID");
+      const json = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(row.payload);
+      assertCodexUsageSnapshotDigest(json, row.digest);
+      const payload = storedAccountUsageSnapshotSchema.parse(JSON.parse(json) as unknown);
+      if (this.#database.query(`SELECT 1 FROM account_scoped_provider_authorities
+        WHERE scope_kind='usage_snapshot' AND scope_id=? AND ${usageAccountAuthorityFactPredicate}`)
+        .get(`${source.profileId}:${row.source_revision}`) === null) throw new Error("USAGE_FACT_AUTHORITY_INVALID");
+      const authority = this.readCodexUsageAuthorityMetadata("usage_snapshot", source.profileId, row.source_revision);
+      if (authority.mode !== "mutation_authoritative" || authority.authority === null
+        || !sameProviderAccountAuthority(authority.authority, source)) return unavailableUsageFact("authority_mismatch");
+      if (payload.observation.sourceSequence !== row.source_revision || payload.observation.observedAt !== row.observed_at
+        || payload.observation.providerGeneration !== source.processGeneration) throw new Error("USAGE_FACT_ROW_MISMATCH");
+      if (payload.observation.accountFingerprint !== canonicalAccountFingerprint(source.identity.email)) {
+        return unavailableUsageFact("identity_unavailable");
+      }
+      const projected = projectCodexV1Usage({ snapshot: payload, sourceRevision: row.source_revision,
+        observedAt: row.observed_at, storedDigest: row.digest,
+        authority: usageProviderAccountAuthoritySchema.parse(authority.authority), authorityMode: authority.mode });
+      const component = projected.observation?.quota;
+      if (component === undefined || component === null || component.quota.format !== "codex_v1") {
+        throw new Error("USAGE_FACT_COMPONENT_INVALID");
+      }
+      return freezeUsageFact({ state: "observed", provenance: usageFactProvenance(component),
+        data: { ...component.quota,
+          // The native v1 decoder collapses absent availability to zero. Keep
+          // the original evidence digest, but never manufacture observed zero.
+          resetCreditsAvailable: component.quota.resetCreditsAvailable > 0 ? component.quota.resetCreditsAvailable : null } });
+    } catch { return unavailableUsageFact("snapshot_conflict"); }
+  }
+
+  #readClaudeUsageFact(source: ProviderUsageSourceMetadata["source"], kind: "quota"): RetainedUsageFact<ClaudeQuotaUsage>;
+  #readClaudeUsageFact(source: ProviderUsageSourceMetadata["source"], kind: "accounting"): RetainedUsageFact<ClaudeAccountingUsage>;
+  #readClaudeUsageFact(source: ProviderUsageSourceMetadata["source"], kind: ProviderUsageComponentKind): RetainedUsageFact<ClaudeQuotaUsage | ClaudeAccountingUsage> {
+    if (source.state !== "cached" || source.provider !== "claude") return unavailableUsageFact("source_unavailable");
+    try {
+      // Select the receipt independently for each component. An inner join or
+      // a combined history cap would hide a missing newest component.
+      const receipt = this.#database.query(`SELECT ${usageReceiptFactColumns} FROM provider_usage_observation_receipts
+        WHERE provider_account_id=? AND component=?
+        ORDER BY provider_usage_observation_receipts.observed_at DESC,provider_usage_observation_receipts.received_at DESC,
+          provider_usage_observation_receipts.observation_revision DESC,provider_usage_observation_receipts.idempotency_key DESC LIMIT 1`)
+        .get(source.providerAccountId, kind) as Record<string, unknown> | null;
+      if (receipt === null) return unavailableUsageFact("not_observed");
+      const key = sha256Schema.parse(receipt.idempotency_key);
+      const raw = this.#database.query(`SELECT CASE WHEN length(CAST(component_digest AS BLOB))=64
+            THEN component_digest ELSE NULL END AS component_digest,
+          length(CAST(component_json AS BLOB)) AS payload_bytes,
+          CASE WHEN length(CAST(component_json AS BLOB))<=${PROVIDER_USAGE_COMPONENT_MAX_BYTES}
+            THEN CAST(component_json AS BLOB) ELSE NULL END AS payload
+        FROM provider_usage_observation_components WHERE idempotency_key=?`).get(key);
+      const row = z.object({ component_digest: sha256Schema, payload_bytes: z.number().int().nonnegative(),
+        payload: z.instanceof(Uint8Array).nullable() }).strict().parse(raw);
+      if (row.payload_bytes > PROVIDER_USAGE_COMPONENT_MAX_BYTES) return unavailableUsageFact("representation_limit");
+      if (row.payload === null || row.payload.byteLength !== row.payload_bytes) throw new Error("USAGE_FACT_BYTES_INVALID");
+      const json = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(row.payload);
+      const component = canonicalProviderUsageComponent(providerUsageComponentSchema.parse(JSON.parse(json) as unknown));
+      if (json !== canonicalProviderUsageJson(component) || component.component !== kind
+        || component.authority.provider !== "claude" || component.turn === null
+        || component.componentDigest !== row.component_digest) throw new Error("USAGE_FACT_COMPONENT_INVALID");
+      const expectedReceipt = { idempotency_key: component.idempotencyKey, component: kind,
+        provider_account_id: component.authority.providerAccountId, profile_id: component.authority.profileId,
+        provider: "claude", binding_generation: component.authority.bindingGeneration,
+        process_generation: component.authority.processGeneration, session_id: component.turn.sessionId,
+        turn_id: component.turn.turnId, observation_revision: component.observationRevision,
+        source: component.source, source_event_digest: component.sourceEventDigest,
+        component_digest: component.componentDigest, observed_at: component.observedAt,
+        received_at: component.receivedAt, recorded_at: unixMillisecondsSchema.parse(receipt.recorded_at) };
+      if (expectedReceipt.recorded_at < component.receivedAt
+        || canonicalProviderUsageJson(receipt) !== canonicalProviderUsageJson(expectedReceipt)) {
+        throw new Error("USAGE_FACT_RECEIPT_MISMATCH");
+      }
+      const turnAuthorities = this.#database.query(`SELECT ${usageTurnAuthorityFactColumns}
+        FROM session_turn_runtime_profiles turn
+        JOIN session_runtime_profiles runtime ON runtime.session_id=turn.session_id
+          AND runtime.source_kind=turn.source_kind AND runtime.source_id=turn.source_id
+        JOIN runtime_profile_provider_authorities authority
+          ON authority.session_id=runtime.session_id AND authority.revision=runtime.revision
+        WHERE turn.session_id=? AND turn.turn_id=? AND turn.profile_id=? AND turn.process_generation=? LIMIT 2`)
+        .all(component.turn.sessionId, component.turn.turnId, component.authority.profileId, component.authority.processGeneration);
+      if (turnAuthorities.length !== 1 || canonicalProviderUsageJson(turnAuthorities[0]) !== canonicalProviderUsageJson({
+        provider_account_id: component.authority.providerAccountId, profile_id: component.authority.profileId,
+        provider: component.authority.provider, binding_generation: component.authority.bindingGeneration,
+        process_generation: component.authority.processGeneration })) throw new Error("USAGE_FACT_TURN_AUTHORITY_MISMATCH");
+      if (!sameProviderAccountAuthority(component.authority, source)) return unavailableUsageFact("authority_mismatch");
+      if (component.component === "quota") {
+        return freezeUsageFact({ state: "observed", provenance: usageFactProvenance(component), data: component.quota });
+      }
+      return freezeUsageFact({ state: "observed", provenance: usageFactProvenance(component), data: component.accounting });
+    } catch { return unavailableUsageFact("snapshot_conflict"); }
+  }
+
+  #readUsageResetFacts(providerAccountId: ProviderAccountId, source: ProviderUsageSourceMetadata["source"]): UsageResetFacts {
+    const conflict = unavailableUsageFact("snapshot_conflict");
+    let currentIdentity: UsageResetFacts["currentIdentity"] = unavailableUsageFact("identity_unavailable");
+    const fingerprint = source.state === "cached" && source.provider === "codex" && source.identity.state === "cached"
+      ? canonicalAccountFingerprint(source.identity.email) : null;
+    try {
+      // Recovery scope is independent of cached readiness, generation mirrors
+      // and identity. Those failures cannot hide already retained reset work.
+      const link = z.object({ id: profileIdSchema, profile_id: profileIdSchema,
+        provider: z.literal("codex"), owner_id: profileIdSchema }).strict().parse(this.#database.query(
+        `SELECT a.id,a.profile_id,a.provider,p.id AS owner_id FROM provider_accounts a
+         LEFT JOIN profiles p ON p.id=a.profile_id
+         WHERE a.id=? AND a.id=a.profile_id AND a.profile_id=p.id AND a.provider='codex'`).get(providerAccountId));
+      if (link.id !== providerAccountId || link.id !== link.profile_id || link.owner_id !== link.profile_id) {
+        throw new Error("USAGE_RESET_SCOPE_INVALID");
+      }
+      const inverse = this.#database.query("SELECT CASE WHEN id=? THEN 1 ELSE 0 END AS matches FROM provider_accounts WHERE profile_id=? AND provider='codex' LIMIT 2")
+        .all(providerAccountId, link.profile_id);
+      if (inverse.length !== 1 || canonicalProviderUsageJson(inverse[0]) !== canonicalProviderUsageJson({ matches: 1 })) {
+        throw new Error("USAGE_RESET_SCOPE_INVALID");
+      }
+      // Deliberately no state/fingerprint predicate. It could hide another
+      // identity's pending work or malformed states outside the partial index.
+      const rows = this.#database.query(`SELECT ${usageResetAttemptFactColumns} FROM account_rate_limit_reset_attempts
+        INDEXED BY account_rate_limit_reset_attempts_identity_window
+        WHERE profile_id=? ORDER BY account_rate_limit_reset_attempts.account_fingerprint,
+          account_rate_limit_reset_attempts.weekly_window_resets_at,account_rate_limit_reset_attempts.attempt_sequence LIMIT ?`)
+        .all(link.profile_id, PROVIDER_USAGE_RESET_FACT_CANDIDATE_LIMIT + 1);
+      if (rows.length > PROVIDER_USAGE_RESET_FACT_CANDIDATE_LIMIT) {
+        const unavailable = unavailableUsageFact("representation_limit");
+        return { currentIdentity: unavailable, pending: unavailable };
+      }
+      const attempts = rows.map(mapAccountRateLimitResetAttempt);
+      let remainingRebinds = PROVIDER_USAGE_RESET_FACT_CANDIDATE_LIMIT;
+      for (const attempt of attempts) {
+        const scopeId = `${attempt.profileId}:${attempt.attemptSequence}`;
+        if (this.#database.query(`SELECT 1 FROM account_scoped_provider_authorities
+          WHERE scope_kind='reset_attempt' AND scope_id=? AND ${usageAccountAuthorityFactPredicate}`).get(scopeId) === null) {
+          throw new Error("USAGE_RESET_SCOPE_AUTHORITY_INVALID");
+        }
+        const original = this.readAccountScopedProviderAuthority("reset_attempt", scopeId);
+        const retained = mapAccountRateLimitResetProviderAuthority(this.#database.query(
+          `SELECT ${usageResetAuthorityFactColumns} FROM account_rate_limit_reset_provider_authorities
+           WHERE idempotency_key=? AND process_generation=?
+           ORDER BY account_rate_limit_reset_provider_authorities.policy_revision DESC LIMIT 1`)
+          .get(attempt.idempotencyKey, attempt.currentProcessGeneration));
+        if (attempt.profileId !== link.profile_id || original === null
+          || original.providerAccountId !== providerAccountId || original.profileId !== link.profile_id
+          || original.processGeneration !== attempt.originProcessGeneration || original.provenance !== "reset_attempt"
+          || retained.authority.providerAccountId !== providerAccountId || retained.authority.profileId !== link.profile_id
+          || retained.authority.bindingGeneration !== original.bindingGeneration
+          || retained.authority.processGeneration !== attempt.currentProcessGeneration
+          || retained.policyAccountFingerprint !== attempt.accountFingerprint
+          // An ambiguous attempt may acquire retained recovery authority under
+          // a later policy window. Its original attempt window stays intact.
+          || retained.policyWeeklyWindowResetsAt < attempt.weeklyWindowResetsAt
+          || !["reset_prepare", "reset_prepare_replay", "reset_rebind", "reset_begin"].includes(retained.provenance)) {
+          throw new Error("USAGE_RESET_ATTEMPT_AUTHORITY_INVALID");
+        }
+        const rebindRows = this.#database.query(`SELECT ${usageResetRebindFactColumns}
+          FROM account_rate_limit_reset_rebinds WHERE idempotency_key=? ORDER BY account_rate_limit_reset_rebinds.sequence LIMIT ?`)
+          .all(attempt.idempotencyKey, remainingRebinds + 1);
+        if (rebindRows.length > remainingRebinds) {
+          const unavailable = unavailableUsageFact("representation_limit");
+          return { currentIdentity: unavailable, pending: unavailable };
+        }
+        remainingRebinds -= rebindRows.length;
+        let generation = attempt.originProcessGeneration;
+        let recordedAt = attempt.createdAt;
+        for (const raw of rebindRows) {
+          const rebind = mapAccountRateLimitResetRebind(raw);
+          if (rebind.idempotencyKey !== attempt.idempotencyKey || rebind.accountFingerprint !== attempt.accountFingerprint
+            || rebind.fromProcessGeneration !== generation || rebind.toProcessGeneration <= generation
+            || rebind.createdAt < recordedAt || rebind.createdAt > attempt.updatedAt) {
+            throw new Error("USAGE_RESET_REBIND_INVALID");
+          }
+          generation = rebind.toProcessGeneration;
+          recordedAt = rebind.createdAt;
+        }
+        if (generation !== attempt.currentProcessGeneration) throw new Error("USAGE_RESET_REBIND_INCOMPLETE");
+      }
+      const pending = attempts.filter((attempt) => attempt.state !== "settled" && attempt.state !== "closed");
+      // Multiple pending identities are a reconciliation conflict, not a
+      // choice of whichever matches today's identity.
+      if (pending.length > 1) throw new Error("USAGE_RESET_PENDING_AMBIGUOUS");
+      if (fingerprint !== null) {
+        try {
+          if (this.#database.query(`SELECT 1 FROM account_rate_limit_reset_policies
+            WHERE profile_id=? AND length(CAST(state AS BLOB))<=23
+              AND (account_fingerprint IS NULL OR length(CAST(account_fingerprint AS BLOB))=64)
+              AND (weekly_window_resets_at IS NULL OR typeof(weekly_window_resets_at) IN ('integer','real'))
+              AND typeof(revision) IN ('integer','real') AND typeof(created_at) IN ('integer','real')
+              AND typeof(updated_at) IN ('integer','real')`)
+            .get(link.profile_id) === null
+            || this.#database.query(`SELECT 1 FROM account_scoped_provider_authorities
+              WHERE scope_kind='reset_policy' AND scope_id=? AND ${usageAccountAuthorityFactPredicate}`)
+              .get(link.profile_id) === null) throw new Error("USAGE_RESET_POLICY_INVALID");
+          const policy = this.requireAccountRateLimitResetPolicy(link.profile_id);
+          const latest = attempts.filter((attempt) => attempt.accountFingerprint === fingerprint)
+            .sort((a, b) => b.attemptSequence - a.attemptSequence)[0] ?? null;
+          currentIdentity = freezeUsageFact({ state: "known", accountFingerprint: fingerprint, policy, lastAttempt: latest });
+        } catch { currentIdentity = conflict; }
+      }
+      const retained = pending[0];
+      return freezeUsageFact({ currentIdentity, pending: retained === undefined ? { state: "none" }
+        : { state: "retained", attempt: retained,
+            identityRelation: fingerprint === null ? "unavailable" : retained.accountFingerprint === fingerprint ? "current" : "different" } });
+    } catch { return { currentIdentity: conflict, pending: conflict }; }
+  }
+
   requireProviderAccountAuthority(
     profileId: ProfileId,
     provider: Provider,
@@ -32923,7 +33248,9 @@ export class StateStore {
         ...(parsed.projectId === undefined ? {} : { projectId: parsed.projectId }),
         title: parsed.title,
         preset: parsed.preset,
-        presetContract: legacyPresetContract,
+        // An adopted provider session is a new Oompa binding, so it takes the
+        // active contract for its alias like any other new session.
+        presetContract: activePresetBinding(parsed.preset).contract,
         fastEnabled: parsed.fastEnabled,
         state: parsed.state,
         ...(parsed.activeTurnId === undefined ? {} : { activeTurnId: parsed.activeTurnId }),

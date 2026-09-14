@@ -78,7 +78,6 @@ describe("Oompa installation composition", () => {
   test("keeps the production namespace fixed", () => {
     const installation = createProductionInstallation();
     expect(installation.kind).toBe("production");
-    expect(installation.desktopSwitching).toBe(true);
     expect(installation.credentialStorePreflight).toEqual({
       cliAuth: "file",
       cwd: process.cwd(),
@@ -121,7 +120,6 @@ describe("Oompa installation composition", () => {
     );
     expect(environment?.CODEX_HOME).toBeUndefined();
     expect(environment?.HRA_CONVEX_URL).toBeUndefined();
-    expect(installation.desktopSwitching).toBe(false);
     expect(installation.credentialStorePreflight).toEqual({
       cliAuth: "file",
       cwd: descriptor.documentsDirectory,

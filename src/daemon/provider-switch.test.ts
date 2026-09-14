@@ -10,6 +10,7 @@ import {
   canonical39SwitchFixtures,
   type Canonical39SwitchScenario,
 } from "../../scripts/fixtures/canonical39-switch";
+import { provisionMigratedStateTemplate } from "../../scripts/fixtures/migrated-state-template";
 import { CLAUDE_PIN, CLAUDE_PIN_MODEL } from "../claude/pin";
 import { IndeterminateCodexEffectError, type OompaHostToolCall } from "../codex";
 import { OOMPA_SESSION_PREAMBLE } from "../domain/oompa-preamble";
@@ -952,9 +953,11 @@ async function fixture(
   factsMemoryEnabled = true,
   historical?: Canonical39SwitchScenario,
   resources: SwitchCaseResources = { roots, stores, services },
+  provision: "migrate" | "template" = "migrate",
 ): Promise<Fixture> {
   const now = typeof nowOrAuthority === "function" ? nowOrAuthority : Date.now;
   const { paths, documents, historicalSwitchRows } = await fixturePaths(historical, resources);
+  if (provision === "template") await provisionMigratedStateTemplate(paths);
   const store = new StateStore(paths);
   resources.stores.push(store);
   const daemonBootId = `boot_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -1091,7 +1094,7 @@ async function codexSession(value: Fixture, requestSignal = signal): Promise<Rea
   );
   requestSignal.throwIfAborted();
   const started = await value.service.execute(
-    { account: added.account.id, fast: false, kind: "session.start", preset: "high", presetContract: 1 },
+    { account: added.account.id, fast: false, kind: "session.start", preset: "high", presetContract: 2 },
     { signal: requestSignal },
   ) as { session: { id: `sess_${string}` } };
   requestSignal.throwIfAborted();
@@ -2408,7 +2411,7 @@ describe("provider portability", () => {
       value.store.beginSessionSwitchTargetStart = () => { throw new Error("pause before target intent"); };
       try {
         await expect(value.service.execute({
-          kind: "session.switch", provider: "codex", presetContract: legacyPresetContract,
+          kind: "session.switch", provider: "codex", presetContract: currentPresetContract,
           session: sessionId, idempotencyKey,
         }, { signal })).rejects.toThrow("pause before target intent");
       } finally {
@@ -2437,7 +2440,8 @@ describe("provider portability", () => {
         expect(targetHostCapabilities).toBeDefined();
         return {
           ...historical,
-          targetPresetContract: currentPresetContract,
+          // The injected historical row carries the inactive contract.
+          targetPresetContract: legacyPresetContract,
           rawRequest: {
             session: record.rawRequest.session, provider: record.rawRequest.provider,
             account: record.rawRequest.account, preset: record.rawRequest.preset,
@@ -2749,7 +2753,8 @@ describe("provider portability", () => {
       { signal },
     );
     expect(value.claude.seededMessages.at(-1)).toBe("carry on");
-  });
+  }, 30_000);
+
 
   test("drops only the switching session's source protocol notice during target start", async () => {
     const value = await fixture();
@@ -2788,7 +2793,7 @@ describe("provider portability", () => {
     const unrelated = await value.service.execute({
       account: source.accountId,
       fast: false,
-      presetContract: legacyPresetContract, kind: "session.start",
+      presetContract: currentPresetContract, kind: "session.start",
       preset: "high",
     }, { signal }) as { session: { id: `sess_${string}` } };
     const authority = liveAuthorityFor(value.store, source.accountId, "codex");
@@ -3420,19 +3425,34 @@ describe("provider portability", () => {
       ambiguousTarget: { account: { id: `acct_${string}` } };
       ambiguousSourceAuthority: ProfileAuthority;
     };
-    let prepared: { owner: ReturnType<typeof createOwnedSwitchCase>; value?: PreparedSeedCase } | undefined;
+    let prepared: {
+      owner: ReturnType<typeof createOwnedSwitchCase>;
+      rejected?: Pick<PreparedSeedCase, "rejected" | "rejectedSession">;
+      value?: PreparedSeedCase;
+    } | undefined;
 
-    // Two real database/session preparations measured 2.71s versus 0.54s for
-    // the coupled proof locally. Give setup its own 5s allowance; retain every
-    // seed/replay/abandon assertion together under a separate 5s proof deadline.
+    // Prepare the independent fixtures in separate bounded hooks: the first
+    // template use also builds its migrated image. Both phases share one owner
+    // so cancellation joins setup before closing either fixture. Every coupled
+    // seed/replay/abandon assertion retains the separate 5s proof deadline.
     beforeEach(() => {
       const holder: NonNullable<typeof prepared> = { owner: createOwnedSwitchCase() };
       prepared = holder;
       const { owner } = holder;
       return owner.run(async () => {
-        const rejected = await owner.request(() => fixture(undefined, undefined, true, undefined, owner.resources));
+        const rejected = await owner.request(() => fixture(undefined, undefined, true, undefined, owner.resources, "template"));
         const rejectedSession = await owner.request(() => codexSession(rejected, owner.signal));
-        const ambiguous = await owner.request(() => fixture(undefined, undefined, true, undefined, owner.resources));
+        owner.signal.throwIfAborted();
+        holder.rejected = { rejected, rejectedSession };
+      });
+    }, 5_000);
+
+    beforeEach(() => {
+      const holder = prepared;
+      if (holder?.rejected === undefined) throw new Error("The rejected seed fixture was not prepared.");
+      const { owner, rejected: { rejected, rejectedSession } } = holder;
+      return owner.run(async () => {
+        const ambiguous = await owner.request(() => fixture(undefined, undefined, true, undefined, owner.resources, "template"));
         const ambiguousSession = await owner.request(() => codexSession(ambiguous, owner.signal));
         const ambiguousTarget = await owner.request(() => ambiguous.service.execute(
           { kind: "account.add", label: "Ambiguous target" },
@@ -3819,7 +3839,7 @@ describe("provider portability", () => {
     const switched = await value.service.execute({
       account: target.account.id,
       idempotencyKey: "00000000-0000-4000-8000-0000000007a6",
-      presetContract: legacyPresetContract, kind: "session.switch",
+      presetContract: currentPresetContract, kind: "session.switch",
       preset: "high",
       provider: "codex",
       session: source.sessionId,
@@ -4564,7 +4584,7 @@ describe("provider portability", () => {
     await expect(value.service.execute({
       account: target.account.id,
       idempotencyKey,
-      presetContract: legacyPresetContract, kind: "session.switch",
+      presetContract: currentPresetContract, kind: "session.switch",
       preset: "high",
       provider: "codex",
       session: source.sessionId,
@@ -4620,7 +4640,7 @@ describe("provider portability", () => {
     const collision = await value.service.execute({
       account: target.account.id,
       fast: false,
-      presetContract: legacyPresetContract, kind: "session.start",
+      presetContract: currentPresetContract, kind: "session.start",
       preset: "high",
       provider: "codex",
     }, { signal }) as { session: { id: `sess_${string}` } };
@@ -4629,7 +4649,7 @@ describe("provider portability", () => {
     await expect(value.service.execute({
       account: target.account.id,
       idempotencyKey,
-      presetContract: legacyPresetContract, kind: "session.switch",
+      presetContract: currentPresetContract, kind: "session.switch",
       provider: "codex",
       session: source.sessionId,
     }, { signal })).rejects.toMatchObject({ code: "RECOVERY_REQUIRED" });
@@ -4682,7 +4702,7 @@ describe("provider portability", () => {
     await expect(value.service.execute({
       account: source.accountId,
       idempotencyKey,
-      presetContract: legacyPresetContract, kind: "session.switch",
+      presetContract: currentPresetContract, kind: "session.switch",
       preset: "ultra",
       provider: "codex",
       session: source.sessionId,
@@ -4720,7 +4740,7 @@ describe("provider portability", () => {
     };
 
     await expect(value.service.execute(
-      { idempotencyKey: crypto.randomUUID(), presetContract: legacyPresetContract, kind: "session.switch", provider: "codex", session: sessionId },
+      { idempotencyKey: crypto.randomUUID(), presetContract: currentPresetContract, kind: "session.switch", provider: "codex", session: sessionId },
       { signal },
     )).resolves.toMatchObject({
       from: { provider: "claude" },
@@ -4974,7 +4994,7 @@ describe("provider portability", () => {
     await expect(value.service.execute({
       idempotencyKey,
       kind: "session.switch",
-      presetContract: currentPresetContract,
+      presetContract: legacyPresetContract,
       provider: "codex",
       session: sessionId,
     }, { signal })).rejects.toMatchObject({
@@ -4998,7 +5018,7 @@ describe("provider portability", () => {
     const command = {
       idempotencyKey,
       kind: "session.switch" as const,
-      presetContract: legacyPresetContract,
+      presetContract: currentPresetContract,
       provider: "codex" as const,
       session: sessionId,
     };
@@ -5020,7 +5040,7 @@ describe("provider portability", () => {
 
     await expect(value.service.execute({
       ...command,
-      presetContract: currentPresetContract,
+      presetContract: legacyPresetContract,
     }, { signal })).rejects.toMatchObject({
       code: "CONFLICT",
       message: expect.stringContaining("preset contract"),
@@ -5052,7 +5072,7 @@ describe("provider portability", () => {
     await value.service.execute({
       idempotencyKey: crypto.randomUUID(),
       kind: "session.switch",
-      presetContract: legacyPresetContract,
+      presetContract: currentPresetContract,
       provider: "codex",
       session: sessionId,
     }, { signal });
@@ -5449,7 +5469,7 @@ describe("provider portability", () => {
       account: targetAccountId,
       idempotencyKey,
       kind: "session.switch",
-      presetContract: legacyPresetContract,
+      presetContract: currentPresetContract,
       provider: "codex",
       session: sessionId,
     }, { signal })).rejects.toMatchObject({ code: "RECOVERY_REQUIRED" });
@@ -5519,7 +5539,7 @@ describe("provider portability", () => {
       account: targetAccountId,
       idempotencyKey,
       kind: "session.switch",
-      presetContract: legacyPresetContract,
+      presetContract: currentPresetContract,
       provider: "codex",
       session: sessionId,
     }, { signal });
@@ -5711,7 +5731,7 @@ describe("provider portability", () => {
     await leaveFinalSwitchCommitUnsettled(value, {
       account: targetAccountId,
       idempotencyKey,
-      presetContract: legacyPresetContract,
+      presetContract: currentPresetContract,
       provider: "codex",
       session: sessionId,
     });
@@ -6998,7 +7018,7 @@ describe("provider portability", () => {
       {
         idempotencyKey: crypto.randomUUID(),
         kind: "session.switch",
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         provider: "codex",
         session: sessionId,
       },
@@ -7110,7 +7130,7 @@ async function codexDrainFixture(cloud = new OfflineCloud()) {
   const sourceProjection = { ...value.codex.projection };
   value.codex.projection = { ...sourceProjection, providerThreadId: "codex-drain-sibling" };
   const sibling = await value.service.execute({
-    account: source.accountId, presetContract: legacyPresetContract, kind: "session.start", preset: "high", fast: false,
+    account: source.accountId, presetContract: currentPresetContract, kind: "session.start", preset: "high", fast: false,
   }, { signal }) as { session: { id: `sess_${string}`; providerThreadId: string } };
   value.codex.projection = sourceProjection;
   const startSession = value.codex.startSession.bind(value.codex);

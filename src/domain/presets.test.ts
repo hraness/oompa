@@ -96,11 +96,11 @@ describe("model presets and providers", () => {
     expect(astraPresetContract).toBe(currentPresetContract);
     expect(devinPresetContract).toBe(astraPresetContract);
     expect(presetRequirements.high).toEqual({
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       effort: "max",
     });
     expect(presetRequirements.ultra).toEqual({
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       effort: "ultra",
     });
     expect(presetRequirements.astra).toEqual({
@@ -116,12 +116,12 @@ describe("model presets and providers", () => {
         requirement: { model: "gpt-5.6-luna", effort: "max" },
       }],
       ["high", {
-        contract: solCodexPresetContract,
-        requirement: { model: "gpt-5.6-sol", effort: "max" },
+        contract: astraPresetContract,
+        requirement: { model: "gpt-6-astra", effort: "max" },
       }],
       ["ultra", {
-        contract: solCodexPresetContract,
-        requirement: { model: "gpt-5.6-sol", effort: "ultra" },
+        contract: astraPresetContract,
+        requirement: { model: "gpt-6-astra", effort: "ultra" },
       }],
       ["fable-max", {
         contract: currentPresetContract,

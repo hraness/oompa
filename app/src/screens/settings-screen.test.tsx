@@ -160,6 +160,7 @@ describe("read-only memory supervision", () => {
     daemonVersion: "0.6.0",
     defaultApprovalMode: "auto:all",
     defaultPreset: "ultra",
+    defaultProjectPublicId: null,
     deviceCommandsAllowed: true,
     devicePublicId: id,
     deviceStatus: "active",

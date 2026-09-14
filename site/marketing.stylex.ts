@@ -2,8 +2,11 @@ import * as stylex from "@stylexjs/stylex";
 
 const marketingStyles = stylex.create({
   productHero: {
-    paddingTop: { default: null, ":is(header)": "clamp(2rem, 4vw, 3.5rem)" },
-    paddingBottom: { default: null, ":is(header)": "2rem" },
+    position: "relative",
+    isolation: "isolate",
+    overflowX: "clip",
+    overflowY: "clip",
+    paddingBlock: { default: null, ":is(header)": "var(--hraness-marketing-hero-space, 3.5rem 4rem)" },
     gap: { default: null, ":is(header)": "clamp(1.5rem, 3vw, 2.5rem)" },
   },
   // A wrapping mobile header has no fixed height. Keep fragment destinations

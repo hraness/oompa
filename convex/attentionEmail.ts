@@ -14,8 +14,8 @@ import {
 } from "./resendApiKey";
 
 /*
- * Body version 1 is the immutable HRA-era wire vocabulary; version 2 is the
- * Oompa presentation. Each version binds its own sender, subject, review line
+ * Body versions 1 and 2 retain their HRA-era and oompa.dev wire vocabulary;
+ * version 3 uses oompa.app. Each version binds its sender, subject, review line
  * and session URL so an effect-started outbox row retries byte-identically.
  */
 export const attentionEmailFromV1 = "HRA attention <notifications@news.hraness.com>" as const;
@@ -29,14 +29,16 @@ export const oompaAttentionEmailDeliveryTimeoutMs = 8_000;
 
 const attentionEmailBodyV1Version = 1 as const;
 const attentionEmailBodyV2Version = 2 as const;
-export type AttentionEmailBodyVersion = typeof attentionEmailBodyV1Version | typeof attentionEmailBodyV2Version;
+const attentionEmailBodyV3Version = 3 as const;
+export type AttentionEmailBodyVersion = typeof attentionEmailBodyV1Version | typeof attentionEmailBodyV2Version
+  | typeof attentionEmailBodyV3Version;
 const attentionEmailBodyV1MaximumBodyBytes = 8 * 1_024;
 const attentionEmailBodyV1MaximumItems = 8;
 const attentionEmailBodyV1SubjectLine = attentionEmailSubjectV1;
 
 export const oompaAttentionEmailMaximumBodyBytes = attentionEmailBodyV1MaximumBodyBytes;
 export const oompaAttentionEmailMaximumItems = attentionEmailBodyV1MaximumItems;
-export const oompaAttentionEmailBodyVersion = attentionEmailBodyV2Version;
+export const oompaAttentionEmailBodyVersion = attentionEmailBodyV3Version;
 
 const maximumProviderResponseBytes = 4 * 1_024;
 const maximumProviderMessageIdCharacters = 256;
@@ -85,10 +87,18 @@ const attentionEmailBodyGrammars: Readonly<Record<AttentionEmailBodyVersion, Att
       subject: oompaAttentionEmailSubject,
       subjectLine: oompaAttentionEmailSubject,
     }),
+    [attentionEmailBodyV3Version]: Object.freeze({
+      from: oompaAttentionEmailFrom,
+      reviewLine: "Open Oompa to review:",
+      sessionUrl: "https://app.oompa.app/#/session/",
+      subject: oompaAttentionEmailSubject,
+      subjectLine: oompaAttentionEmailSubject,
+    }),
   });
 
 function isAttentionEmailBodyVersion(value: unknown): value is AttentionEmailBodyVersion {
-  return value === attentionEmailBodyV1Version || value === attentionEmailBodyV2Version;
+  return value === attentionEmailBodyV1Version || value === attentionEmailBodyV2Version
+    || value === attentionEmailBodyV3Version;
 }
 
 const interactionKinds = new Set<InteractionKind>(
@@ -213,7 +223,7 @@ function requireAttentionEmailIdempotencyKey(value: unknown): string {
 
 export function buildOompaAttentionEmailBody(
   input: readonly OompaAttentionEmailItem[],
-  version: AttentionEmailBodyVersion = attentionEmailBodyV2Version,
+  version: AttentionEmailBodyVersion = oompaAttentionEmailBodyVersion,
 ): OompaAttentionEmailBody {
   if (
     !Array.isArray(input)

@@ -62,7 +62,7 @@ const candidateInstallNotice: ContentBlock = {
     text(isAdmittedRelease(publicContent.releaseVersion)
       ? ` for v${admittedReleaseVersion}, or use its `
       : ` for v${admittedReleaseVersion}. Only after immutable GitHub release admission may you run the candidate install command below. For the admitted v${admittedReleaseVersion} artifact, you can also use its `),
-    link("immutable README", `https://github.com/hraness/oompa/tree/v${admittedReleaseVersion}#get-started`),
+    link("verified installation notes", publicContent.links.admittedInstall),
     text(". Neither artifact admission nor installation authorizes daemon startup."),
   ],
 };
@@ -88,10 +88,10 @@ export const docsPages: readonly DocsPage[] = [
     title: "Oompa documentation",
     description: "Set up Oompa, follow your coding sessions in the web app, and use the terminal or CLI when you need more control.",
     keywords: ["guides", "browser", "CLI", "getting started"],
-    reviewDate: "2026-09-08",
+    reviewDate: "2026-09-10",
     admission: {
       owner: "Hraness",
-      checkedOn: "2026-09-08",
+      checkedOn: "2026-09-10",
       reassessOn: "2026-10-20",
       decision: "keep",
       readerJob: "Choose the right Oompa guide without first reading the command catalog.",
@@ -128,7 +128,7 @@ export const docsPages: readonly DocsPage[] = [
         ],
       },
     ],
-    referenceSectionIds: ["project"],
+    referenceSectionIds: [],
     related: [{ path: "/docs/start/", label: "Start with one machine" }, { path: "/docs/web/", label: "Explore the web app" }],
   },
   {
@@ -136,10 +136,10 @@ export const docsPages: readonly DocsPage[] = [
     title: "Set up Oompa",
     description: "Find the admitted CLI and this candidate's installation limits, then follow the first-run path only when artifact admission and rollout prerequisites are satisfied.",
     keywords: ["install", "setup", "login", "first session", "Bun"],
-    reviewDate: "2026-09-09",
+    reviewDate: "2026-09-10",
     admission: {
       owner: "Hraness",
-      checkedOn: "2026-09-09",
+      checkedOn: "2026-09-10",
       reassessOn: "2026-10-06",
       decision: "keep",
       readerJob: "Install Oompa safely and understand the shortest path to a first local conversation.",
@@ -165,7 +165,7 @@ export const docsPages: readonly DocsPage[] = [
         heading: "2. Connect a provider account",
         blocks: [
           setupNotice,
-          paragraph(text("After the rollout prerequisites are satisfied, run these as separate commands in a foreground terminal. Initialization sets up the local state and a default project. Name your profile, then let Codex complete its own device-code sign-in.")),
+          paragraph(text("After the rollout prerequisites are satisfied, run these as separate commands in a foreground terminal. Initialization sets up local state and uses your Documents directory as the default workspace. Name your profile, then let Codex complete its own device-code sign-in.")),
           commands(publicContent.initCommand, "oompa account add personal", "oompa account login personal --provider codex --device-code"),
           paragraph(text("For Claude Code on Linux, use "), code("oompa account login personal --provider claude"), text(" instead. Claude owns its terminal prompts and browser handoff. Managed Claude login and execution are not available on macOS, and Claude has no Oompa browser-linking flow.")),
           paragraph(text("Provider login is a one-shot command, not a command inside Oompa's persistent shell. Oompa never asks you to paste a provider credential. "), link("Account status and login recovery", "/docs/sessions/#accounts"), text(" cover an interrupted sign-in.")),
@@ -190,7 +190,7 @@ export const docsPages: readonly DocsPage[] = [
         ],
       },
     ],
-    referenceSectionIds: [],
+    referenceSectionIds: ["first-account", "first-session"],
     related: [{ path: "/docs/web/", label: "Pair a browser" }, { path: "/docs/status/", label: "Release and setup status" }],
   },
   {
@@ -198,17 +198,17 @@ export const docsPages: readonly DocsPage[] = [
     title: "Use the web app",
     description: "Pair a browser, see which sessions need you, and direct work on your own machines from the session grid.",
     keywords: ["web app", "browser", "pairing", "grid", "settings", "questions"],
-    reviewDate: "2026-09-09",
+    reviewDate: "2026-09-10",
     previewId: "overview",
     admission: {
       owner: "Hraness",
-      checkedOn: "2026-09-09",
+      checkedOn: "2026-09-10",
       reassessOn: "2026-10-06",
       decision: "keep",
-      readerJob: "Enroll a browser and use Oompa's real grid, conversation, and Settings screens without mistaking a browser for an execution machine.",
-      contribution: "A screen-by-screen guide joins the app's actual enrollment states, target picker, composer, and remote interaction policy into a usable first browser journey.",
+      readerJob: "Enroll a browser, use inline conversations in the grid, and inspect Settings without mistaking a browser for an execution machine.",
+      contribution: "A browser guide connects device approval, machine selection, inline conversations, and the remote interaction policy.",
       overlapDecision: "Start owns local installation, Sessions owns CLI conversation operations, and the deployment runbook addresses operators. None explains everyday browser use.",
-      evidence: ["app/src/custody/enrollment-screen.tsx", "app/src/screens/grid-screen.tsx", "app/src/screens/session-screen.tsx", "app/src/screens/settings-screen.tsx", "src/domain/remote-interaction-policy.ts"],
+      evidence: ["app/src/custody/enrollment-screen.tsx", "app/src/screens/grid-screen.tsx", "app/src/components/session-card.tsx", "app/src/screens/settings-screen.tsx", "src/domain/remote-interaction-policy.ts"],
       scores: [2, 2, 2, 2, 2, 1],
     },
     sections: [
@@ -218,22 +218,22 @@ export const docsPages: readonly DocsPage[] = [
         blocks: [
           setupNotice,
           paragraph(text("First-time machine setup belongs in "), link("Set up Oompa", "/docs/start/"), text(". On a configured, eligible machine, complete Oompa's "), link("protected email-code sign-in", "/docs/web/#cloud-sign-in-and-device-pairing"), text(" with "), code("oompa auth login --input-stdin"), text(". Each invocation reads one protected JSON document; the linked instructions show how to request and verify a code. Complete machine sign-in before enrolling the browser. Your provider sign-in is separate.")),
-          paragraph(text("Open "), link("app.oompa.dev", "https://app.oompa.dev/"), text(" and sign in with your Oompa email and one-time code. Use the same identity as your execution machine. A browser cannot be the first device on an account or approve another device.")),
+          paragraph(text("Open "), link("app.oompa.app", "https://app.oompa.app/"), text(" and sign in with your Oompa email and one-time code. Use the same identity as your execution machine. A browser cannot be the first device on an account or approve another device.")),
           list(
             [text("Choose Enroll this browser. Oompa generates this browser's device keys and shows a fingerprint.")],
             [text("On an already approved machine, list devices and compare the browser fingerprint before approving its exact device ID.")],
-            [text("Return to the waiting browser and choose Check again. Once approved and unlocked, it can decrypt your synchronized sessions.")],
+            [text("Return to the waiting browser and choose Check again. Once approved, the browser opens your synchronized sessions automatically.")],
           ),
           commands("oompa device list", "oompa device approve <pending-device-id-or-prefix> --fingerprint <value>"),
-          paragraph(text("Email access alone cannot recover encrypted history. Keep an approved device with the account key. The browser drops its unwrapped account key when locked; "), code("Ctrl+L"), text(" also locks the app.")),
+          paragraph(text("Email access alone cannot recover encrypted history. Keep an approved device with the account key. The browser holds its unwrapped account key only in memory and drops it when the tab closes.")),
         ],
       },
       {
         id: "read-the-grid",
         heading: "See what needs you",
         blocks: [
-          paragraph(text("The grid shows your conversations as cards with their latest activity and a named state: Working, Needs an answer, Needs approval, or Done. Sessions needing attention come first. Open a card to read the conversation; drag cards to keep your preferred arrangement.")),
-          paragraph(text("With no session selected, the composer starts a new conversation on the account and project you choose. With a session selected, it sends to that conversation. Only registered targets with the necessary local permissions appear. Claude targets require a Linux execution machine.")),
+          paragraph(text("The grid shows each conversation inside its card, with a named state: Working, Needs an answer, Needs approval, or Done. Sessions needing attention come first. Drag cards to keep your preferred arrangement.")),
+          paragraph(text("To start a conversation, write a prompt in the start box and choose a machine. Oompa selects a signed-in Codex account when available, otherwise a signed-in Claude account on Linux, and uses that machine's default workspace. Only registered machines with the necessary local permissions appear. Follow-up prompts belong in the conversation card.")),
           paragraph(text("The execution machine must be running and eligible before it can apply a command. An offline command can remain pending until its deadline; opening this page does not move the session to your browser. "), link("Current rollout status", "/docs/status/"), text(" determines whether new commands are available.")),
         ],
       },
@@ -241,7 +241,7 @@ export const docsPages: readonly DocsPage[] = [
         id: "direct-a-session",
         heading: "Read, answer, and send the next instruction",
         blocks: [
-          paragraph(text("Inside a session, follow the transcript and send your next message. Oompa lets the execution machine decide whether to begin a turn or steer the active one. Stop is available while a turn is running. The session menu offers model presets, Codex Fast mode, approval settings, and eligible provider changes.")),
+          paragraph(text("Read and reply inside each card. Earlier completed responses start collapsed; expand one to read it, or choose Earlier to load older history. The latest response stays open. Each card scrolls independently and follows new output until you scroll up. The start box and card composer accept multiple lines: Enter sends, and Shift+Enter adds a line. Stop is available during a turn. The card menu contains approval settings and eligible provider changes.")),
           paragraph(text("Attach supported images or text files by picking, pasting, or dropping them into an existing conversation. A new session starts with text only. Other devices see attachment names and metadata, not a copy of the original file or image.")),
           paragraph(text("A supported, non-secret multiple-choice question can be answered here. Command, file-change, and permission requests can be declined remotely; accepting them, granting permission, typing a free-text or Other answer, and completing MCP forms stay on the execution machine. Follow the interaction's local instruction when the browser cannot act.")),
         ],
@@ -268,11 +268,11 @@ export const docsPages: readonly DocsPage[] = [
     title: "Sessions and accounts",
     description: "Inspect account status and usage, continue a conversation, switch providers, and handle interrupted work without duplicating it.",
     keywords: ["account", "session", "usage", "switch", "recovery", "transcript"],
-    reviewDate: "2026-09-09",
+    reviewDate: "2026-09-10",
     previewId: "conversation",
     admission: {
       owner: "Hraness",
-      checkedOn: "2026-09-09",
+      checkedOn: "2026-09-10",
       reassessOn: "2026-10-20",
       decision: "keep",
       readerJob: "Operate an existing Oompa conversation and know which identity, provider, and recovery action it belongs to.",
@@ -321,7 +321,7 @@ export const docsPages: readonly DocsPage[] = [
         ],
       },
     ],
-    referenceSectionIds: ["first-account", "first-session", "presets-and-permissions", "desktop-account-switching"],
+    referenceSectionIds: ["presets-and-permissions"],
     related: [{ path: "/docs/reference/", label: "Complete command reference" }, { path: "/docs/status/#install-and-update", label: "Update and recovery runbook" }],
   },
   {
@@ -387,7 +387,7 @@ export const docsPages: readonly DocsPage[] = [
   {
     path: "/docs/status/",
     title: "Availability and release status",
-    description: "Distinguish the v0.8.0 candidate from the admitted v0.7.1 CLI, check provider support, and understand the runtime rollout prerequisites.",
+    description: "Distinguish the v0.8.2 candidate from the admitted v0.8.1 CLI, check provider support, and understand the runtime rollout prerequisites.",
     keywords: ["release", "availability", "platforms", "Codex", "Claude", "upgrade"],
     reviewDate: "2026-09-09",
     admission: {
@@ -409,7 +409,7 @@ export const docsPages: readonly DocsPage[] = [
           : `v${publicContent.releaseVersion} is a candidate. v${admittedReleaseVersion} remains admitted.`,
         blocks: [
           candidateInstallNotice,
-          paragraph(text(`The v${admittedReleaseVersion} CLI passed immutable GitHub and npm artifact admission. ${isAdmittedRelease(publicContent.releaseVersion) ? "For its exact installation instructions, use the " : `The v${publicContent.releaseVersion} candidate is not yet admitted and requires its own immutable GitHub proof. For the admitted predecessor, use its `}`), link("immutable README", `https://github.com/hraness/oompa/tree/v${admittedReleaseVersion}#get-started`), text(" to install and run "), code("oompa doctor --offline"), text(". The public website, browser app, and open-beta sync service are available; their availability does not authorize starting the current daemon or sending new hosted commands.")),
+          paragraph(text(`The v${admittedReleaseVersion} CLI passed immutable GitHub artifact admission. Its optional npm mirror is not admitted. ${isAdmittedRelease(publicContent.releaseVersion) ? "For its exact installation instructions, use the " : `The v${publicContent.releaseVersion} candidate is not yet admitted and requires its own immutable GitHub proof. For the admitted predecessor, use its `}`), link("verified installation notes", publicContent.links.admittedInstall), text(" to install and run "), code("oompa doctor --offline"), text(". The public website, browser app, and open-beta sync service are available; their availability does not authorize starting the current daemon or sending new hosted commands.")),
           paragraph(text(`The v${publicContent.releaseVersion} ${isAdmittedRelease(publicContent.releaseVersion) ? "release" : "candidate"} retains the read-only exact Codex default-profile observation admitted in v0.7.1. The display remains unavailable until the intended daemon publishes a matching fresh companion after its rollout gates pass. This does not change Ultra defaults, admit models, choose a route, or authorize a command.`)),
           releaseAdmissionNotice,
           { kind: "notice", label: "Current runtime hold", content: [text(publicContent.daemonRolloutNotice)] },
@@ -438,7 +438,7 @@ export const docsPages: readonly DocsPage[] = [
         ],
       },
     ],
-    referenceSectionIds: ["install-and-update", "authority-boundaries"],
+    referenceSectionIds: ["install-and-update", "authority-boundaries", "project"],
     related: [{ path: "/docs/start/", label: "Install and check Oompa" }, { path: source("docs/beta-release-notes.md"), label: "Release notes" }, { path: source("SECURITY.md"), label: "Security support policy" }],
   },
 ];

@@ -459,12 +459,6 @@ export interface CodexRuntimePort extends SessionRuntimePort<EffectiveRuntimePro
   close(): Promise<void>;
 }
 
-export interface DesktopSwitchPort {
-  switchAccount(input: { source?: ProfileAuthority; target: ProfileAuthority; idempotencyKey: string; signal: AbortSignal }): Promise<{ status: "applied" | "recovery_required"; activeAccount?: CodexAccountProjection; diagnostic?: string; idempotencyKey: string }>;
-  recoverSwitch(input: { signal: AbortSignal }): Promise<unknown>;
-  currentRecovery(): unknown;
-}
-
 export interface CloudControlPort {
   status(signal: AbortSignal): Promise<unknown>;
   sync(signal: AbortSignal): Promise<unknown>;

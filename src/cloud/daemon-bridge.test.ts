@@ -4594,7 +4594,7 @@ describe("cloud daemon bridge", () => {
     await cloud.enqueue("device_22222222", sessionPublicId, commandPublicId, {
       kind: "set_model",
       preset: "ultra",
-      presetContract: 1,
+      presetContract: 2,
     });
     await replaceWithAuthenticatedForeignRemotePayload(
       cloud.requireCommand(commandPublicId),
@@ -6034,7 +6034,7 @@ describe("cloud daemon bridge", () => {
     [
       "stale model contract",
       "set_model",
-      { kind: "set_model", preset: "ultra", presetContract: 2 },
+      { kind: "set_model", preset: "ultra", presetContract: 1 },
     ],
     [
       "wrong model contract",
@@ -6049,7 +6049,7 @@ describe("cloud daemon bridge", () => {
     [
       "stale derived-Codex contract",
       "set_provider",
-      { kind: "set_provider", presetContract: 2, provider: "codex" },
+      { kind: "set_provider", presetContract: 1, provider: "codex" },
     ],
   ] as const) {
     test(`fails an authenticated ${name} before the remote effect boundary`, async () => {
@@ -6071,8 +6071,8 @@ describe("cloud daemon bridge", () => {
         sessionPublicId,
         commandPublicId,
         kind === "set_model"
-          ? { kind, preset: "ultra", presetContract: 1 }
-          : { kind, presetContract: 1, provider: "codex" },
+          ? { kind, preset: "ultra", presetContract: 2 }
+          : { kind, presetContract: 2, provider: "codex" },
       );
       await replaceWithAuthenticatedForeignRemotePayload(
         cloud.requireCommand(commandPublicId),
@@ -6112,7 +6112,7 @@ describe("cloud daemon bridge", () => {
     await cloud.enqueue("device_22222222", sessionPublicId, commandPublicId, {
       kind: "set_model",
       preset: "ultra",
-      presetContract: 1,
+      presetContract: 2,
     });
     await replaceWithAuthenticatedForeignRemotePayload(
       cloud.requireCommand(commandPublicId),
@@ -6219,7 +6219,7 @@ describe("cloud daemon bridge", () => {
       "device_22222222",
       sessionPublicId,
       commandPublicId,
-      { kind: "set_model", preset: "ultra", presetContract: 1 },
+      { kind: "set_model", preset: "ultra", presetContract: 2 },
     );
     cloud.failPrepareOnce = true;
     await adapter.cycle(new AbortController().signal);
@@ -6572,7 +6572,7 @@ describe("cloud daemon push wake and adaptive cadence", () => {
         "device_22222222",
         sessionPublicId,
         second,
-        { kind: "set_model", preset: "ultra", presetContract: 1 },
+        { kind: "set_model", preset: "ultra", presetContract: 2 },
       );
       // The wake fires again from inside the very cycle that claims these
       // commands, so the next sleep returns immediately while the one-second
@@ -6912,7 +6912,7 @@ describe("device registry publication", () => {
       notificationEmail: { enabled: false, revision: 1, version: 1 },
       notificationHours: { endMinute: 1_320, revision: 1, startMinute: 600, timeZone: "UTC", version: 1 },
       notificationPolicyRevision: 1,
-      profileBinding: { preset: "ultra", profileKey: "codex:gpt-5.6-sol:ultra" },
+      profileBinding: { preset: "ultra", profileKey: "codex:gpt-6-astra:ultra" },
       registry: { ...registry, defaultPreset: "ultra", heartbeatAt: fixedNow },
     };
   }
@@ -6936,7 +6936,7 @@ describe("device registry publication", () => {
       ...authority, kind: "profile_binding",
     })).toEqual({
       preset: "ultra",
-      profileKey: "codex:gpt-5.6-sol:ultra",
+      profileKey: "codex:gpt-6-astra:ultra",
       observedAt: fixedNow,
       registryEnvelopeDigest: await profileBindingRegistryDigest(row?.envelope as EncryptedEnvelope),
       registryRevision: 2,
@@ -6946,7 +6946,7 @@ describe("device registry publication", () => {
     expect(world.writes).toHaveLength(2);
     projection = {
       ...projection,
-      profileBinding: { preset: "high", profileKey: "codex:gpt-5.6-sol:max" },
+      profileBinding: { preset: "high", profileKey: "codex:gpt-6-astra:max" },
       registry: { ...projection.registry, defaultPreset: "high" },
     };
     expect((await daemon.cycle(signal)).errors).toEqual([]);
@@ -8685,7 +8685,7 @@ describe("device command execution", () => {
         accountPublicId: "acct_primary0001",
         kind: "session_start",
         preset: "ultra",
-        presetContract: 2,
+        presetContract: 1,
         projectPublicId: "proj_alpha000001",
         prompt: "continue",
         provider: "codex",
@@ -8715,7 +8715,7 @@ describe("device command execution", () => {
           accountPublicId: "acct_primary0001",
           kind: "session_start",
           preset: "ultra",
-          presetContract: 1,
+          presetContract: 2,
           projectPublicId: "proj_alpha000001",
           prompt: "continue",
           provider: "codex",
@@ -8761,7 +8761,7 @@ describe("device command execution", () => {
         accountPublicId: "acct_primary0001",
         kind: "session_start",
         preset: "ultra",
-        presetContract: 1,
+        presetContract: 2,
         projectPublicId: "proj_alpha000001",
         prompt: "continue",
         provider: "codex",
@@ -9632,7 +9632,7 @@ describe("device command execution", () => {
         accountPublicId: "acct_primary0001",
         kind: "session_start",
         preset: "ultra",
-        presetContract: 1,
+        presetContract: 2,
         projectPublicId: "proj_alpha000001",
         prompt: "continue",
         provider: "codex",
@@ -9842,7 +9842,7 @@ describe("device command execution", () => {
         accountPublicId: "acct_primary0001",
         kind: "session_start",
         preset: "ultra",
-        presetContract: 1,
+        presetContract: 2,
         projectPublicId: "proj_alpha000001",
         prompt: "continue",
         provider: "codex",

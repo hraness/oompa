@@ -60,11 +60,18 @@ export function advanceStylesheetSettlement(
   let first = state.first;
   let last = state.last;
   let matchingFrames = 0;
+  const frameIdentities = value.map((entry: unknown) => {
+    const item = object(entry);
+    return typeof item.frame !== "number" ? "nonnumeric"
+      : Number.isFinite(item.frame) ? item.frame : "nonfinite";
+  });
   for (const entry of value as unknown[]) {
     const item = object(entry);
     if (Object.keys(item).length !== 2 || !("frame" in item) || !("sample" in item)
       || typeof item.frame !== "number" || !Number.isFinite(item.frame) || item.frame < 0
-      || (frame !== null && item.frame <= frame)) throw new Error("Invalid stylesheet frame identity");
+      || (frame !== null && item.frame <= frame)) {
+      throw new Error(`Invalid stylesheet frame identity: previous=${String(state.frame)}, pair=${JSON.stringify(frameIdentities)}`);
+    }
     last = parseStylesheetSample(item.sample, foundation);
     first ??= last;
     frame = item.frame;
@@ -210,6 +217,8 @@ export function readRestoredStyleFramePair(
   return new Promise((resolve, reject) => {
     let finished = false;
     let animationFrame: number | undefined;
+    let callbacks = 0;
+    let previousTimestamp: number | undefined;
     const frames: { frame: number; sample: Record<string, string> }[] = [];
     const timer = view.setTimeout(() => fail(new Error("Stylesheet frame probe exceeded its remaining deadline")), input.remainingMs);
     function release() {
@@ -225,6 +234,17 @@ export function readRestoredStyleFramePair(
       if (finished) return;
       try {
         control.assertRestored();
+        callbacks += 1;
+        if (callbacks > 4096) throw new Error("Stylesheet frame probe exhausted its callback bound");
+        if (!Number.isFinite(timestamp) || timestamp < 0) throw new Error("Invalid stylesheet callback timestamp: nonfinite or negative");
+        if (previousTimestamp !== undefined && timestamp < previousTimestamp) {
+          throw new Error(`Stylesheet callback timestamp regressed: previous=${String(previousTimestamp)}, current=${String(timestamp)}`);
+        }
+        // A repeated browser timestamp is not another admissible frame. Forget
+        // the earlier sample and require a fresh adjacent increasing pair.
+        // The original timer, identity checks and strict reducer stay in force.
+        if (timestamp === previousTimestamp) frames.length = 0;
+        previousTimestamp = timestamp;
         if (!element.isConnected || element.ownerDocument !== document) {
           throw new Error("Stylesheet sample target changed");
         }

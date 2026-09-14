@@ -85,7 +85,7 @@ const convex: ConvexTarget = {
 };
 
 const plan: CurrentProjectAliasReleasePlan = {
-  alias: "oompa.dev",
+  alias: "oompa.app",
   convex,
   idempotencyKey: "607f32a6-98a9-4597-b54e-32e72fe32b56",
   kind: "current-project-canonical-alias",
@@ -191,7 +191,7 @@ const cliDeploymentWithoutGitSourceFor = (
 };
 
 const aliasFor = (endpoint: CurrentProjectAliasEndpoint): CurrentAliasReadback => ({
-  alias: "oompa.dev",
+  alias: "oompa.app",
   deployment: { id: endpoint.deploymentId, url: endpoint.deploymentUrl },
   deploymentId: endpoint.deploymentId,
   projectId: OOMPA_VERCEL_PROJECT_ID,
@@ -276,7 +276,7 @@ const seedTargetPhase = async (
     inputPlan,
     intent,
     {
-      alias: "oompa.dev",
+      alias: "oompa.app",
       created: 1_787_961_600_000,
       oldDeploymentId: inputPlan.vercel.source.deploymentId,
       uid: "alias_CurrentOompa1234567890",
@@ -396,7 +396,7 @@ class FakeProvider implements CurrentProjectAliasReleaseProvider {
     endpoint: CurrentProjectAliasEndpoint,
     idempotencyKey: string,
   ): Promise<Readonly<{
-    alias: "oompa.dev";
+    alias: "oompa.app";
     created: number;
     oldDeploymentId: string;
     uid: string;
@@ -408,7 +408,7 @@ class FakeProvider implements CurrentProjectAliasReleaseProvider {
         ? target.deploymentId
         : "dpl_UnknownCurrent12345678901";
     const response = {
-      alias: "oompa.dev" as const,
+      alias: "oompa.app" as const,
       created: 1_787_961_600_000,
       oldDeploymentId: this.mutationOldDeploymentIdOverride ?? oldDeploymentId,
       uid: "alias_CurrentOompa1234567890",
@@ -469,7 +469,7 @@ class FakeDirectVercelTransport {
       JSON.stringify(value),
       { headers: { "content-type": "application/json" }, status },
     );
-    if (url.startsWith("https://oompa.dev/.well-known/hra.json?release=")) {
+    if (url.startsWith("https://oompa.app/.well-known/hra.json?release=")) {
       const headers = new Headers(init.headers);
       expect(headers.has("authorization")).toBeFalse();
       expect(init.method).toBe("GET");
@@ -502,7 +502,7 @@ class FakeDirectVercelTransport {
       const targetPath = `/v2/deployments/${target.deploymentId}/aliases`;
       const sourcePath = `/v2/deployments/${source.deploymentId}/aliases`;
       expect([sourcePath, targetPath]).toContain(parsedUrl.pathname);
-      expect(init.body).toBe(JSON.stringify({ alias: "oompa.dev" }));
+      expect(init.body).toBe(JSON.stringify({ alias: "oompa.app" }));
       expect(headers.get("content-type")).toBe("application/json");
       const assigningTarget = parsedUrl.pathname === targetPath;
       expect(headers.get("idempotency-key")).toBe(currentAliasReleaseMutationKey(
@@ -516,7 +516,7 @@ class FakeDirectVercelTransport {
         expect(this.mode).toBe("recover-source");
         this.aliasState = "source";
         return json({
-          alias: "oompa.dev",
+          alias: "oompa.app",
           created: 1_787_961_603_000,
           oldDeploymentId: target.deploymentId,
           uid: "alias_CurrentOompa1234567890",
@@ -525,11 +525,11 @@ class FakeDirectVercelTransport {
       if (this.mode === "mutation-rejected") return json({ error: "refused" }, 500);
       if (this.mode === "mutation-malformed") {
         this.aliasState = "target";
-        return json({ alias: "oompa.dev" });
+        return json({ alias: "oompa.app" });
       }
       this.aliasState = "target";
       return json({
-        alias: "oompa.dev",
+        alias: "oompa.app",
         created: 1_787_961_600_000,
         oldDeploymentId: source.deploymentId,
         uid: "alias_CurrentOompa1234567890",
@@ -546,7 +546,7 @@ class FakeDirectVercelTransport {
     if (parsedUrl.pathname === `/v13/deployments/${target.deploymentId}`) {
       return json(deploymentFor(target));
     }
-    if (parsedUrl.pathname === "/v4/aliases/oompa.dev") {
+    if (parsedUrl.pathname === "/v4/aliases/oompa.app") {
       const alias = aliasFor(this.aliasState === "source" ? source : target);
       return json(this.activityEvidence === undefined
         ? alias
@@ -561,7 +561,7 @@ class FakeDirectVercelTransport {
       return json({
         aliases: this.activityEvidence === undefined
           ? []
-          : [{ alias: "oompa.dev", uid: this.activityEvidence.alias.uid }],
+          : [{ alias: "oompa.app", uid: this.activityEvidence.alias.uid }],
       });
     }
     if (parsedUrl.pathname === `/v2/deployments/${source.deploymentId}/aliases`) {
@@ -801,20 +801,23 @@ describe("private descriptor fixture protocol", () => {
 });
 
 describe("current-project alias plan", () => {
-  test("parses the checked exact editorial-image release plan", async () => {
+  test("preserves the historical editorial-image plan without admitting its retired alias", async () => {
     const document = await readFile(
       join(import.meta.dir, "..", "docs", "oompa-dev-80c20f7-plan.json"),
       "utf8",
     );
-    const parsed = parseCurrentProjectAliasReleasePlan(document);
-
-    expect(parsed.repository).toEqual({ id: 1_343_008_607, name: "hraness/oompa" });
-    expect(parsed.vercel.projectId).toBe("prj_8ciIt9t9foE3utG45frRN7cxckjS");
-    expect(parsed.vercel.source.deploymentId).toBe("dpl_7pK5Y4G5G6rrNWzExGCYCjr6kMKN");
-    expect(parsed.vercel.target.deploymentId).toBe("dpl_5um4zKKeN7WhLT58xoycxRkeoVKZ");
-    expect(parsed.vercel.target.sourceCommit).toBe(
-      "80c20f7b1aa06aaec4a8bc03dbea249911de4717",
-    );
+    expect(JSON.parse(document)).toMatchObject({
+      alias: "oompa.dev",
+      repository: { id: 1_343_008_607, name: "hraness/oompa" },
+      vercel: {
+        projectId: "prj_8ciIt9t9foE3utG45frRN7cxckjS",
+        source: { deploymentId: "dpl_7pK5Y4G5G6rrNWzExGCYCjr6kMKN" },
+        target: { deploymentId: "dpl_5um4zKKeN7WhLT58xoycxRkeoVKZ",
+          sourceCommit: "80c20f7b1aa06aaec4a8bc03dbea249911de4717" },
+      },
+    });
+    expect(() => parseCurrentProjectAliasReleasePlan(document)).toThrow("input_invalid");
+    expect(parseCurrentProjectAliasReleasePlan(JSON.stringify(plan))).toEqual(plan);
   });
 
   test("rejects retired and name-only provider identities", () => {
@@ -835,6 +838,7 @@ describe("current-project alias plan", () => {
       retiredDeployment,
       retiredRepository,
       uppercaseKey,
+      { ...plan, alias: "oompa.dev" },
       { ...plan, extra: true },
       { ...plan, vercel: { ...plan.vercel, target: source } },
     ]) {
@@ -845,7 +849,7 @@ describe("current-project alias plan", () => {
 
   test("derives one exact record confirmation including project, IDs, and hostnames", () => {
     expect(requiredAliasConfirmation(plan)).toBe(
-      `reassign oompa.dev in ${OOMPA_VERCEL_PROJECT_ID} from ${source.deploymentId}@${source.deploymentUrl} to ${target.deploymentId}@${target.deploymentUrl} using plan ${plan.idempotencyKey}`,
+      `reassign oompa.app in ${OOMPA_VERCEL_PROJECT_ID} from ${source.deploymentId}@${source.deploymentUrl} to ${target.deploymentId}@${target.deploymentUrl} using plan ${plan.idempotencyKey}`,
     );
     expect(requiredAliasConfirmation({
       ...plan,
@@ -878,7 +882,7 @@ describe("current-project alias plan", () => {
       plan,
       intent,
       {
-        alias: "oompa.dev",
+        alias: "oompa.app",
         created: 1_787_961_600_000,
         oldDeploymentId: source.deploymentId,
         uid: "alias_CurrentOompa1234567890",
@@ -909,7 +913,7 @@ describe("current-project alias plan", () => {
       plan,
       intent,
       {
-        alias: "oompa.dev",
+        alias: "oompa.app",
         created: 1_787_961_600_000,
         oldDeploymentId: "dpl_UnknownCurrent12345678901",
         uid: "alias_CurrentOompa1234567890",
@@ -1241,7 +1245,7 @@ describe("current-project alias authority", () => {
           undefined,
           "approve both",
           "confirmed do it",
-          "reassign oompa.dev",
+          "reassign oompa.app",
         ] as const) {
           const provider = new FakeProvider();
           const stderr: string[] = [];
@@ -1606,7 +1610,7 @@ describe("current-project Vercel provider", () => {
       "--method",
       "POST",
       "--raw-field",
-      "alias=oompa.dev",
+      "alias=oompa.app",
       "--header",
       `Idempotency-Key:${key}`,
       "--scope",
@@ -1619,7 +1623,7 @@ describe("current-project Vercel provider", () => {
       "fixture-vercel-token",
     );
     expect(request).toEqual({
-      body: JSON.stringify({ alias: "oompa.dev" }),
+      body: JSON.stringify({ alias: "oompa.app" }),
       headers: {
         accept: "application/json",
         authorization: "Bearer fixture-vercel-token",
@@ -1768,9 +1772,9 @@ describe("current-project Vercel provider", () => {
         `/v9/projects/${OOMPA_VERCEL_PROJECT_ID}`,
         `/v13/deployments/${source.deploymentId}`,
         `/v13/deployments/${target.deploymentId}`,
-        "/v4/aliases/oompa.dev",
+        "/v4/aliases/oompa.app",
         "/.well-known/hra.json",
-        "/v4/aliases/oompa.dev",
+        "/v4/aliases/oompa.app",
       ]);
 
       const executed = await runDirectApiCli(
@@ -3006,7 +3010,7 @@ describe("current-project alias CLI", () => {
       expect(exitCode).toBe(0);
       expect(stderr).toEqual([]);
       expect(JSON.parse(stdout.join(""))).toEqual({
-        alias: "oompa.dev",
+        alias: "oompa.app",
         idempotencyKey: plan.idempotencyKey,
         nextAction: "execute_with_machine_token_under_standing_task_authority",
         observedState: "source",

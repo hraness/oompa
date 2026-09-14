@@ -30,8 +30,6 @@ const accountActions = new Set([
   "logout",
   "usage",
   "usage-history",
-  "switch",
-  "switch-recover",
 ]);
 
 const sessionActions = new Set([

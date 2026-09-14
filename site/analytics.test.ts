@@ -10,12 +10,12 @@ import { oompaPostHogSite } from "./analytics-site.ts";
 
 const publicProjectToken = "phc_public_test_token";
 
-describe("oompa.dev analytics boundary", () => {
+describe("oompa.app analytics boundary", () => {
   test("classifies only canonical Oompa routes without queries or fragments", () => {
-    expect(classifyAnalyticsRoute(oompaPostHogSite, "https://oompa.dev/"))
+    expect(classifyAnalyticsRoute(oompaPostHogSite, "https://oompa.app/"))
       .toMatchObject({
         analytics_schema_version: 1,
-        canonical_domain: "oompa.dev",
+        canonical_domain: "oompa.app",
         canonical_path: "/",
         content_group: "product",
         page_kind: "product_home",
@@ -23,27 +23,29 @@ describe("oompa.dev analytics boundary", () => {
       });
     expect(classifyAnalyticsRoute(
       oompaPostHogSite,
-      "https://oompa.dev/privacy/?token=private#account",
+      "https://oompa.app/privacy/?token=private#account",
     )).toMatchObject({
       canonical_path: "/privacy",
       content_group: "legal",
       page_kind: "privacy",
     });
-    expect(classifyAnalyticsRoute(oompaPostHogSite, "https://oompa.dev/private/path"))
+    expect(classifyAnalyticsRoute(oompaPostHogSite, "https://oompa.app/private/path"))
       .toMatchObject({
         canonical_path: "/not-found",
         page_kind: "other",
       });
-    expect(classifyAnalyticsRoute(oompaPostHogSite, "https://www.oompa.dev/"))
+    expect(classifyAnalyticsRoute(oompaPostHogSite, "https://www.oompa.app/"))
       .toBeNull();
     expect(classifyAnalyticsRoute(oompaPostHogSite, "https://attacker.example/"))
       .toBeNull();
+    expect(classifyAnalyticsRoute(oompaPostHogSite, "https://oompa.dev/"))
+      .toBeNull();
   });
 
-  test("is eligible only for an exact production oompa.dev page and public token", () => {
+  test("is eligible only for an exact production oompa.app page and public token", () => {
     const evidence = {
-      hostname: "oompa.dev",
-      href: "https://oompa.dev/",
+      hostname: "oompa.app",
+      href: "https://oompa.app/",
       production: true,
       referrer: "",
     } as const;
@@ -53,6 +55,11 @@ describe("oompa.dev analytics boundary", () => {
       evidence,
       site: oompaPostHogSite,
     })).toBe(true);
+    expect(isPostHogBrowserEligible({
+      apiKey: publicProjectToken,
+      evidence: { ...evidence, hostname: "oompa.dev", href: "https://oompa.dev/" },
+      site: oompaPostHogSite,
+    })).toBe(false);
     expect(isPostHogBrowserEligible({
       apiKey: publicProjectToken,
       evidence: { ...evidence, hostname: "oompa-preview.vercel.app" },
@@ -77,18 +84,18 @@ describe("oompa.dev analytics boundary", () => {
     ] as const;
     expect(oompaPostHogSite.routes.map(({ path }) => path)).toEqual(["/", "/privacy", ...pages.map(([path]) => path)]);
     for (const [path, kind] of pages) {
-      expect(classifyAnalyticsRoute(oompaPostHogSite, `https://oompa.dev${path}/?token=private#local-account`)).toMatchObject({
+      expect(classifyAnalyticsRoute(oompaPostHogSite, `https://oompa.app${path}/?token=private#local-account`)).toMatchObject({
         canonical_path: path, page_kind: kind, content_group: "documentation",
       });
     }
     for (const path of ["/docs/private", "/docs/start/private", "/examples/app/", "/examples/app/index.html?view=settings", "/preview/"]) {
-      expect(classifyAnalyticsRoute(oompaPostHogSite, `https://oompa.dev${path}`)).toMatchObject({ canonical_path: "/not-found", page_kind: "other" });
+      expect(classifyAnalyticsRoute(oompaPostHogSite, `https://oompa.app${path}`)).toMatchObject({ canonical_path: "/not-found", page_kind: "other" });
     }
   });
 
   test("uses anonymous cookieless memory state with invasive capture disabled", () => {
     const config = createPostHogBrowserConfig(oompaPostHogSite, {
-      href: "https://oompa.dev/",
+      href: "https://oompa.app/",
       referrer: "https://www.google.com/search?q=private",
     });
 

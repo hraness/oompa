@@ -66,9 +66,9 @@ describe("machine default builders", () => {
 
   test("session preset changes bind the alias to this build's exact contract", () => {
     expect(sessionPresetCommand("high"))
-      .toEqual({ kind: "set_model", preset: "high", presetContract: 1 });
+      .toEqual({ kind: "set_model", preset: "high", presetContract: 2 });
     expect(sessionPresetCommand("ultra"))
-      .toEqual({ kind: "set_model", preset: "ultra", presetContract: 1 });
+      .toEqual({ kind: "set_model", preset: "ultra", presetContract: 2 });
     expect(accepted(sessionPresetCommand("ultra"))).toEqual(sessionPresetCommand("ultra"));
   });
 

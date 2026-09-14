@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -90,7 +90,8 @@ type DeviceFixture = Readonly<{
 }>;
 
 afterEach(async () => {
-  for (const teardown of ownedMemoryTeardowns.splice(0)) await teardown();
+  // A later stage depends on earlier fixtures: abort and join it before closing them.
+  for (const teardown of ownedMemoryTeardowns.splice(0).reverse()) await teardown();
   for (const fixture of fixtures.splice(0).reverse()) {
     await fixture.sync.close().catch(() => undefined);
     fixture.store.close();
@@ -844,31 +845,37 @@ describe("OompaCanonicalMemorySynchronizer", () => {
     expect(remote.server.createAttempts).toBe(1);
   });
 
-  test("never reserves a portable create or attach authority over an existing canonical database", async () => {
+  test("never reserves a portable create authority over an existing canonical database", () => ownedMemoryCase(async (
+    { createDevice: createOwnedDevice, request },
+  ) => {
     const emptyRemote = createEmptyRemote();
-    const createDeviceFixture = await createDevice("legacy-create-preflight", emptyRemote.source);
-    await seedLegacyCanonicalDatabase(createDeviceFixture, "legacy-create-record");
+    const createDeviceFixture = await createOwnedDevice("legacy-create-preflight", emptyRemote.source);
+    await request(() => seedLegacyCanonicalDatabase(createDeviceFixture, "legacy-create-record"));
 
-    await expect(createDeviceFixture.sync.createHostedSpace({
+    await expect(request(() => createDeviceFixture.sync.createHostedSpace({
       idempotencyKey: "00000000-0000-4000-8000-000000000806",
       projectId: createDeviceFixture.projectId,
-    })).rejects.toThrow("CANONICAL_MEMORY_DATABASE_RECOVERY_REQUIRED");
+    }))).rejects.toThrow("CANONICAL_MEMORY_DATABASE_RECOVERY_REQUIRED");
     expect(createDeviceFixture.store.readProjectMemoryAuthority(createDeviceFixture.projectId))
       .toBeNull();
     expect(emptyRemote.server.createAttempts).toBe(0);
+  }));
 
-    const attachRemote = await createRemote();
-    const attachDevice = await createDevice("legacy-attach-preflight", attachRemote.source);
-    await seedLegacyCanonicalDatabase(attachDevice, "legacy-attach-record");
+  test("never reserves a portable attach authority over an existing canonical database", () => ownedMemoryCase(async (
+    { createDevice: createOwnedDevice, request },
+  ) => {
+    const attachRemote = await request(() => createRemote());
+    const attachDevice = await createOwnedDevice("legacy-attach-preflight", attachRemote.source);
+    await request(() => seedLegacyCanonicalDatabase(attachDevice, "legacy-attach-record"));
 
-    await expect(attachDevice.sync.attachHostedSpace({
+    await expect(request(() => attachDevice.sync.attachHostedSpace({
       hostedSpaceId: attachRemote.hostedSpaceId,
       projectId: attachDevice.projectId,
-    })).rejects.toThrow("CANONICAL_MEMORY_DATABASE_RECOVERY_REQUIRED");
+    }))).rejects.toThrow("CANONICAL_MEMORY_DATABASE_RECOVERY_REQUIRED");
     expect(attachDevice.store.readProjectMemoryAuthority(attachDevice.projectId)).toBeNull();
     expect(attachDevice.store.readCanonicalMemoryHostedAttachment(attachDevice.projectId))
       .toBeNull();
-  });
+  }));
 
   test("recovers an applied create with a lost response by comparing the exact winner", async () => {
     const remote = createEmptyRemote();
@@ -1579,75 +1586,89 @@ describe("OompaCanonicalMemorySynchronizer", () => {
     expect(reader.store.readUnresolvedCanonicalMemorySyncIntent(reader.projectId)).toBeNull();
   });
 
-  test("freezes before importing a crash-left pull operation removed from later remote history", () => ownedMemoryCase(async (
-    { createDevice: createOwnedDevice, request },
-  ) => {
-    const remote = await request(() => createRemote());
-    const [originalWriter, branchWriter, reader] = await Promise.all([
-      createOwnedDevice("pull-orphan-original", remote.source),
-      createOwnedDevice("pull-orphan-branch", remote.source),
-      createOwnedDevice("pull-orphan-reader", remote.source),
-    ]);
-    await Promise.all([originalWriter, branchWriter, reader].map((device) =>
-      request(() => device.sync.attachHostedSpace({
-        hostedSpaceId: remote.hostedSpaceId,
-        projectId: device.projectId,
-      }))));
-    await request(() => advanceLocal(originalWriter, "pull-orphan-original-operation"));
-    await request(() => originalWriter.sync.synchronizeProject({
-      projectId: originalWriter.projectId,
-      reason: "owner",
-    }));
-    const orphaned = remote.server.operations[0];
-    if (orphaned === undefined) throw new Error("TEST_ORPHANED_OPERATION_MISSING");
+  describe("orphaned pull recovery", () => {
+    let remote: Awaited<ReturnType<typeof createRemote>>;
+    let originalWriter: DeviceFixture;
+    let branchWriter: DeviceFixture;
+    let reader: DeviceFixture;
 
-    const authorize = reader.store.authorizeCanonicalMemoryPullResult.bind(reader.store);
-    let failOnce = true;
-    Object.defineProperty(reader.store, "authorizeCanonicalMemoryPullResult", {
-      configurable: true,
-      value: (input: Parameters<StateStore["authorizeCanonicalMemoryPullResult"]>[0]) => {
-        if (failOnce) {
-          failOnce = false;
-          throw new Error("TEST_CRASH_BEFORE_ORPHANED_PULL_AUTHORIZATION");
-        }
-        return authorize(input);
-      },
-    });
-    await expect(request(() => reader.sync.synchronizeProject({
-      projectId: reader.projectId,
-      reason: "owner",
-    }))).rejects.toThrow("TEST_CRASH_BEFORE_ORPHANED_PULL_AUTHORIZATION");
-    expect(reader.store.readUnresolvedCanonicalMemorySyncIntent(reader.projectId))
-      .toMatchObject({ direction: "pull", state: "response_observed" });
-
-    remote.server.operations.splice(0);
-    await request(() => advanceLocal(branchWriter, "pull-orphan-replacement-one"));
-    await request(() => branchWriter.sync.synchronizeProject({
-      projectId: branchWriter.projectId,
-      reason: "owner",
+    // Each fresh device runs the full StateStore migrations under its own
+    // bounded setup hook. The case deadline covers the crash and recovery.
+    beforeEach(() => ownedMemoryCase(async ({ createDevice: createOwnedDevice, request }) => {
+      remote = await request(() => createRemote());
+      originalWriter = await createOwnedDevice("pull-orphan-original", remote.source);
     }));
-    await request(() => advanceLocal(branchWriter, "pull-orphan-replacement-two"));
-    await request(() => branchWriter.sync.synchronizeProject({
-      projectId: branchWriter.projectId,
-      reason: "owner",
+    beforeEach(() => ownedMemoryCase(async ({ createDevice: createOwnedDevice }) => {
+      branchWriter = await createOwnedDevice("pull-orphan-branch", remote.source);
     }));
-    expect(remote.server.operations).toHaveLength(2);
-    expect(remote.server.operations[0]).not.toEqual(orphaned);
+    beforeEach(() => ownedMemoryCase(async ({ createDevice: createOwnedDevice }) => {
+      reader = await createOwnedDevice("pull-orphan-reader", remote.source);
+    }));
 
-    Object.defineProperty(reader.store, "authorizeCanonicalMemoryPullResult", {
-      configurable: true,
-      value: authorize,
-    });
-    await expect(request(() => reader.sync.synchronizeProject({
-      projectId: reader.projectId,
-      reason: "recovery",
-    }))).rejects.toThrow("REMOTE_MEMORY_DIVERGENCE");
-    expect(reader.store.readProjectMemoryAuthority(reader.projectId)).toMatchObject({
-      head: PROJECT_MEMORY_EMPTY_HEAD,
-      syncState: "conflict",
-    });
-    expect(reader.store.readUnresolvedCanonicalMemorySyncIntent(reader.projectId)).toBeNull();
-  }));
+    test("freezes before importing a crash-left pull operation removed from later remote history", () => ownedMemoryCase(async (
+      { request },
+    ) => {
+      await Promise.all([originalWriter, branchWriter, reader].map((device) =>
+        request(() => device.sync.attachHostedSpace({
+          hostedSpaceId: remote.hostedSpaceId,
+          projectId: device.projectId,
+        }))));
+      await request(() => advanceLocal(originalWriter, "pull-orphan-original-operation"));
+      await request(() => originalWriter.sync.synchronizeProject({
+        projectId: originalWriter.projectId,
+        reason: "owner",
+      }));
+      const orphaned = remote.server.operations[0];
+      if (orphaned === undefined) throw new Error("TEST_ORPHANED_OPERATION_MISSING");
+
+      const authorize = reader.store.authorizeCanonicalMemoryPullResult.bind(reader.store);
+      let failOnce = true;
+      Object.defineProperty(reader.store, "authorizeCanonicalMemoryPullResult", {
+        configurable: true,
+        value: (input: Parameters<StateStore["authorizeCanonicalMemoryPullResult"]>[0]) => {
+          if (failOnce) {
+            failOnce = false;
+            throw new Error("TEST_CRASH_BEFORE_ORPHANED_PULL_AUTHORIZATION");
+          }
+          return authorize(input);
+        },
+      });
+      await expect(request(() => reader.sync.synchronizeProject({
+        projectId: reader.projectId,
+        reason: "owner",
+      }))).rejects.toThrow("TEST_CRASH_BEFORE_ORPHANED_PULL_AUTHORIZATION");
+      expect(reader.store.readUnresolvedCanonicalMemorySyncIntent(reader.projectId))
+        .toMatchObject({ direction: "pull", state: "response_observed" });
+
+      remote.server.operations.splice(0);
+      await request(() => advanceLocal(branchWriter, "pull-orphan-replacement-one"));
+      await request(() => branchWriter.sync.synchronizeProject({
+        projectId: branchWriter.projectId,
+        reason: "owner",
+      }));
+      await request(() => advanceLocal(branchWriter, "pull-orphan-replacement-two"));
+      await request(() => branchWriter.sync.synchronizeProject({
+        projectId: branchWriter.projectId,
+        reason: "owner",
+      }));
+      expect(remote.server.operations).toHaveLength(2);
+      expect(remote.server.operations[0]).not.toEqual(orphaned);
+
+      Object.defineProperty(reader.store, "authorizeCanonicalMemoryPullResult", {
+        configurable: true,
+        value: authorize,
+      });
+      await expect(request(() => reader.sync.synchronizeProject({
+        projectId: reader.projectId,
+        reason: "recovery",
+      }))).rejects.toThrow("REMOTE_MEMORY_DIVERGENCE");
+      expect(reader.store.readProjectMemoryAuthority(reader.projectId)).toMatchObject({
+        head: PROJECT_MEMORY_EMPTY_HEAD,
+        syncState: "conflict",
+      });
+      expect(reader.store.readUnresolvedCanonicalMemorySyncIntent(reader.projectId)).toBeNull();
+    }));
+  });
 
   test("sticky-freezes an erased attached remote and zeroizes the authority snapshot", async () => {
     const remote = await createRemote();

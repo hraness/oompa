@@ -196,32 +196,6 @@ export function isIdleSession(state: SessionStateValue): boolean {
   return idleStates.has(state);
 }
 
-/**
- * Where the grid composer steers.
- *
- * With no session selected the composer starts a new one through the
- * `session_start` device command instead; this resolves the target only for the
- * steering half. `summaries` is expected in the grid's own display order, which
- * already puts the freshest first inside each group, so the fallback re-sorts
- * by activity rather than trusting it.
- */
-export function resolveComposerTarget(
-  summaries: readonly SessionCardSummary[],
-  selectedPublicId: string | null,
-): SessionCardSummary | null {
-  // A deliberate retired selection must not redirect a message to a sibling.
-  if (summaries.some((summary) =>
-    summary.publicId === selectedPublicId && summary.retiredProvider !== undefined)) return null;
-  const visible = summaries.filter((summary) =>
-    !summary.archived && summary.retiredProvider === undefined);
-  const selected = selectedPublicId === null
-    ? undefined
-    : visible.find((summary) => summary.publicId === selectedPublicId);
-  if (selected !== undefined && isIdleSession(selected.state)) return selected;
-  const byActivity = [...visible].sort((left, right) => right.lastActivityAt - left.lastActivityAt);
-  return byActivity[0] ?? null;
-}
-
 export const interactionKindLabel: Readonly<Record<CompactInteractionKind, string>> =
   Object.freeze({
     command_approval: "Command approval",

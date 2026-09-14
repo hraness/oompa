@@ -26,6 +26,8 @@ const stores = new Set<StateStore>();
 const fixedNow = () => 10_000;
 const storeOptions = { now: fixedNow, resolveMachineTimeZone: () => "UTC" };
 const capabilityCodec = new WorkCapabilityCodec(new Uint8Array(32).fill(7));
+const astraUltra = "codex:gpt-6-astra:ultra";
+// Archived contract-1 fixtures retain Sol; current fixtures select Astra.
 const solUltra = "codex:gpt-5.6-sol:ultra";
 const lunaMax = "codex:gpt-5.6-luna:max";
 const identityTables = ["sessions", "work_routes", "work_tasks", "work_attempts"] as const;
@@ -247,7 +249,7 @@ describe("canonical profile real-StateStore integration", () => {
           if (operation === "archive") expect(updated.archivedAt).toBe(fixedNow());
           if (operation === "bind") expect(updated.providerThreadId).toBe("synthetic-bound-thread");
           expect(inspect(store, (database) => query(database, "SELECT canonical_profile_key FROM sessions")))
-            .toEqual([{ canonical_profile_key: solUltra }]);
+            .toEqual([{ canonical_profile_key: astraUltra }]);
         }
         closeStore(store);
       }
@@ -257,7 +259,7 @@ describe("canonical profile real-StateStore integration", () => {
   for (const state of liveStates) {
     test(`persists exact four-row keys and atomically fences ${state} session reselection`, async () => {
       const value = await fixture(state);
-      expect(keys(value.store)).toEqual(Object.fromEntries(identityTables.map((table) => [table, [{ canonical_profile_key: solUltra }]])));
+      expect(keys(value.store)).toEqual(Object.fromEntries(identityTables.map((table) => [table, [{ canonical_profile_key: astraUltra }]])));
       expect(inspect(value.store, (database) => query(database,
         "SELECT name,type,\"notnull\",dflt_value,hidden FROM pragma_table_xinfo('sessions') WHERE name='canonical_profile_key'")))
         .toEqual([{ name: "canonical_profile_key", type: "TEXT", notnull: 0, dflt_value: null, hidden: 0 }]);
@@ -269,7 +271,7 @@ describe("canonical profile real-StateStore integration", () => {
       const updated = value.store.updateSessionMetadata({ sessionId: value.session.id,
         expectedRevision: value.session.revision, title: "Allowed metadata", note: "Identity unchanged." });
       expect(updated.revision).toBe(value.session.revision + 1);
-      expect(keys(value.store)).toEqual(Object.fromEntries(identityTables.map((table) => [table, [{ canonical_profile_key: solUltra }]])));
+      expect(keys(value.store)).toEqual(Object.fromEntries(identityTables.map((table) => [table, [{ canonical_profile_key: astraUltra }]])));
     });
   }
 
@@ -284,8 +286,8 @@ describe("canonical profile real-StateStore integration", () => {
       const selected = value.store.updateSessionMetadata({ sessionId: value.session.id,
         expectedRevision: value.session.revision, preset: "low" });
       expect(keys(value.store)).toEqual({ sessions: [{ canonical_profile_key: lunaMax }],
-        work_routes: [{ canonical_profile_key: solUltra }], work_tasks: [{ canonical_profile_key: solUltra }],
-        work_attempts: [{ canonical_profile_key: solUltra }] });
+        work_routes: [{ canonical_profile_key: astraUltra }], work_tasks: [{ canonical_profile_key: astraUltra }],
+        work_attempts: [{ canonical_profile_key: astraUltra }] });
       expect(workEvidence(value.store)).toBe(before);
       expect(canonicalWorkJson(projections(value.store, value))).toBe(publicBytes);
       expect(canonicalWorkJson(createWorkStore(value.store).apply(value.claimOperation))).toBe(replayBytes);
@@ -302,7 +304,7 @@ describe("canonical profile real-StateStore integration", () => {
   }
 
   for (const table of identityTables) {
-    for (const invalid of [null, "claude:claude-fable-5-1:max", solUltra.toUpperCase()] as const) {
+    for (const invalid of [null, "claude:claude-fable-5-1:max", astraUltra.toUpperCase()] as const) {
       test(`refuses ${table} ${invalid === null ? "NULL" : invalid.startsWith("claude") ? "foreign" : "case-variant"} stored identity without repairing data`, async () => {
         const value = await fixture("claimed");
         corruptKey(value.store, table, invalid);

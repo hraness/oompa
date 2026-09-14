@@ -222,7 +222,7 @@ describe("built shell", () => {
     expect(shell).not.toMatch(/<script[^>]*\b(?:async|defer)\b/u);
     expect(shell.indexOf(`<script src="${bootstraps[0]}"`)).toBeLessThan(shell.indexOf("</head>"));
     expect(shell.indexOf('href="/stylex.css"')).toBeLessThan(shell.indexOf(`<script src="${bootstraps[0]}"`));
-    expect(shell).toContain(`<html lang="en" data-palette="catppuccin" data-theme="dark" class="${getDesignPaletteTheme("catppuccin", "dark").className}">`);
+    expect(shell).toContain(`<html lang="en" data-hraness-theme="paper" data-palette="paper" data-theme="light" class="${getDesignPaletteTheme("paper", "light").className}">`);
     for (const target of [...stylesheets, ...scripts, ...bootstraps]) {
       expect(artifacts.some(({ name }) => `/${name}` === target)).toBe(true);
     }
@@ -233,8 +233,8 @@ describe("built shell", () => {
   test("preserves the complete authored shell metadata and root boundary", async () => {
     const authored = await readFile(join(appRoot, "index.html"), "utf8");
     const unlinked = shell.replace(
-      `<html lang="en" data-palette="catppuccin" data-theme="dark" class="${getDesignPaletteTheme("catppuccin", "dark").className}">`,
-      '<html lang="en" data-palette="catppuccin" data-theme="dark">',
+      `<html lang="en" data-hraness-theme="paper" data-palette="paper" data-theme="light" class="${getDesignPaletteTheme("paper", "light").className}">`,
+      '<html lang="en" data-hraness-theme="paper" data-palette="paper" data-theme="light">',
     ).replace(/<link rel="stylesheet" href="\/graphs\/client\/assets\/[^/]+\.css">\n {4}<link rel="stylesheet" href="\/stylex\.css">\n {4}<script src="\/graphs\/client\/assets\/appearance-[A-Za-z0-9_-]+\.js"><\/script>\n {2}/u, "")
       .replace(/<script type="module" src="\/graphs\/client\/assets\/[^/]+\.js"><\/script>/u, '<script type="module" src="/src/main.tsx"></script>');
     expect(unlinked).toBe(authored);
@@ -313,7 +313,7 @@ describe("built shell", () => {
     const marker = artifacts.find((artifact) =>
       artifact.name === ".well-known/oompa-app.json");
 
-    expect(packageManifest.version).toBe("0.8.0");
+    expect(packageManifest.version).toBe("0.8.2");
     expect(buildSourceCommit).toMatch(/^[0-9a-f]{40}$/u);
     expect(marker?.text).toBe(`${JSON.stringify(expected, null, 2)}\n`);
     expect(JSON.parse(marker?.text ?? "null")).toEqual(expected);

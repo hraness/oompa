@@ -12,6 +12,8 @@ import type * as DeviceCommands from "../../src/data/device-commands";
 import type * as Devices from "../../src/data/devices";
 import type * as Archived from "../../src/data/archived-sessions";
 import type * as Auth from "@convex-dev/auth/react";
+import type * as Usage from "../../src/data/usage";
+import { usageOverview } from "../product/usage";
 
 const now = 1_780_000_000_000;
 const noop = () => undefined;
@@ -61,13 +63,13 @@ const registries: DeviceRegistries = {
     accountLinkingAllowed: false,
     accounts: [{ label: "Fixture account", provider: "codex", publicId: "account_browser_fixture", status: "signed_in" }],
     attentionEmailEnabled: null, daemonVersion: "0.7.0", defaultApprovalMode: "manual", defaultPreset: "ultra",
-    deviceCommandsAllowed: true, devicePublicId: browserHead.executionDevicePublicId, deviceStatus: "active",
+    defaultProjectPublicId: null, deviceCommandsAllowed: true, devicePublicId: browserHead.executionDevicePublicId, deviceStatus: "active",
     heartbeatAt: now, label: "Fixture machine", online: true,
     memorySummary: null, memorySummaryFreshness: "unsupported",
     notificationHours: null, notificationHoursStatus: "unsupported", notificationPolicyFreshness: "unsupported",
     notificationPolicyRevision: null, projects: [{ label: "Fixture project", publicId: "project_browser_fixture" }],
     profileBinding: {
-      profile: { effort: "ultra", key: "codex:gpt-5.6-sol:ultra", model: "gpt-5.6-sol", provider: "codex" },
+      profile: { effort: "ultra", key: "codex:gpt-6-astra:ultra", model: "gpt-6-astra", provider: "codex" },
       status: "current",
     },
     proseAutorespondConfigured: false, revision: 1, scheduledTasks: [], sessionAdoption: null,
@@ -97,7 +99,8 @@ export const useAuthActions: typeof Auth.useAuthActions = () => ({ signIn: refus
 export function useCustody(): Custody {
   return {
     busy: false, devicePublicId: null, enroll: refuse, enrollment: "needs_registration",
-    error: null, fingerprint: null, lock: noop, refresh: refuse, reportAuthorityFailure: noop,
-    state: "locked", unlock: refuse,
+    error: null, fingerprint: null, refresh: refuse, reportAuthorityFailure: noop,
+    state: "unenrolled", unlock: refuse,
   };
 }
+export const useUsageOverview: typeof Usage.useUsageOverview = () => usageOverview(now);

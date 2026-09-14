@@ -10,6 +10,10 @@ import {
   type CommandState,
 } from "../src/cloud/contracts";
 import {
+  AUTHORITY_REDUCTION_QUOTA_CEILINGS,
+  authorityReductionReservationDemand,
+  emptyAuthorityReductionQuotaCeilings,
+  inspectAuthorityReductionQuota,
   adjustCommandLifecycleQuotaForReplacement,
   adjustCommandQuotaForPatch,
   adjustQuotaForPatch,
@@ -22,6 +26,7 @@ import {
 import {
   backfillAuthorityReductionCapacityForUser,
   classifyAuthorityReductionCapacityForUser,
+  inspectAuthorityReductionCapacityForUser,
   type AuthorityReductionCapacityDisposition,
 } from "./authorityReductionCapacity";
 import { COMMAND_TERMINAL_RETENTION_MS } from "./lifecyclePolicy";
@@ -1627,6 +1632,86 @@ export const classifyAuthorityReductionHeadroomPage = internalQuery({
       continueCursor: page.continueCursor,
       isDone: page.isDone,
       scanned: page.page.length,
+    };
+  },
+});
+
+// A page is one read-only observation, never a reservation or activation proof.
+export const auditAuthorityReductionQuotaCeilingsPage = internalQuery({
+  args: {
+    expectedRuntimeAttestation: runtimeFenceValidator,
+    paginationOpts: v.object({ cursor: v.union(v.string(), v.null()), numItems: v.number() }),
+  },
+  handler: async (ctx, args) => {
+    requireRuntimeFence(args.expectedRuntimeAttestation);
+    if (
+      !isSafePositiveInteger(args.paginationOpts.numItems)
+      || args.paginationOpts.numItems > maximumCommandLifecycleBatch
+      || (args.paginationOpts.cursor !== null && args.paginationOpts.cursor.length > 4_096)
+    ) return corrupt();
+    const page = await ctx.db.query("users").paginate({
+      cursor: args.paginationOpts.cursor,
+      maximumRowsRead: maximumCommandLifecycleBatch,
+      numItems: args.paginationOpts.numItems,
+    });
+    if (
+      page.page.length > maximumCommandLifecycleBatch
+      || page.continueCursor.length > 4_096
+    ) return corrupt();
+    const counts = {
+      capacityMissing: 0, evaluated: 0, orphanEligible: 0, orphanPending: 0,
+      quotaAuthorityUnknown: 0, ready: 0, topologyBlocked: 0,
+    };
+    const demand = { accountPairs: 0, deviceQuartets: 0, paddingBytesLowerBound: 0, totalRecords: 0 };
+    const ceilings = emptyAuthorityReductionQuotaCeilings();
+    const now = Date.now();
+    for (const user of page.page) {
+      const inspected = await inspectAuthorityReductionCapacityForUser(ctx, user._id, now);
+      switch (inspected.disposition) {
+        case "ready": counts.ready += 1; break;
+        case "topology_blocked": counts.topologyBlocked += 1; break;
+        case "orphan_cleanup_pending": counts.orphanPending += 1; break;
+        case "orphan_cleanup_eligible": counts.orphanEligible += 1; break;
+        case "capacity_missing": {
+          counts.capacityMissing += 1;
+          const missing = authorityReductionReservationDemand(inspected.accountPairs, inspected.deviceQuartets);
+          demand.accountPairs += missing.accountPairs;
+          demand.deviceQuartets += missing.deviceQuartets;
+          demand.totalRecords += missing.totalRecords;
+          demand.paddingBytesLowerBound += missing.paddingBytesLowerBound;
+          const observation = await inspectAuthorityReductionQuota(
+            ctx, user._id, inspected.accountPairs, inspected.deviceQuartets,
+          );
+          if (observation.state === "authority_unknown") {
+            counts.quotaAuthorityUnknown += 1;
+            break;
+          }
+          counts.evaluated += 1;
+          for (const ceiling of AUTHORITY_REDUCTION_QUOTA_CEILINGS) {
+            const source = observation.ceilings[ceiling];
+            const target = ceilings[ceiling];
+            target.applicable += source.applicable;
+            target.bytesBlockedByLowerBound += source.bytesBlockedByLowerBound;
+            target.bytesUnknown += source.bytesUnknown;
+            target.recordsBlocked += source.recordsBlocked;
+          }
+          break;
+        }
+      }
+    }
+    return {
+      ...counts,
+      activationAuthorized: false as const,
+      byteCost: "padding_lower_bound_only" as const,
+      ceilings,
+      consistency: "page_snapshot" as const,
+      continueCursor: page.continueCursor,
+      demand,
+      isDone: page.isDone,
+      kind: "authority_reduction_quota_diagnostic" as const,
+      repairAuthorized: false as const,
+      scanned: page.page.length,
+      schemaVersion: 1 as const,
     };
   },
 });

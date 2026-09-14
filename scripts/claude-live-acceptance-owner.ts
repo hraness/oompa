@@ -77,25 +77,68 @@ export async function acquireClaudeLiveAcceptanceOwner(input: Readonly<{
   runId: string;
   receiptPath: string;
 }>): Promise<ClaudeLiveAcceptanceOwner> {
+  return acquireOwner(input, "session");
+}
+
+/** A distinct, closed receipt family for the Mac authentication experiment. */
+export async function acquireClaudeMacosAuthQualificationOwner(input: Readonly<{
+  runId: string;
+  receiptPath: string;
+}>): Promise<ClaudeLiveAcceptanceOwner> {
+  if (process.platform !== "darwin") return refused("primitive_unavailable");
+  return acquireOwner(input, "macos_auth");
+}
+
+/** Separate fresh Darwin-session receipts never acquire auth or Linux session ownership. */
+export async function acquireClaudeMacosSessionQualificationOwner(input: Readonly<{
+  runId: string;
+  receiptPath: string;
+}>): Promise<ClaudeLiveAcceptanceOwner> {
+  if (process.platform !== "darwin") return refused("primitive_unavailable");
+  return acquireOwner(input, "macos_session");
+}
+
+/** The daemon restart ceremony owns a distinct fresh private namespace. */
+export async function acquireClaudeMacosDaemonQualificationOwner(input: Readonly<{
+  runId: string;
+  receiptPath: string;
+}>): Promise<ClaudeLiveAcceptanceOwner> {
+  if (process.platform !== "darwin") return refused("primitive_unavailable");
+  return acquireOwner(input, "macos_daemon");
+}
+
+async function acquireOwner(input: Readonly<{
+  runId: string;
+  receiptPath: string;
+}>, scope: "session" | "macos_auth" | "macos_session" | "macos_daemon"): Promise<ClaudeLiveAcceptanceOwner> {
   let parentFd: number | undefined;
   let lockFd: number | undefined;
   try {
     const parsed = inputSchema.safeParse(input);
     if (!parsed.success) return refused("scope_refused");
     const { runId, receiptPath } = parsed.data;
+    const prefix = scope === "session" ? ".oompa-live-claude-acceptance"
+      : scope === "macos_auth" ? ".oompa-macos-auth-qualification"
+      : scope === "macos_session" ? ".oompa-macos-session-qualification" : ".oompa-macos-daemon-qualification";
     const parent = dirname(receiptPath);
-    const temporaryRoot = realpathSync(tmpdir());
+    const shortDarwinScope = scope === "macos_session" || scope === "macos_daemon";
+    const temporaryRoot = shortDarwinScope ? "/private/tmp" : realpathSync(tmpdir());
     if (!isAbsolute(receiptPath) || resolve(receiptPath) !== receiptPath
-      || basename(receiptPath) !== `.oompa-live-claude-acceptance-${runId}.recovery.json`
+      || basename(receiptPath) !== `${prefix}-${runId}.recovery.json`
       || (parent !== temporaryRoot && !parent.startsWith(`${temporaryRoot}${sep}`))
       || privatePathsOverlap(parent, homedir()) || privatePathsOverlap(parent, resolveStatePaths().root)
       || realpathSync(parent) !== parent) return refused("scope_refused");
+    // A short fixed namespace keeps the Darwin callback socket within sockaddr_un.
+    const parentPattern = scope === "macos_daemon" ? /^oompa-md-[A-Za-z0-9]{6}$/u : /^oompa-ms-[A-Za-z0-9]{6}$/u;
+    if (shortDarwinScope && (realpathSync(temporaryRoot) !== temporaryRoot || dirname(parent) !== temporaryRoot
+      || !parentPattern.test(basename(parent)))) return refused("scope_refused");
     const uid = process.getuid?.();
     if (uid === undefined) return refused("primitive_unavailable");
-    const lockPath = join(parent, `.oompa-live-claude-acceptance-${runId}.lock`);
+    const lockPath = join(parent, `${prefix}-${runId}.lock`);
     parentFd = openSync(parent, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK | constants.O_DIRECTORY);
     const parentIdentity = fstatSync(parentFd);
     requireThat(parentIdentity.isDirectory() && parentIdentity.nlink > 0 && sameNode(parentIdentity, lstatSync(parent)));
+    if (shortDarwinScope) requireThat(parentIdentity.uid === uid && (parentIdentity.mode & 0o7777) === 0o700);
     lockFd = openSync(lockPath, constants.O_CREAT | constants.O_NOFOLLOW | constants.O_RDWR | constants.O_NONBLOCK, 0o600);
     const identity = fstatSync(lockFd);
     requireThat(privateLock(identity, uid) && sameNode(identity, lstatSync(lockPath)));

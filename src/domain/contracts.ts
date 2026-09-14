@@ -407,8 +407,6 @@ export const localCommandSchema = z.discriminatedUnion("kind", [
     limit: z.number().int().min(1).max(ACCOUNT_USAGE_HISTORY_PAGE_LIMIT),
     cursor: z.string().min(1).max(2_048).optional(),
   }).strict(),
-  z.object({ kind: z.literal("account.switch"), account: selectorSchema, idempotencyKey: requiredIdempotencyKeySchema }).strict(),
-  z.object({ kind: z.literal("account.switch-recover") }).strict(),
   z.object({
     kind: z.literal("plugin.list"),
     account: selectorSchema,

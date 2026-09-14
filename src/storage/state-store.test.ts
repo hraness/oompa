@@ -37,7 +37,8 @@ import { canonical39DevinDatabaseBytes, canonical39DevinFixture } from "../../sc
 import { canonical39RetiredDatabaseBytes, canonical39RetiredFixtures, type Canonical39RetiredKind } from "../../scripts/fixtures/canonical39-retired-effects";
 import { canonical39RetiredRecoveryDatabaseBytes, canonical39RetiredRecoveryFixtures } from "../../scripts/fixtures/canonical39-retired-recovery";
 import { retiredSuccessorDatabaseBytes, retiredSuccessorFixtures } from "../../scripts/fixtures/retired-successors";
-import { deriveDesktopProfilePaths } from "../desktop/profile";
+import { provisionMigratedStateTemplate } from "../../scripts/fixtures/migrated-state-template";
+import { deriveDesktopProfilePaths } from "./desktop-profile-paths";
 import { AUTORESPOND_DAY_MS } from "../domain/autorespond-budget";
 import {
   ROOT_STATUS_ATTENTION_LIMIT,
@@ -51,7 +52,6 @@ import {
   devinPresetContract,
   legacyPresetContract,
   presetRequirements,
-  solCodexPresetContract,
 } from "../domain/presets";
 import {
   createPortableProjectMemoryCanonicalIdentity,
@@ -444,16 +444,27 @@ async function fixture(
     now?: () => number;
     resolveMachineTimeZone?: MachineTimeZoneResolver;
     securityScrubCheckpoint?: SecurityScrubCheckpointPolicy;
+    /**
+     * `template`, this file's default, copies the process-wide migrated
+     * template before the open so the store starts at the current schema
+     * without replaying the migration chain. `migrate` opens an empty file
+     * and runs the real chain; a test that inspects the migration ledger, the
+     * schema version stamp, cohort classification, schema refusal on reopen,
+     * or first-open behaviour chooses it explicitly.
+     */
+    provision?: "template" | "migrate";
   }> = {},
 ): Promise<{ store: StateStore; home: string }> {
   const home = await realpath(await mkdtemp(join(tmpdir(), "oompa-store-")));
   const paths = resolveStatePaths({ homeDirectory: home, platform: "darwin" });
   await initializeStatePaths(paths);
-  const store = new StateStore(paths, {
-    now: options.now ?? (() => { let value = 1_000; return () => value++; })(),
-    resolveMachineTimeZone: () => "America/Puerto_Rico",
-    ...options,
-  });
+  const { provision = "template", ...storeOptions } = options;
+  const now = storeOptions.now ?? (() => { let value = 1_000; return () => value++; })();
+  const resolveMachineTimeZone = storeOptions.resolveMachineTimeZone ?? (() => "America/Puerto_Rico");
+  if (provision === "template") {
+    await provisionMigratedStateTemplate(paths, { now, resolveMachineTimeZone });
+  }
+  const store = new StateStore(paths, { ...storeOptions, now, resolveMachineTimeZone });
   stores.push(store);
   return { store, home };
 }
@@ -479,7 +490,12 @@ async function syntheticAdoption36ContractFixture(scenario: "launch" | "quaranti
   const paths = resolveStatePaths({ homeDirectory: home, platform: "darwin" });
   await initializeStatePaths(paths);
   const database = new Database(paths.database, { create: true, strict: true });
-  try { installSyntheticAdoption36Fixture(database, scenario); }
+  try {
+    // Batch only fixture construction; the tested v36 migration remains a
+    // separate real first open. Foreign keys must be enabled before BEGIN.
+    database.exec("PRAGMA foreign_keys=ON");
+    database.transaction(() => installSyntheticAdoption36Fixture(database, scenario)).immediate();
+  }
   finally { database.close(false); }
   await chmod(paths.database, 0o600);
   return paths;
@@ -1104,7 +1120,7 @@ describe("automatic usage policy configuration", () => {
   };
 
   test("starts at the domain default and changes only configuration and its global receipt", async () => {
-    const { store, home } = await fixture();
+    const { store, home } = await fixture({ provision: "migrate" });
     seedUnrelatedState(store);
     const database = inspect(home);
     try {
@@ -1243,7 +1259,7 @@ describe("automatic usage policy configuration", () => {
   });
 
   test.each(["missing_table", "missing_initial", "weakened_guard", "digest", "receipt", "request"])("fails closed on current-schema corruption: %s", async (damage) => {
-    const { store, home } = await fixture();
+    const { store, home } = await fixture({ provision: "migrate" });
     const request = command();
     store.updateAutomaticUsagePolicyConfiguration(request);
     const database = inspect(home);
@@ -1351,7 +1367,7 @@ describe("automatic usage policy configuration", () => {
   });
 
   test.each([false, true])("refuses an adversarial joined-schema v43 restamp with missing or partial policy without writes (partial=%s)", async (partial) => {
-    const { store, home } = await fixture();
+    const { store, home } = await fixture({ provision: "migrate" });
     seedUnrelatedState(store);
     if (partial) store.updateAutomaticUsagePolicyConfiguration(command());
     const database = inspect(home);
@@ -1387,7 +1403,7 @@ describe("automatic usage policy configuration", () => {
   });
 
   test("refuses an adversarial joined-schema v43 restamp with a malformed policy table without writes", async () => {
-    const { home } = await fixture();
+    const { home } = await fixture({ provision: "migrate" });
     const database = inspect(home);
     try {
       database.exec("DROP TABLE automatic_usage_policy_revisions");
@@ -1403,7 +1419,7 @@ describe("automatic usage policy configuration", () => {
   });
 
   test.each([false, true])("refuses an adversarial joined-schema v43 restamp with empty policy history without repair (retained receipt=%s)", async (retainedReceipt) => {
-    const { store, home } = await fixture();
+    const { store, home } = await fixture({ provision: "migrate" });
     if (retainedReceipt) store.updateAutomaticUsagePolicyConfiguration(command());
     const database = inspect(home);
     try {
@@ -1438,7 +1454,7 @@ describe("automatic usage policy configuration", () => {
   });
 
   test("refuses an orphan current-schema configuration intent on writable and readonly reopen", async () => {
-    const { home } = await fixture();
+    const { home } = await fixture({ provision: "migrate" });
     const database = inspect(home);
     try {
       database.query(`INSERT INTO mutation_attempts(id,idempotency_key,kind,authority_id,authority_generation,request_digest,state,created_at,updated_at)
@@ -2159,7 +2175,7 @@ async function prepareSignedOutSessionStart(
       projectId: project.id,
       provider: input.provider,
       preset: input.preset,
-      ...(input.preset === "high" ? { presetContract: legacyPresetContract } : {}),
+      ...(input.preset === "high" ? { presetContract: currentPresetContract } : {}),
       fast: false,
     }),
   });
@@ -2284,7 +2300,7 @@ const codexRuntimeProfile = (
   processGeneration: profile.processGeneration,
   observedAt,
   preset: "high" as const,
-  model: "gpt-5.6-sol",
+  model: "gpt-6-astra",
   reasoningEffort: "max" as const,
   serviceTier: null,
   fast: false,
@@ -3781,8 +3797,8 @@ describe("StateStore", () => {
     const { store } = await fixture();
     const prepared = prepareDedicatedSessionSwitch(store, 701);
     expect(prepared.status).toBe("prepared");
-    expect(prepared.switch.sourcePresetContract).toBe(legacyPresetContract);
-    expect(store.latestSessionRuntimeProfile(prepared.session.id)?.profile.model).toBe("gpt-5.6-sol");
+    expect(prepared.switch.sourcePresetContract).toBe(currentPresetContract);
+    expect(store.latestSessionRuntimeProfile(prepared.session.id)?.profile.model).toBe("gpt-6-astra");
     expect(prepared.switch.targetPresetContract).toBe(currentPresetContract);
     expect(store.prepareSessionSwitch({
       targetAccountKey: prepared.targetAccountKey,
@@ -4702,7 +4718,7 @@ describe("StateStore", () => {
   });
 
   test("refuses current anchored plan tampering without startup repair", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const prepared = prepareDedicatedSessionSwitch(store, 773);
     const paths = store.paths;
     store.close();
@@ -5903,7 +5919,7 @@ describe("StateStore", () => {
   });
 
   test("refuses an adversarial joined-schema v42 restamp without rewriting switch evidence", async () => {
-    const value = await fixture();
+    const value = await fixture({ provision: "migrate" });
     const prepared = prepareDedicatedSessionSwitch(value.store, 739);
     advanceDedicatedSessionSwitch(value.store, prepared, "target_starting");
     const paths = value.store.paths;
@@ -6779,7 +6795,7 @@ describe("StateStore", () => {
   });
 
   test("creates a project and session with CAS metadata", async () => {
-    const { store, home } = await fixture();
+    const { store, home } = await fixture({ provision: "migrate" });
     const repository = join(home, "Documents");
     await mkdir(repository);
     const profile = store.createProfile("Main");
@@ -6990,7 +7006,7 @@ describe("StateStore", () => {
             provider_v39: z.literal("codex"),
             session_preset: z.enum(["low", "ultra"]),
             session_contract: z.union([z.literal(1), z.literal(2)]),
-            work_contract: z.literal(1),
+            work_contract: z.literal(2),
             route_preset: z.literal("ultra"),
             task_preset: z.literal("ultra"),
             attempt_preset: z.literal("ultra"),
@@ -7031,10 +7047,10 @@ describe("StateStore", () => {
           dispatch: value.dispatchSettlement === null ? null
             : owner.finalizeDispatch(value.dispatchSettlement.key, value.dispatchSettlement.outcome),
         });
-        const solUltra = "codex:gpt-5.6-sol:ultra";
+        const solUltra = "codex:gpt-6-astra:ultra";
         expect(historicalKeys()).toEqual({ session: solUltra, route: solUltra, task: solUltra, attempt: solUltra });
         expect(value.store.requireSessionPresetRequirement(value.session.id)).toEqual({
-          preset: "ultra", requirement: { model: "gpt-5.6-sol", effort: "ultra" },
+          preset: "ultra", requirement: { model: "gpt-6-astra", effort: "ultra" },
         });
         const retained = persistedHistory();
         const before = publicHistory(work);
@@ -7517,7 +7533,7 @@ describe("StateStore", () => {
     });
   });
 
-  test("uses active Sol bindings while preserving established contract 2", async () => {
+  test("uses active Astra bindings while preserving established contract 1", async () => {
     const { store } = await fixture();
     const profile = signInProfile(store, "Preset contracts", "preset-contracts@example.com");
     const created = store.createSession({
@@ -7527,7 +7543,7 @@ describe("StateStore", () => {
     });
     expect(store.requireSessionPresetRequirement(created.id)).toEqual({
       preset: "high",
-      requirement: { model: "gpt-5.6-sol", effort: "max" },
+      requirement: { model: "gpt-6-astra", effort: "max" },
     });
 
     const imported = store.upsertProviderSession({
@@ -7543,34 +7559,34 @@ describe("StateStore", () => {
     });
     expect(store.requireSessionPresetRequirement(imported.id)).toEqual({
       preset: "high",
-      requirement: { model: "gpt-5.6-sol", effort: "max" },
+      requirement: { model: "gpt-6-astra", effort: "max" },
     });
     const database = new Database(store.paths.database, { strict: true });
     // Synthetic historical binding, not a source-authentic release fixture.
-    database.query("UPDATE sessions SET preset_contract=?,canonical_profile_key='codex:gpt-6-astra:max' WHERE id=?")
-      .run(currentPresetContract, created.id);
+    database.query("UPDATE sessions SET preset_contract=?,canonical_profile_key='codex:gpt-5.6-sol:max' WHERE id=?")
+      .run(legacyPresetContract, created.id);
     database.close(false);
     expect(store.requireSessionPresetRequirement(created.id)).toEqual({
       preset: "high",
-      requirement: { model: "gpt-6-astra", effort: "max" },
+      requirement: { model: "gpt-5.6-sol", effort: "max" },
     });
     const renamed = store.updateSessionMetadata({
       sessionId: created.id,
       expectedRevision: created.revision,
-      title: "Established Astra",
+      title: "Established Sol",
     });
     expect(store.requireSessionPresetRequirement(created.id).requirement.model)
-      .toBe("gpt-6-astra");
+      .toBe("gpt-5.6-sol");
     store.updateSessionMetadata({
       sessionId: created.id,
       expectedRevision: renamed.revision,
       preset: "high",
     });
     expect(store.requireSessionPresetRequirement(created.id).requirement.model)
-      .toBe("gpt-5.6-sol");
+      .toBe("gpt-6-astra");
   });
 
-  test("settles immutable Astra evidence before permitting a Sol reselection", async () => {
+  test("settles immutable Sol evidence before permitting an Astra reselection", async () => {
     let { store } = await fixture();
     const daemon = startInputFixtureDaemon(store);
     const profile = signInProfile(store, "Legacy recovery preset", "legacy-recovery@example.com");
@@ -7588,15 +7604,15 @@ describe("StateStore", () => {
     });
     const database = new Database(store.paths.database, { strict: true });
     // Retain the legacy binding coherently before authoring its recovery evidence.
-    database.query("UPDATE sessions SET preset_contract=?,canonical_profile_key='codex:gpt-6-astra:max' WHERE id=?")
-      .run(currentPresetContract, session.id);
+    database.query("UPDATE sessions SET preset_contract=?,canonical_profile_key='codex:gpt-5.6-sol:max' WHERE id=?")
+      .run(legacyPresetContract, session.id);
     database.close(false);
     const runtimeProfile = {
       approvalPolicy: "on-request" as const,
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-6-astra",
+      model: "gpt-5.6-sol",
       observedAt: 2_000,
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
@@ -7681,7 +7697,7 @@ describe("StateStore", () => {
     expect(store.runtimeProfileForTurn(session.id, "turn-legacy-recovery-preset"))
       .toEqual(runtimeProfile);
     expect(store.requireSessionPresetRequirement(session.id).requirement)
-      .toEqual({ model: "gpt-6-astra", effort: "max" });
+      .toEqual({ model: "gpt-5.6-sol", effort: "max" });
 
     store.updateSessionMetadata({
       expectedRevision: recovered.revision,
@@ -7689,7 +7705,7 @@ describe("StateStore", () => {
       sessionId: session.id,
     });
     expect(store.requireSessionPresetRequirement(session.id).requirement)
-      .toEqual({ model: "gpt-5.6-sol", effort: "max" });
+      .toEqual({ model: "gpt-6-astra", effort: "max" });
   });
 
   test("records the session provider and refuses another provider's preset", async () => {
@@ -10240,7 +10256,7 @@ describe("StateStore", () => {
   });
 
   test("rejects a weakened same-name Work authority guard in current adoption-v39", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const candidate = store.upsertSessionAdoptionCandidate({
       provider: "codex",
       providerThreadId: "current-v39-weakened-work-guard",
@@ -11937,7 +11953,7 @@ describe("StateStore", () => {
   });
 
   test("rejects a malformed current Claude authority table without rewriting custody", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const profile = signInProfile(store, "Legacy Claude authority", "legacy-claude@example.com");
     const identities = [
       { pid: 52_001, pidDomain: "darwin" as const, procStart: "legacy-claimed" },
@@ -12327,7 +12343,7 @@ describe("StateStore", () => {
   });
 
   test("rejects a malformed current adoption candidate table without releasing fences", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const candidate = store.upsertSessionAdoptionCandidate({
       provider: "claude",
       providerThreadId: "legacy-v35-candidate",
@@ -12558,7 +12574,7 @@ describe("StateStore", () => {
         projectId: project.id,
         provider: "codex",
         preset: "high",
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         fast: false,
       }),
       idempotencyKey: "00000000-0000-4000-8000-0000000006c0",
@@ -12578,7 +12594,7 @@ describe("StateStore", () => {
         projectId: project.id,
         clientMessageId: null,
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
       },
     });
     store.enqueue(queued.id, "retained queue evidence");
@@ -13322,7 +13338,7 @@ describe("StateStore", () => {
       authorityId: profile.id,
       authorityGeneration: providerAuthority.processGeneration,
       request: sessionStartMutationRequest({ projectId: project.id, provider: "codex", preset: "high",
-        presetContract: legacyPresetContract, fast: false }),
+        presetContract: currentPresetContract, fast: false }),
       idempotencyKey: "00000000-0000-4000-8000-000000000625",
       providerAuthorities: [{ role: "primary", authority: providerAuthority, provenance: "session_start" }],
     });
@@ -13341,7 +13357,7 @@ describe("StateStore", () => {
         projectId: project.id,
         clientMessageId: null,
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         runtimeProfile: reviewedCodexProfile(profile),
       },
     });
@@ -13707,7 +13723,7 @@ describe("StateStore", () => {
       request: sessionProviderSwitchMutationRequest({
         provider: "codex",
         preset: "high",
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         targetProfileId: codexProfile.id,
         seedDigest: personalSourceSeed,
       }),
@@ -13742,7 +13758,7 @@ describe("StateStore", () => {
         targetProvider: "codex",
         targetProviderAccountKey: providerAccountKeyForProfile(store, codexProfile.id, "codex"),
         targetHostCapabilities: testSwitchHostCapabilities,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         transcriptDigest: personalSourceTranscript,
       },
     });
@@ -13813,7 +13829,7 @@ describe("StateStore", () => {
       title: "Recovered Codex target",
       providerUpdatedAt: 20,
     });
-    expect(store.requireSessionPresetContract(recoveredTarget.id)).toBe(legacyPresetContract);
+    expect(store.requireSessionPresetContract(recoveredTarget.id)).toBe(currentPresetContract);
     expect(recoveredTarget).toMatchObject({
       profileId: codexProfile.id,
       provider: "codex",
@@ -13931,7 +13947,7 @@ describe("StateStore", () => {
       request: {
         accountId: null,
         preset: "high" as const,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         provider: "codex" as const,
       },
       seed: {
@@ -14114,7 +14130,7 @@ describe("StateStore", () => {
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
       preset: "high" as const,
@@ -14328,7 +14344,7 @@ describe("StateStore", () => {
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
       preset: "high" as const,
@@ -14679,7 +14695,7 @@ describe("StateStore", () => {
         projectId: project.id,
         provider: "codex",
         preset: "high",
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         fast: false,
       }),
       idempotencyKey: key,
@@ -14694,7 +14710,7 @@ describe("StateStore", () => {
       provider: "codex",
       providerAuthority: store.requireProviderAccountAuthority(profile.id, "codex"),
       providerAccountKey: providerAccountKeyForProfile(store, profile.id, "codex"),
-      evidence: { kind: "session.start", projectId: project.id, clientMessageId: null, messageDigest: null, presetContract: legacyPresetContract },
+      evidence: { kind: "session.start", projectId: project.id, clientMessageId: null, messageDigest: null, presetContract: currentPresetContract },
       hostCapabilities: {
         preambleVersion: 1,
         preambleDigest: "a".repeat(64),
@@ -14714,7 +14730,7 @@ describe("StateStore", () => {
       evidence: {
         evidence: {
           kind: "session.start",
-          presetContract: legacyPresetContract,
+          presetContract: currentPresetContract,
           projectId: project.id,
         },
       },
@@ -14746,7 +14762,7 @@ describe("StateStore", () => {
     expect(reopened.requireSession(session.id).providerThreadId).toBeUndefined();
     expect(reopened.readMutation(key)?.evidence).toEqual(originalMutation?.evidence);
     expect(reopened.readMutation(key)?.evidence?.evidence)
-      .toMatchObject({ presetContract: legacyPresetContract });
+      .toMatchObject({ presetContract: currentPresetContract });
     expect(reopened.requireSessionHostCapabilityBinding(session.id)).toEqual(originalCapabilities);
   });
 
@@ -14760,7 +14776,7 @@ describe("StateStore", () => {
     const attempt = store.prepareMutation({
       kind: "session.start", authorityId: profile.id, authorityGeneration: profile.processGeneration,
       request: sessionStartMutationRequest({ projectId: project.id, provider: "codex", preset: "high",
-        presetContract: legacyPresetContract, fast: false }),
+        presetContract: currentPresetContract, fast: false }),
       idempotencyKey: key,
     });
     const session = store.beginSessionStartEffect({
@@ -14769,13 +14785,13 @@ describe("StateStore", () => {
       providerAuthority: store.requireProviderAccountAuthority(profile.id, "codex"),
       providerAccountKey: providerAccountKeyForProfile(store, profile.id, "codex"),
       evidence: { kind: "session.start", projectId: project.id, clientMessageId: null,
-        messageDigest: null, presetContract: legacyPresetContract },
+        messageDigest: null, presetContract: currentPresetContract },
       hostCapabilities: { preambleVersion: 1, preambleDigest: "a".repeat(64),
         manifestVersion: 1, manifestDigest: "b".repeat(64) },
     });
     expect(store.readMutation(key)).toMatchObject({
       state: "effect_started", sessionStartId: session.id,
-      evidence: { evidence: { presetContract: legacyPresetContract } },
+      evidence: { evidence: { presetContract: currentPresetContract } },
     });
     const paths = store.paths;
     store.close();
@@ -14846,7 +14862,7 @@ describe("StateStore", () => {
         clientMessageId: null,
         kind: "session.start",
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         projectId: project.id,
       },
       fastEnabled: false,
@@ -14923,7 +14939,7 @@ describe("StateStore", () => {
         projectId: project.id,
         provider: "codex",
         preset: "high",
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         fast: false,
       }),
     });
@@ -14934,7 +14950,7 @@ describe("StateStore", () => {
         clientMessageId: null,
         kind: "session.start",
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         projectId: project.id,
         runtimeProfile,
       },
@@ -14979,7 +14995,7 @@ describe("StateStore", () => {
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       observedAt: 2_000,
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
@@ -15000,7 +15016,7 @@ describe("StateStore", () => {
         projectId: project.id,
         provider: "codex",
         preset: "high",
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         fast: false,
       }),
     });
@@ -15011,7 +15027,7 @@ describe("StateStore", () => {
         clientMessageId: null,
         kind: "session.start",
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         projectId: project.id,
         runtimeProfile,
       },
@@ -15251,7 +15267,7 @@ describe("StateStore", () => {
         projectId: logoutProject.id,
         provider: "codex",
         preset: "high",
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         fast: false,
       }),
     });
@@ -15270,7 +15286,7 @@ describe("StateStore", () => {
         clientMessageId: null,
         kind: "session.start",
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         projectId: logoutProject.id,
       },
       fastEnabled: false,
@@ -15431,7 +15447,7 @@ describe("StateStore", () => {
         clientMessageId: null,
         kind: "session.start",
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         projectId: project.id,
       },
       fastEnabled: false,
@@ -15461,7 +15477,7 @@ describe("StateStore", () => {
         clientMessageId: null,
         kind: "session.start",
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         projectId: project.id,
       },
       fastEnabled: false,
@@ -15497,7 +15513,7 @@ describe("StateStore", () => {
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       observedAt: 2_000,
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
@@ -15551,7 +15567,7 @@ describe("StateStore", () => {
           projectId: project.id,
           provider,
           preset,
-          ...(preset === "high" ? { presetContract: legacyPresetContract } : {}),
+          ...(preset === "high" ? { presetContract: currentPresetContract } : {}),
           fast: false,
         }),
       });
@@ -15561,7 +15577,7 @@ describe("StateStore", () => {
           clientMessageId: null,
           kind: "session.start",
           messageDigest: null,
-          ...(preset === "high" ? { presetContract: legacyPresetContract } : {}),
+          ...(preset === "high" ? { presetContract: currentPresetContract } : {}),
           projectId: project.id,
           runtimeProfile,
         },
@@ -15704,7 +15720,7 @@ describe("StateStore", () => {
         request: sessionProviderSwitchMutationRequest({
           provider: "codex",
           preset: "high",
-          presetContract: legacyPresetContract,
+          presetContract: currentPresetContract,
           targetProfileId: targetProfile.id,
           seedDigest,
         }),
@@ -15740,7 +15756,7 @@ describe("StateStore", () => {
             "codex",
           ),
           targetHostCapabilities: testSwitchHostCapabilities,
-          presetContract: legacyPresetContract,
+          presetContract: currentPresetContract,
           transcriptDigest: createHash("sha256").update(seedName).digest("hex"),
         },
       });
@@ -16022,7 +16038,7 @@ describe("StateStore", () => {
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       observedAt: 2_000,
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
@@ -16060,7 +16076,7 @@ describe("StateStore", () => {
         projectId: project.id,
         provider: "codex",
         preset: "high",
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         fast: false,
       }),
     });
@@ -16071,7 +16087,7 @@ describe("StateStore", () => {
         conversationAutomationCapability: SESSION_CONVERSATION_AUTOMATION_CAPABILITY,
         kind: "session.start",
         messageDigest: null,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         projectId: project.id,
         runtimeProfile: codexProfile,
       },
@@ -16969,7 +16985,7 @@ describe("StateStore", () => {
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       observedAt: 2_000,
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
@@ -17007,7 +17023,7 @@ describe("StateStore", () => {
           targetProfile.id,
           "codex",
         ),
-        presetContract: solCodexPresetContract,
+        presetContract: currentPresetContract,
         transcriptDigest: createHash("sha256").update("legacy switch transcript").digest("hex"),
       },
       sessionId: session.id,
@@ -17061,7 +17077,7 @@ describe("StateStore", () => {
         request: sessionProviderSwitchMutationRequest({
           provider: "codex",
           preset: "high",
-          presetContract: legacyPresetContract,
+          presetContract: currentPresetContract,
           targetProfileId: targetProfile.id,
           seedDigest,
         }),
@@ -17075,7 +17091,7 @@ describe("StateStore", () => {
         daemonGeneration: 0,
         requestedAccountId: targetProfile.id,
         requestedPreset: "high" as const,
-        runtimeProfile: solProfile,
+        runtimeProfile: astraProfile,
         seedDigest,
         seedIncludedRecords: 1,
         seedOmittedRecords: 0,
@@ -17094,7 +17110,7 @@ describe("StateStore", () => {
         targetProcessGeneration: targetProfile.processGeneration,
         targetProfileId: targetProfile.id,
         targetProvider: "codex" as const,
-        presetContract: legacyPresetContract,
+        presetContract: currentPresetContract,
         transcriptDigest: createHash("sha256").update(`transcript-${suffix}`).digest("hex"),
       };
       store.beginSessionProviderSwitchEffect({
@@ -17110,11 +17126,12 @@ describe("StateStore", () => {
       return { attempt, seedText, session };
     };
 
-    const current = stageSwitch("6b2", "Seed the active Sol target.");
+    const current = stageSwitch("6b2", "Seed the active Astra target.");
+    // A Sol runtime profile no longer matches the active Astra target.
     expect(() => store.recordSessionProviderSwitchSeedIntent({
       attemptId: current.attempt.id,
       providerThreadId: "target-6b2",
-      runtimeProfile: astraProfile,
+      runtimeProfile: solProfile,
       seedText: current.seedText,
       sessionId: current.session.id,
     })).toThrow("SESSION_PROVIDER_SWITCH_SEED_INTENT_AUTHORITY_MISMATCH");
@@ -17122,18 +17139,18 @@ describe("StateStore", () => {
     store.recordSessionProviderSwitchSeedIntent({
       attemptId: current.attempt.id,
       providerThreadId: "target-6b2",
-      runtimeProfile: solProfile,
+      runtimeProfile: astraProfile,
       seedText: current.seedText,
       sessionId: current.session.id,
     });
     expect(store.readSessionProviderSwitchProgress(current.attempt.id).seed?.runtimeProfile.model)
-      .toBe("gpt-5.6-sol");
+      .toBe("gpt-6-astra");
 
-    const tampered = stageSwitch("6b3", "Keep the second admitted Sol target unchanged.");
+    const tampered = stageSwitch("6b3", "Keep the second admitted Astra target unchanged.");
     const inspector = new Database(store.paths.database, { create: false, strict: true });
     try {
-      // Deliberate current-row corruption is not historical contract-2 proof.
-      // Authentic canonical39 fixtures separately retain the old runtime bytes.
+      // Deliberate current-row corruption is not historical contract-1 proof.
+      // Authentic canonical fixtures separately retain the old runtime bytes.
       const before = snapshotSwitchContainmentForTest(inspector);
       const stored = inspector.query(
         "SELECT evidence_json FROM mutation_effect_evidence WHERE attempt_id=?",
@@ -17141,7 +17158,7 @@ describe("StateStore", () => {
       const alteredEvidence = JSON.parse(stored.evidence_json) as {
         runtimeProfile: { model: string };
       };
-      alteredEvidence.runtimeProfile.model = "gpt-6-astra";
+      alteredEvidence.runtimeProfile.model = "gpt-5.6-sol";
       const alteredEvidenceJson = JSON.stringify(alteredEvidence);
       withRemovedTestGuards(inspector, ["mutation_effect_evidence_immutable_update"], () => inspector.query(
         `UPDATE mutation_effect_evidence SET evidence_json=?,evidence_digest=?
@@ -17779,7 +17796,7 @@ describe("StateStore", () => {
 
   test("refuses missing or changed current timestamp guards before maintenance without repairing them", async () => {
     for (const definition of ["missing", "weaker", "changed_literal"] as const) {
-      const { store } = await fixture();
+      const { store } = await fixture({ provision: "migrate" });
       const inspector = new Database(store.paths.database, { create: false, strict: true });
       try {
         const original = z.object({ sql: z.string() }).parse(inspector.query("SELECT sql FROM sqlite_master WHERE name='mutation_resolutions_timestamp_proof_insert'").get()).sql;
@@ -17923,7 +17940,7 @@ describe("StateStore", () => {
         if (version === 45 || version === 46) return canonicalAuthBudgetArchive(version);
         if (version === 47) return stagedCanonical47Archive();
         if (version === 48) return canonical48WorkArchive();
-        const { store } = await fixture();
+        const { store } = await fixture({ provision: "migrate" });
         signInProfile(store, "Auth schema drift", "auth-schema@example.com");
         return store.paths;
       })();
@@ -18603,7 +18620,7 @@ describe("StateStore", () => {
       processGeneration: profile.processGeneration,
       observedAt: 2_000,
       preset: "high" as const,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       reasoningEffort: "max" as const,
       serviceTier: null,
       fast: false,
@@ -19128,7 +19145,7 @@ describe("StateStore", () => {
     "queue_message_resolution_scrub", "queue_message_settlement_guard",
   ])("refuses a damaged current queue scrub guard without repairing history: %s", async (guard) => {
     for (const damage of ["missing", "weakened", "wrong_table"] as const) {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const profile = signInProfile(store, "Stale queue trigger", "stale-trigger@example.com");
     const session = createProvenTestSession(store, {
       profileId: profile.id,
@@ -19752,7 +19769,7 @@ describe("StateStore", () => {
       processGeneration: profile.processGeneration,
       observedAt: 2_000,
       preset: "high" as const,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       reasoningEffort: "max" as const,
       serviceTier: null,
       fast: false,
@@ -19872,7 +19889,7 @@ describe("StateStore", () => {
       processGeneration: profile.processGeneration,
       observedAt: 2_000,
       preset: "high" as const,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       reasoningEffort: "max" as const,
       serviceTier: null,
       fast: false,
@@ -24437,7 +24454,7 @@ describe("StateStore", () => {
   });
 
   test("readonly open rejects a stale same-name reset-policy guard", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -24458,7 +24475,7 @@ describe("StateStore", () => {
   });
 
   test("readonly open rejects a weakened same-name reset-policy table", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -25927,7 +25944,7 @@ describe("StateStore", () => {
   });
 
   test("refuses weakened same-name usage guards in current60 without rewriting authority", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const profile = signInProfile(store, "Repair v36 guards", "repair-v36@example.com");
     const codexAuthority = store.requireProviderAccountAuthority(profile.id, "codex");
     const snapshot = usageSnapshot({
@@ -25966,7 +25983,7 @@ describe("StateStore", () => {
     expectInertSchemaRefusal(paths, "STATE_SCHEMA_COHORT_INVALID:joined60:account_scoped_provider_authorities_immutable_update");
   });
   test("refuses weakened same-name switch guards in current49 without rewriting authority", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -26940,7 +26957,7 @@ describe("StateStore", () => {
   });
 
   test("creates fresh databases at the latest append-only schema version", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const inspector = new Database(store.paths.database, { readonly: true, strict: true });
     try {
       expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
@@ -27581,7 +27598,8 @@ describe("StateStore", () => {
       const workGuard = z.object({ sql: z.string() }).parse(inspector.query(
         "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='work_devin_preset_contract_guard'",
       ).get()).sql;
-      expect(workGuard).toContain("NEW.preset_contract!=1");
+      // The Work guard is rebuilt at open against the active contract (2, Astra).
+      expect(workGuard).toContain("NEW.preset_contract!=2");
       expect(workGuard).not.toContain("provider_v39='devin'");
       const sessionGuard = z.object({ sql: z.string() }).parse(inspector.query(
         "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='work_session_devin_contract_guard'",
@@ -28137,7 +28155,7 @@ describe("StateStore", () => {
 
   test("refuses a missing or weakened current60 transcript authority guard without repair", async () => {
     for (const damage of ["missing", "weakened"] as const) {
-      const { store } = await fixture();
+      const { store } = await fixture({ provision: "migrate" });
       const paths = store.paths;
       store.close();
       stores.splice(stores.indexOf(store), 1);
@@ -28429,7 +28447,7 @@ describe("StateStore", () => {
     });
     const runtime = {
       profileId: profile.id, processGeneration: profile.processGeneration, observedAt: now,
-      preset: "high" as const, model: "gpt-5.6-sol", reasoningEffort: "max" as const,
+      preset: "high" as const, model: "gpt-6-astra", reasoningEffort: "max" as const,
       serviceTier: null, fast: false, approvalPolicy: "on-request" as const,
       reviewMode: "auto_review" as const, permissionProfile: ":workspace" as const,
       computerUse: true as const, pluginCapability: true as const, enabledApps: [],
@@ -28519,7 +28537,7 @@ describe("StateStore", () => {
       processGeneration: profile.processGeneration,
       observedAt: 2_000,
       preset: "high" as const,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       reasoningEffort: "max" as const,
       serviceTier: null,
       fast: false,
@@ -28657,7 +28675,7 @@ describe("StateStore", () => {
       processGeneration: profile.processGeneration,
       observedAt: 2_000,
       preset: "high" as const,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       reasoningEffort: "max" as const,
       serviceTier: null,
       fast: false,
@@ -28770,7 +28788,7 @@ describe("StateStore", () => {
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       observedAt: 2_100,
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
@@ -28989,7 +29007,7 @@ describe("StateStore", () => {
   });
 
   test("replays a finalized attachment queue from sealed identity after display manifest pruning", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const daemon = startInputFixtureDaemon(store);
     const profile = signInProfile(
       store,
@@ -29021,7 +29039,7 @@ describe("StateStore", () => {
       processGeneration: profile.processGeneration,
       observedAt: 2_000,
       preset: "high" as const,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       reasoningEffort: "max" as const,
       serviceTier: null,
       fast: false,
@@ -29346,7 +29364,7 @@ describe("StateStore", () => {
   }
 
   test("rejects stale same-name v39 provider-revocation policy guards", async () => {
-    const value = await fixture();
+    const value = await fixture({ provision: "migrate" });
     const store = value.store;
     const profile = signInProfile(
       store,
@@ -29391,7 +29409,7 @@ describe("StateStore", () => {
   });
 
   test("readonly open rejects a malformed same-name v39 authority trigger", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -29414,7 +29432,7 @@ describe("StateStore", () => {
     "last_live_observed_at",
     "provider_project_root",
   ] as const)("current v39 opens never repair a missing candidate retention column: %s", async (column) => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -29441,7 +29459,7 @@ describe("StateStore", () => {
   });
 
   test("current60 never recreates missing provider-v39 authority", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -29471,7 +29489,7 @@ describe("StateStore", () => {
   });
 
   test("current v60 rejects a weakened same-name provider-v39 authority trigger without repair", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -29510,7 +29528,7 @@ describe("StateStore", () => {
   });
 
   test("current60 never backfills a missing provider-v39 column", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -29540,7 +29558,7 @@ describe("StateStore", () => {
   });
 
   test("writable open rejects malformed v39 identity uniqueness and revision guards", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const first = store.createProfile("First repaired Claude identity");
     const second = store.createProfile("Second repaired Claude identity");
     const identity = {
@@ -30228,7 +30246,7 @@ describe("StateStore", () => {
   });
 
   test("refuses missing and noncanonical notification-hours authority: weakened update guard", async () => {
-    const weakenedFixture = await fixture();
+    const weakenedFixture = await fixture({ provision: "migrate" });
     const weakenedPaths = weakenedFixture.store.paths;
     weakenedFixture.store.close();
     stores.splice(stores.indexOf(weakenedFixture.store), 1);
@@ -30249,7 +30267,7 @@ describe("StateStore", () => {
   });
 
   test("refuses missing and noncanonical notification-hours authority: weakened insert guard", async () => {
-    const weakenedInsertFixture = await fixture();
+    const weakenedInsertFixture = await fixture({ provision: "migrate" });
     const weakenedInsertPaths = weakenedInsertFixture.store.paths;
     weakenedInsertFixture.store.close();
     stores.splice(stores.indexOf(weakenedInsertFixture.store), 1);
@@ -30335,7 +30353,7 @@ describe("StateStore", () => {
   });
 
   test("current v60 opens reject a missing v35 authority object without repairing it", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -30362,7 +30380,7 @@ describe("StateStore", () => {
   });
 
   test("current60 refuses a missing provider-switch object without recreating evidence", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -30376,7 +30394,7 @@ describe("StateStore", () => {
     expectInertSchemaRefusal(paths, "STATE_SCHEMA_V35_OBJECT_MISSING:session_provider_switch_target_releases");
   });
   test("rejects a same-name no-op v35 immutable trigger as invalid", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -30397,7 +30415,7 @@ describe("StateStore", () => {
   });
 
   test("rejects a same-name v35 immutable trigger attached to the wrong table", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -30419,7 +30437,7 @@ describe("StateStore", () => {
 
 
   test("current49 refuses a nonunique Unicode label index without changing state", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.createProfile("Équipe");
     store.close();
@@ -30436,7 +30454,7 @@ describe("StateStore", () => {
     expectInertSchemaRefusal(paths, "STATE_SCHEMA_V24_STRUCTURE_INVALID");
   });
   test("current49 refuses a stale label guard without rewriting authority", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -30496,7 +30514,7 @@ describe("StateStore", () => {
 
   test("migrates an exact v17 writer to the current prepared-response supersession guards", async () => {
     const paths = await canonicalLabelPresetArchive("canonical17-approval-controls");
-    const { store: reference } = await fixture();
+    const { store: reference } = await fixture({ provision: "migrate" });
     const selectGuards = (database: Database) => database.query(
       `SELECT name,tbl_name,sql FROM sqlite_master WHERE type='trigger' AND name IN (
          'provider_interactions_intent_immutable','provider_interactions_response_fields_guard',
@@ -33519,7 +33537,9 @@ describe("StateStore", () => {
       idempotencyKey: peerIdempotencyKey(9_101),
       message,
     });
-    const runtime = codexRuntimeProfile(profile, 50_000);
+    // The retained pre-v44 session keeps its contract 1 (Sol) route; only new
+    // sessions take the active Astra binding.
+    const runtime = { ...codexRuntimeProfile(profile, 50_000), model: "gpt-5.6-sol" };
     expect(migrated.requireSessionPresetRequirement(currentTarget.id)).toEqual({
       preset: runtime.preset, requirement: { model: runtime.model, effort: runtime.reasoningEffort },
     });
@@ -35963,7 +35983,7 @@ describe("StateStore", () => {
   });
 
   test("rejects a pre-portable memory lookalike stamped as current without repairing it", async () => {
-    const { store, home } = await fixture();
+    const { store, home } = await fixture({ provision: "migrate" });
     const root = join(home, "legacy-project-memory-identity");
     await mkdir(root);
     const project = await store.createProject("Legacy memory identity", root);
@@ -36122,7 +36142,7 @@ describe("StateStore", () => {
 
   test("current v60 refuses missing or changed hosted-memory triggers without repair", async () => {
     for (const damage of ["missing", "changed"] as const) {
-      const { store } = await fixture();
+      const { store } = await fixture({ provision: "migrate" });
       const paths = store.paths;
       store.close();
       stores.splice(stores.indexOf(store), 1);
@@ -36165,7 +36185,7 @@ describe("StateStore", () => {
   });
 
   test("current v60 opens require the exact peer and local-memory guards", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -36193,7 +36213,7 @@ describe("StateStore", () => {
 
   test("current v60 rejects widened peer queue columns and non-peer actor vocabulary without writes", async () => {
     for (const damage of ["widened_column", "invalid_row"] as const) {
-      const { store } = await fixture();
+      const { store } = await fixture({ provision: "migrate" });
       const profile = signInProfile(store, "Queue provenance column", "queue-column@example.com");
       const session = createProvenTestSession(store, {
         profileId: profile.id,
@@ -36221,13 +36241,17 @@ describe("StateStore", () => {
           const triggers = damaged.query(
             "SELECT name,sql FROM sqlite_master WHERE type='trigger' ORDER BY name",
           ).all().map((row) => z.object({ name: z.string(), sql: z.string() }).strict().parse(row));
-          for (const trigger of triggers) {
-            damaged.exec(`DROP TRIGGER "${trigger.name.replaceAll('"', '""')}"`);
-          }
-          damaged.exec("ALTER TABLE queue_entries DROP COLUMN message_actor");
-          damaged.exec(`ALTER TABLE queue_entries ADD COLUMN message_actor TEXT NOT NULL
-            DEFAULT 'human' CHECK(message_actor IN ('human','peer_session','automation'))`);
-          for (const trigger of triggers) damaged.exec(trigger.sql);
+          // Commit the adversarial fixture once, then prove both real opens
+          // refuse the same completed schema under the original test deadline.
+          damaged.transaction(() => {
+            for (const trigger of triggers) {
+              damaged.exec(`DROP TRIGGER "${trigger.name.replaceAll('"', '""')}"`);
+            }
+            damaged.exec("ALTER TABLE queue_entries DROP COLUMN message_actor");
+            damaged.exec(`ALTER TABLE queue_entries ADD COLUMN message_actor TEXT NOT NULL
+              DEFAULT 'human' CHECK(message_actor IN ('human','peer_session','automation'))`);
+            for (const trigger of triggers) damaged.exec(trigger.sql);
+          }).immediate();
         } else {
           const guard = z.object({ sql: z.string() }).strict().parse(damaged.query(
             "SELECT sql FROM sqlite_master WHERE name='queue_peer_provenance_immutable'",
@@ -36257,7 +36281,7 @@ describe("StateStore", () => {
   });
 
   test("current v60 opens never recreate a missing peer authority trigger or index", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);
@@ -36285,7 +36309,7 @@ describe("StateStore", () => {
 
 
   test("readonly open rejects a weakened previously unaudited v40 guard", async () => {
-    const { store } = await fixture();
+    const { store } = await fixture({ provision: "migrate" });
     const paths = store.paths;
     store.close();
     stores.splice(stores.indexOf(store), 1);

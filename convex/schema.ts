@@ -362,6 +362,7 @@ export default defineSchema({
     .index("by_session_stream_and_first", ["sessionId", "stream", "firstSequence"])
     .index("by_session_stream_and_last", ["sessionId", "stream", "lastSequence"])
     .index("by_stream_and_expires_at", ["stream", "expiresAt"])
+    .index("by_user_and_stream", ["userId", "stream"])
     .index("by_user", ["userId"]),
   sessionStreamEpochs: defineTable({
     authority: v.object({
@@ -725,7 +726,7 @@ export default defineSchema({
       attemptCount: v.number(),
       body: v.optional(v.object({
         text: v.string(),
-        version: v.union(v.literal(1), v.literal(2)),
+        version: v.union(v.literal(1), v.literal(2), v.literal(3)),
       })),
       bodyDigest: v.string(),
       claimedAt: v.number(),
@@ -986,6 +987,10 @@ export default defineSchema({
   storageUsageByUser: defineTable({
     category: quotaCategory,
     logicalBytes: v.number(),
+    // Only the identity category may carry this uncharged authority marker.
+    // Keep stored numbers readable so runtime validation refuses future or
+    // damaged authority instead of treating it as an unmarked predecessor.
+    quotaSchemaVersion: v.optional(v.number()),
     records: v.number(),
     updatedAt: v.number(),
     userId: v.id("users"),

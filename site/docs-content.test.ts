@@ -94,6 +94,9 @@ describe("task-oriented documentation content", () => {
     }
     expect(docsPathForSection("privacy")).toBe("/privacy/");
     expect(() => docsPathForSection("missing-section")).toThrow("No documentation page owns section");
+    expect(pageAt("/docs/").referenceSectionIds).toEqual([]);
+    expect(pageAt("/docs/start/").referenceSectionIds).toEqual(["first-account", "first-session"]);
+    expect(docsPathForSection("project")).toBe("/docs/status/#project");
     expect(pageAt("/docs/reference/").referenceSectionIds).toContain("command-reference");
     expect(pageAt("/docs/status/").referenceSectionIds).toContain("install-and-update");
   });
@@ -131,15 +134,15 @@ describe("task-oriented documentation content", () => {
     expect(blockText(blocks[0]!)).toContain(publicContent.installNotice);
     expect(blockLinks(blocks[0]!)).toContain(publicContent.links.admittedInstall);
     expect(blockText(blocks[0]!)).toContain("Only after immutable GitHub release admission");
-    expect(blockText(blocks[0]!)).toContain("admitted v0.7.1 artifact");
+    expect(blockText(blocks[0]!)).toContain("admitted v0.8.1 artifact");
     expect(blockText(blocks[0]!)).toContain("Neither artifact admission nor installation authorizes daemon startup.");
-    expect(blockLinks(blocks[0]!)).toContain("https://github.com/hraness/oompa/tree/v0.7.1#get-started");
+    expect(blockLinks(blocks[0]!)).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
     expect(blocks[1]).toEqual({ kind: "commands", commands: [publicContent.installCommand] });
     const text = pageText(page);
     expect(text.indexOf("Candidate artifact not yet admitted")).toBeLessThan(text.indexOf(publicContent.installCommand));
     expect(text.indexOf(publicContent.installCommand)).toBeLessThan(text.indexOf(publicContent.doctorCommand));
     expect(text.indexOf(publicContent.installNotice)).toBeLessThan(text.indexOf(publicContent.installCommand));
-    expect(text).not.toContain("You can install and check v0.8.0 now");
+    expect(text).not.toContain("You can install and check v0.8.2 now");
     expect(text.indexOf(publicContent.doctorCommand)).toBeLessThan(text.indexOf(publicContent.initCommand));
     const noticeIndex = blocks.findIndex((block) => block.kind === "notice"
       && blockText(block).includes("Initialization, daemon startup, and hosted command writers remain blocked on capacity"));
@@ -153,11 +156,11 @@ describe("task-oriented documentation content", () => {
     expect(parseCli(["session", "start", "personal", "--provider", "claude", "--preset", "fable-max"])).toMatchObject({ kind: "command", command: { kind: "session.start", provider: "claude", preset: "fable-max" } });
     const status = pageText(pageAt("/docs/status/"));
     expect(status).toContain(publicContent.daemonRolloutNotice);
-    expect(status).toContain("v0.8.0 is a candidate. v0.7.1 remains admitted.");
+    expect(status).toContain("v0.8.2 is a candidate. v0.8.1 remains admitted.");
     expect(status).toContain(publicContent.installNotice);
-    expect(status).toContain("The v0.7.1 CLI passed immutable GitHub and npm artifact admission.");
-    expect(status).not.toContain("The v0.8.0 CLI passed");
-    expect(status).not.toContain("v0.8.0 is released");
+    expect(status).toContain("The v0.8.1 CLI passed immutable GitHub artifact admission.");
+    expect(status).not.toContain("The v0.8.2 CLI passed");
+    expect(status).not.toContain("v0.8.2 is released");
   });
 
   test("puts machine sign-in formats before browser enrollment", () => {
@@ -166,7 +169,7 @@ describe("task-oriented documentation content", () => {
     const signInIndex = pairing.blocks.findIndex((block) =>
       blockLinks(block).includes("/docs/web/#cloud-sign-in-and-device-pairing"),
     );
-    const browserIndex = pairing.blocks.findIndex((block) => blockLinks(block).some((href) => href === "https://app.oompa.dev/"));
+    const browserIndex = pairing.blocks.findIndex((block) => blockLinks(block).some((href) => href === "https://app.oompa.app/"));
     expect(signInIndex).toBeGreaterThan(-1);
     expect(browserIndex).toBeGreaterThan(signInIndex);
     const instructions = blockText(pairing.blocks[signInIndex]!);
@@ -176,7 +179,7 @@ describe("task-oriented documentation content", () => {
 
   test("teaches actual browser actions without granting browser device or provider authority", () => {
     const text = pageText(pageAt("/docs/web/"));
-    expect(text).toContain("app.oompa.dev");
+    expect(text).toContain("app.oompa.app");
     const hold = text.indexOf("Initialization, daemon startup, and hosted command writers remain blocked on capacity");
     expect(hold).toBeGreaterThan(-1);
     expect(hold).toBeLessThan(text.indexOf("oompa auth login --input-stdin"));
@@ -184,8 +187,14 @@ describe("task-oriented documentation content", () => {
     expect(text).toContain("A browser cannot be the first device on an account or approve another device");
     expect(text).toContain("oompa device approve <pending-device-id-or-prefix> --fingerprint <value>");
     expect(text).toContain("Email access alone cannot recover encrypted history");
-    expect(text).toContain("With no session selected");
-    expect(text).toContain("With a session selected");
+    expect(text).toContain("write a prompt in the start box and choose a machine");
+    expect(text).toContain("Follow-up prompts belong in the conversation card");
+    expect(text).toContain("Earlier completed responses start collapsed");
+    expect(text).toContain("Shift+Enter adds a line");
+    expect(text).toContain("opens your synchronized sessions automatically");
+    for (const retired of ["Open a card", "approved and unlocked", "With a session selected", "offers model presets"]) {
+      expect(text).not.toContain(retired);
+    }
     expect(text).toContain("multiple-choice question can be answered here");
     expect(text).toContain("accepting them, granting permission, typing a free-text or Other answer, and completing MCP forms stay on the execution machine");
     expect(text).toContain("Scheduled tasks are read-only here");

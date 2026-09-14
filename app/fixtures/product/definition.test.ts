@@ -78,7 +78,7 @@ describe("isolated real-screen product examples", () => {
       const head = useSessionHead(PRODUCT_SESSION_IDS.conversation);
       expect(useSessionModel(head, { history: "full" }).model.title).toBe("Polish the checkout");
       expect(() => useSessionHead("unknown")).toThrow("Unknown");
-      expect(useCustody().state).toBe("locked");
+      expect(useCustody().state).toBe("unenrolled");
       expect(Object.hasOwn(useCustody(), "key")).toBe(false);
       await expect(useSubmitCommand()({ executionDevicePublicId: head!.executionDevicePublicId, payload: { kind: "stop" }, sessionPublicId: head!.publicId })).rejects.toThrow("No command was sent");
       expect(session.harness.refusedEffects()).toBe(1);

@@ -1,7 +1,6 @@
 import { AppearanceHeader } from "./components/appearance";
 import { ConvexAuthProvider, useConvexAuth } from "@convex-dev/auth/react";
 import * as stylex from "@stylexjs/stylex";
-import { useState } from "react";
 
 import { convexClient } from "./auth/convex-client";
 import { memoryTokenStorage } from "./auth/memory-token-storage";
@@ -11,11 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./com
 import { ErrorBoundary } from "./components/error-boundary";
 import { CustodyProvider, useCustody } from "./custody/custody-context";
 import { EnrollmentScreen } from "./custody/enrollment-screen";
-import { LockScreen } from "./custody/lock-screen";
 import { CommandReceiptRecovery } from "./data/command-receipt-recovery";
 import { navigateBack, useRoute } from "./routing/router";
 import { GridScreen } from "./screens/grid-screen";
-import { SessionScreen } from "./screens/session-screen";
 import { SettingsScreen } from "./screens/settings-screen";
 import { appStyles } from "./app.stylex";
 
@@ -28,26 +25,14 @@ function Centered({ children }: Readonly<{ children: React.ReactNode }>) {
   );
 }
 
-/**
- * The routed screens.
- *
- * The selected session is held here rather than in the grid, so it survives the
- * grid unmounting when a session opens: the grid composer targets the session
- * the reader last opened, and falls back to the most recently active one.
- */
+/** The routed screens: the grid of conversations, and settings. */
 function RoutedScreens() {
   const route = useRoute();
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-
   switch (route.kind) {
-    case "session":
-      return <SessionScreen key={route.sessionPublicId} sessionPublicId={route.sessionPublicId} />;
     case "settings":
-      return <SettingsScreen onBack={navigateBack} />;
+      return <SettingsScreen onBack={navigateBack} section={route.section} />;
     case "grid":
-      return (
-        <GridScreen onSelect={setSelectedSessionId} selectedSessionId={selectedSessionId} />
-      );
+      return <GridScreen />;
   }
 }
 
@@ -76,8 +61,7 @@ function CustodyGate() {
           <RoutedScreens />
         </ErrorBoundary>
       );
-    case "locked":
-      return <LockScreen />;
+    case "unlocking":
     case "unenrolled":
     default:
       return <EnrollmentScreen />;

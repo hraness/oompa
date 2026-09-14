@@ -10,8 +10,10 @@ import { availableParallelism, constants as osConstants, homedir } from "node:os
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { performance } from "node:perf_hooks";
+import { isatty } from "node:tty";
 
 import { slopcameraRuntimeDirectory } from "./runtime-pin";
+import { readQueueSnapshot, requireQueueTaskId, startQueueObserver, type QueueObserver } from "./queue-observer";
 
 import {
   commandProgramLabel,
@@ -29,6 +31,7 @@ import {
 
 export type ResourceMode = "shared" | "heavy" | "exclusive";
 export type CapabilityLane = "compute" | "browser-auth" | "mac-native";
+export type TtySignalOwner = "parent" | "child";
 
 export const hostAccessRequiredCode = "OOMPA_HOST_ACCESS_REQUIRED";
 export const hostAccessRequiredExitCode = 77;
@@ -80,6 +83,8 @@ export type HostRunOptions = {
   readonly lane: CapabilityLane;
   readonly mode: ResourceMode;
   readonly stateRoot?: string;
+  readonly taskId?: string;
+  readonly ttySignalOwner?: TtySignalOwner;
 };
 
 export function permitCapacity(hostParallelism = availableParallelism()): number {
@@ -104,6 +109,8 @@ export function parseHostRunArguments(arguments_: readonly string[]): {
   readonly label: string;
   readonly lane: CapabilityLane;
   readonly mode: ResourceMode;
+  readonly taskId?: string;
+  readonly ttySignalOwner?: TtySignalOwner;
 } {
   const delimiter = arguments_.indexOf("--");
   if (delimiter < 0) throw new Error("oompa-host-run requires -- before its command");
@@ -111,6 +118,8 @@ export function parseHostRunArguments(arguments_: readonly string[]): {
   let lane: CapabilityLane = "compute";
   let laneSupplied = false;
   let mode: ResourceMode | undefined;
+  let ttySignalOwner: TtySignalOwner | undefined;
+  let taskId: string | undefined;
   for (const argument of arguments_.slice(0, delimiter)) {
     if (argument.startsWith("--mode=")) {
       if (mode !== undefined) throw new Error("--mode may appear only once");
@@ -136,6 +145,18 @@ export function parseHostRunArguments(arguments_: readonly string[]): {
       laneSupplied = true;
       continue;
     }
+    if (argument.startsWith("--tty-signal-owner=")) {
+      if (ttySignalOwner !== undefined) throw new Error("--tty-signal-owner may appear only once");
+      const value = argument.slice("--tty-signal-owner=".length);
+      if (value !== "parent" && value !== "child") throw new Error(`invalid TTY signal owner: ${value}`);
+      ttySignalOwner = value;
+      continue;
+    }
+    if (argument.startsWith("--task-id=")) {
+      if (taskId !== undefined) throw new Error("--task-id may appear only once");
+      taskId = requireQueueTaskId(argument.slice("--task-id=".length));
+      continue;
+    }
     throw new Error(`unknown oompa-host-run argument: ${argument}`);
   }
   const command = arguments_.slice(delimiter + 1);
@@ -150,6 +171,8 @@ export function parseHostRunArguments(arguments_: readonly string[]): {
     label: label ?? commandProgramLabel(command[0]),
     lane,
     mode: mode ?? "shared",
+    ...(taskId === undefined ? {} : { taskId }),
+    ...(ttySignalOwner === undefined ? {} : { ttySignalOwner }),
   };
 }
 
@@ -233,16 +256,28 @@ async function hostResourceModule(
   return { createHostResourceCoordinator: loaded.createHostResourceCoordinator as HostResourceModule["createHostResourceCoordinator"] };
 }
 
+type ChildTtySignalScope = { active: boolean };
+
+/** This is an actual descriptor guard, not a caller-supplied TTY observation. */
+function assertChildTtySignalOwner(): void {
+  if (process.platform === "win32" || ![0, 1, 2].every((descriptor) => isatty(descriptor))) {
+    throw new Error("--tty-signal-owner=child requires POSIX terminal descriptors 0, 1 and 2");
+  }
+}
+
 function spawnCommand(
   command: readonly string[],
   cwd: string,
   environment: Readonly<NodeJS.ProcessEnv>,
   inheritedLeaseDescriptors: readonly number[] = [],
+  ttySignalScope?: ChildTtySignalScope,
 ): Promise<number> {
   return new Promise((resolveExit, reject) => {
     const [program, ...arguments_] = command;
     if (program === undefined) return reject(new Error("command is empty"));
-    const ownsProcessGroup = process.platform !== "win32" && !process.stdin.isTTY;
+    if (ttySignalScope !== undefined) assertChildTtySignalOwner();
+    const ownsProcessGroup = ttySignalScope === undefined
+      && process.platform !== "win32" && !process.stdin.isTTY;
     const child = spawn(program, arguments_, {
       cwd,
       detached: ownsProcessGroup,
@@ -287,6 +322,10 @@ function spawnCommand(
       }
     };
     const forward = (signal: NodeJS.Signals): void => {
+      // An opted-in foreground child receives terminal SIGINT directly. Its
+      // caller owns any local interruption ceremony; duplicate delivery is unsafe.
+      // HUP/QUIT/TERM and default/non-TTY behavior keep their existing forwarding.
+      if (signal === "SIGINT" && ttySignalScope?.active === true) return;
       signalChildTree(signal);
       if (ownsProcessGroup && forcedCleanup === undefined) {
         forcedCleanup = setTimeout(() => signalChildTree("SIGKILL"), 750);
@@ -294,7 +333,11 @@ function spawnCommand(
     };
     const forwardedSignals = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
     for (const signal of forwardedSignals) process.on(signal, forward);
+    // Lease admission alone is not child ownership. Before spawn succeeds, SIGINT
+    // still cancels admission; the scope remains held until this exact child exits.
+    if (ttySignalScope !== undefined) ttySignalScope.active = child.pid !== undefined;
     const removeSignalHandlers = (): void => {
+      if (ttySignalScope !== undefined) ttySignalScope.active = false;
       for (const signal of forwardedSignals) process.off(signal, forward);
     };
     child.once("error", (error) => {
@@ -554,6 +597,11 @@ export function permissionBoundaryDenied(error: unknown): boolean {
   return false;
 }
 
+/** Opt-in signal semantics must not reuse a default command's validation digest. */
+export function hostCommandDigest(command: readonly string[], scope: string, owner: TtySignalOwner = "parent"): string {
+  return owner === "child" ? sha256(JSON.stringify({ command, scope, ttySignalOwner: "child" })) : commandDigest(command, scope);
+}
+
 export function capabilityPlatformSupported(
   lane: CapabilityLane,
   platform: NodeJS.Platform = process.platform,
@@ -561,8 +609,16 @@ export function capabilityPlatformSupported(
   return lane !== "mac-native" || platform === "darwin";
 }
 
+function requireTtySignalOwner(value: unknown): TtySignalOwner | undefined {
+  if (value === undefined || value === "parent" || value === "child") return value;
+  throw new Error("invalid TTY signal owner");
+}
+
 export async function runHostCommand(options: HostRunOptions): Promise<number> {
   const environment = { ...(options.environment ?? process.env) };
+  const ttySignalOwner = requireTtySignalOwner(options.ttySignalOwner);
+  const ttySignalScope: ChildTtySignalScope | undefined = ttySignalOwner === "child" ? { active: false } : undefined;
+  if (ttySignalScope !== undefined) assertChildTtySignalOwner();
   if (!capabilityPlatformSupported(options.lane)) {
     throw new Error("the mac-native capability lane requires macOS");
   }
@@ -573,7 +629,7 @@ export async function runHostCommand(options: HostRunOptions): Promise<number> {
       throw new Error("nested oompa-host-run cannot escalate its outer mode or capability lane");
     }
     assertInheritedLeaseDescriptors(inherited);
-    return spawnCommand(options.command, options.cwd, environment);
+    return spawnCommand(options.command, options.cwd, environment, [], ttySignalScope);
   }
   const capacity = permitCapacity();
   const permitCount = permitsForMode(options.mode);
@@ -591,7 +647,7 @@ export async function runHostCommand(options: HostRunOptions): Promise<number> {
     runStartedAt: null,
   };
   const scope = scopeDigest(options.cwd);
-  const digest = commandDigest(options.command, scope);
+  const digest = hostCommandDigest(options.command, scope, ttySignalOwner);
   const telemetryRoot = throughputTelemetryRoot(stateRoot);
   const record = (
     outcome: "canceled" | "fail" | "pass" | "scheduler-error" | "spawn-error",
@@ -629,14 +685,39 @@ export async function runHostCommand(options: HostRunOptions): Promise<number> {
   };
   const cancellation = new AbortController();
   const cancellationState: { signal: NodeJS.Signals | null } = { signal: null };
+  let observer: QueueObserver | undefined;
   const cancel = (signal: NodeJS.Signals): void => {
+    // During the admitted opted-in child, SIGINT belongs to its terminal policy.
+    // Do not classify a successful local ceremony as canceled before it settles.
+    if (signal === "SIGINT" && ttySignalScope?.active === true) return;
     if (cancellationState.signal !== null) return;
     cancellationState.signal = signal;
+    observer?.settling();
     cancellation.abort();
     record("canceled", signalExitCode(signal));
   };
   const cancellationSignals = ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM"] as const;
   for (const signal of cancellationSignals) process.on(signal, cancel);
+  let progressTimer: ReturnType<typeof setTimeout> | undefined;
+  let finished = false;
+  const isWaiting = (): boolean => !finished && execution.admittedAt === null && !cancellation.signal.aborted;
+  const reportWait = async (): Promise<void> => {
+    if (!isWaiting()) return;
+    try {
+      const snapshot = await readQueueSnapshot(stateRoot, options.lane);
+      if (!isWaiting()) return;
+      const holders = snapshot.owners.filter(owner => owner.capability === "reported-held");
+      const details = holders.slice(0, 4).map(owner => `${owner.label} (${owner.stage}, held=${((owner.capabilityMilliseconds ?? 0) / 1000).toFixed(1)}s, run=${owner.runId}`
+        + (owner.taskId === null ? "" : `, task=${owner.taskId}`) + ")");
+      console.error(`[oompa-host-run] waiting ${((performance.now() - queuedAtMonotonic) / 1_000).toFixed(1)}s for ${options.label}; `
+        + (details.length === 0 ? "holder unknown" : `reported holder: ${details.join(", ")}`)
+        + "; partial observation, scheduler owns admission. Inspect: oompa-host-queue --lane=" + options.lane + " --json");
+    } catch { /* Observation cannot fail admission. */ }
+    if (isWaiting()) {
+      progressTimer = setTimeout(() => { void reportWait(); }, 30_000);
+      progressTimer.unref();
+    }
+  };
   try {
     const module = await hostResourceModule(environment);
     const cpuCoordinator = module.createHostResourceCoordinator({
@@ -661,10 +742,28 @@ export async function runHostCommand(options: HostRunOptions): Promise<number> {
         waitTimeoutMilliseconds: 24 * 60 * 60_000,
       });
     if (cancellationState.signal !== null) return signalExitCode(cancellationState.signal);
+    if (environment.OOMPA_LOCAL_EFFICIENCY_QUEUE !== "off") {
+      try {
+        observer = await startQueueObserver({ stateRoot, label: options.label, lane: options.lane, mode: options.mode,
+          ...(options.taskId === undefined ? {} : { taskId: options.taskId }),
+          onHandoff(request) {
+            console.error(`[oompa-host-run] handoff requested by ${request.requesterLabel} (request=${request.requestId}, run=${request.runId}). `
+              + "Finish and collect this browser/native session before releasing its lane; do source editing and external waits after release. This notice does not interrupt the child.");
+          } });
+        console.error(`[oompa-host-run] queue run=${observer.runId}`);
+        if (cancellation.signal.aborted) observer.settling();
+      } catch {
+        console.error("[oompa-host-run] queue visibility unavailable; scheduler admission unchanged");
+      }
+      progressTimer = setTimeout(() => { void reportWait(); }, 15_000);
+      progressTimer.unref();
+    }
     const runWithCpu = async (outerDescriptors: readonly number[]): Promise<number> => {
       return cpuCoordinator.withLease(
         [{ resource: "cpu", amount: permitCount }],
         async (lease) => {
+          observer?.cpuAdmitted();
+          if (progressTimer !== undefined) clearTimeout(progressTimer);
           execution.admittedAt = new Date();
           execution.runStartedAt = performance.now();
           const waitedSeconds = (execution.runStartedAt - queuedAtMonotonic) / 1_000;
@@ -692,12 +791,15 @@ export async function runHostCommand(options: HostRunOptions): Promise<number> {
               options.cwd,
               childEnvironment,
               [...outerDescriptors, lease.inheritedFileDescriptor],
+              ttySignalScope,
             );
             record(exitCode === 0 ? "pass" : "fail", exitCode);
             return exitCode;
           } catch (error: unknown) {
             record("spawn-error", null);
             throw error;
+          } finally {
+            observer?.settling();
           }
         },
         {
@@ -709,7 +811,11 @@ export async function runHostCommand(options: HostRunOptions): Promise<number> {
     if (capabilityCoordinator === null) return await runWithCpu([]);
     return await capabilityCoordinator.withLease(
       [{ resource: options.lane, amount: 1 }],
-      (lease) => runWithCpu([lease.inheritedFileDescriptor]),
+      async (lease) => {
+        observer?.capabilityAdmitted();
+        try { return await runWithCpu([lease.inheritedFileDescriptor]); }
+        finally { observer?.settling(); }
+      },
       {
         signal: cancellation.signal,
         waitTimeoutMilliseconds: 24 * 60 * 60_000,
@@ -723,13 +829,18 @@ export async function runHostCommand(options: HostRunOptions): Promise<number> {
     }
     throw error;
   } finally {
+    finished = true;
+    if (progressTimer !== undefined) clearTimeout(progressTimer);
+    try { await observer?.close(); } catch { /* Observation cannot change the command outcome. */ }
     for (const signal of cancellationSignals) process.off(signal, cancel);
   }
 }
 
 function usage(): string {
   return "Usage: oompa-host-run --mode=shared|heavy|exclusive"
-    + " [--lane=compute|browser-auth|mac-native] [--label=LABEL] -- COMMAND [ARGUMENT ...]";
+    + " [--lane=compute|browser-auth|mac-native] [--label=LABEL]"
+    + " [--task-id=UUID]"
+    + " [--tty-signal-owner=parent|child] -- COMMAND [ARGUMENT ...]";
 }
 
 if (import.meta.main) {

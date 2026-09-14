@@ -49,7 +49,7 @@ test("switch travel uses the logical inline axis without physical translation", 
 test("session and transcript labels align to inline start", async () => {
   const card = await recipes("./session-card.stylex.ts", "sessionCardStyles");
   const transcript = await recipes("./transcript-view.stylex.ts", "transcriptStyles");
-  expect(card.get("openButton")?.get("textAlign")).toBe('"start"');
+  expect(card.get("choice")?.get("textAlign")).toBe('"start"');
   expect(transcript.get("thinkingButton")?.get("textAlign")).toBe('"start"');
   expect(transcript.get("userText")?.get("borderStartEndRadius")).toBe('"0.125rem"');
   expect(transcript.get("userText")?.has("borderTopRightRadius")).toBe(false);

@@ -30,8 +30,10 @@ const escapeHtml = (value: string): string =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 
-const defaultPalette = getDesignPaletteTheme("catppuccin", "dark");
-const paletteAttributes = `class="${escapeHtml(defaultPalette.className)}" data-palette="catppuccin" data-theme="dark"`;
+const defaultPalette = getDesignPaletteTheme("paper", "light");
+const previewPalette = getDesignPaletteTheme("catppuccin", "dark");
+const previewPaletteAttributes = `class="${escapeHtml(previewPalette.className)}" data-palette="catppuccin" data-theme="dark"`;
+const paletteAttributes = `class="${escapeHtml(defaultPalette.className)}" data-hraness-theme="paper" data-palette="paper" data-theme="light"`;
 const classes = (hook: string, ...slots: readonly SitePresentationSlot[]): string =>
   [hook, sitePresentationClasses(...slots)].filter(Boolean).join(" ");
 
@@ -40,41 +42,13 @@ const renderShellCode = (value: string): string => {
   return `<code class="${classes(highlighted.className, "codeContent")}">${highlighted.html}</code>`;
 };
 
-export const OOMPA_MAILING_TURNSTILE_SITEKEY_ENV =
-  "NEXT_PUBLIC_HRANESS_MAILING_TURNSTILE_SITEKEY" as const;
+export const oompaMailingListConfig = (): HranessMailingListConfig => ({
+  audience: "hra",
+  kind: "signup",
+});
 
-const turnstileSitekeyPattern = /^[A-Za-z0-9_-]{20,100}$/u;
-const emptySiteEnvironment: Readonly<Record<string, string | undefined>> =
-  Object.freeze({});
-
-export const oompaMailingListConfig = (
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
-): HranessMailingListConfig => {
-  const turnstileSitekey = environment[OOMPA_MAILING_TURNSTILE_SITEKEY_ENV];
-  if (turnstileSitekey === undefined || turnstileSitekey.length === 0) {
-    if (environment.VERCEL_ENV === "production") {
-      throw new Error(
-        `${OOMPA_MAILING_TURNSTILE_SITEKEY_ENV} must be configured for Vercel Production.`,
-      );
-    }
-    return { kind: "none" };
-  }
-  if (!turnstileSitekeyPattern.test(turnstileSitekey)) {
-    throw new Error(
-      `${OOMPA_MAILING_TURNSTILE_SITEKEY_ENV} must be a 20-100 character URL-safe public Cloudflare Turnstile sitekey.`,
-    );
-  }
-  return {
-    audience: "hra",
-    kind: "signup",
-    turnstileSitekey,
-  };
-};
-
-export const renderOompaSiteFooter = (
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
-): string => renderHranessSiteFooter({
-  mailingList: oompaMailingListConfig(environment),
+export const renderOompaSiteFooter = (): string => renderHranessSiteFooter({
+  mailingList: oompaMailingListConfig(),
 });
 
 export const renderAskAiAboutThis = (canonicalUrl: string): string =>
@@ -175,6 +149,7 @@ const renderHead = (
     readonly openGraphType?: "article" | "website";
     readonly robots?: string;
     readonly title: string;
+    readonly themeColor?: string;
   },
 ): string => {
   const canonicalUrl = `${content.siteUrl}${options.canonicalPath}`;
@@ -229,7 +204,7 @@ ${image.type === undefined ? "" : `<meta property="og:image:type" content="${esc
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${escapeHtml(image.src)}">
 <meta name="twitter:image:alt" content="${escapeHtml(image.alt)}">
-<meta name="theme-color" content="${escapeHtml(defaultPalette.background)}">
+<meta name="theme-color" content="${escapeHtml(options.themeColor ?? defaultPalette.background)}">
 ${options.interactiveAppearance === false ? "" : '<script src="/appearance.js"></script>'}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/styles.css">${structuredData}`;
@@ -247,10 +222,9 @@ const renderProjectResources = (content: PublicContent): string => `<aside aria-
 
 export const renderSiteHtml = (
   content: PublicContent = publicContent,
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
 ): string => {
   return `<!doctype html>
-<html ${paletteAttributes} lang="en">
+<html ${paletteAttributes} data-hraness-marketing-preset="editorial" data-hraness-material="lantern" lang="en">
 <head>
 ${renderHead(content, {
   canonicalPath: "/",
@@ -267,7 +241,7 @@ ${renderMarketingPage(content)}
 </main>
 ${renderAskAiAboutThis(`${content.siteUrl}/`)}
 ${renderProjectResources(content)}
-${renderOompaSiteFooter(environment)}
+${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>
 </body>
@@ -277,13 +251,14 @@ ${renderOompaAnalyticsScript()}
 
 export const renderPreviewHtml = (content: PublicContent = publicContent): string =>
   `<!doctype html>
-<html ${paletteAttributes} lang="en">
+<html ${previewPaletteAttributes} lang="en">
 <head>
 ${renderHead(content, {
   canonicalPath: "/",
   description: content.description,
   includeStructuredData: false,
   interactiveAppearance: false,
+  themeColor: previewPalette.background,
   robots: "noindex, nofollow",
   title: `${content.productName} | ${content.tagline}`,
 })}
@@ -306,11 +281,10 @@ ${renderHead(content, {
 
 export const renderPrivacyHtml = (
   content: PublicContent = publicContent,
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
 ): string => {
   const privacy = findSection(content, "privacy");
   return `<!doctype html>
-<html ${paletteAttributes} lang="en">
+<html ${paletteAttributes} data-hraness-material="lantern" lang="en">
 <head>
 ${renderHead(content, {
   canonicalPath: "/privacy/",
@@ -327,7 +301,7 @@ ${renderMarketingHeader(content, "/privacy/")}
 </main>
 ${renderAskAiAboutThis(`${content.siteUrl}/privacy/`)}
 ${renderProjectResources(content)}
-${renderOompaSiteFooter(environment)}
+${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 </body>
 </html>
@@ -339,14 +313,17 @@ const docsLabel = (page: DocsPage): string => ({ "/docs/": "Overview", "/docs/st
 /** Static, navigable documents. Search and screen controls are progressive enhancements. */
 export const renderDocsHtml = (
   page: DocsPage,
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
 ): string => {
   const content = publicContent;
   const reference = docsReferenceSections(page);
+  // Published fragments remain navigable when a reference changes guide owner.
+  const movedReferenceIds = page.path === "/docs/" ? ["project"]
+    : page.path === "/docs/sessions/" ? ["first-account", "first-session"] : [];
+  const movedReferences = movedReferenceIds.map((id) => findSection(content, id));
   const nav = docsPages.map((item) => `<a class="${docsClasses("navLink")}" data-doc-search="${escapeHtml([item.title, item.description, ...item.keywords, ...item.sections.map(({ heading }) => heading)].join(" "))}" href="${item.path}"${item.path === page.path ? ' aria-current="page"' : ""}>${escapeHtml(docsLabel(item))}</a>`).join("");
   const sections = [...page.sections, ...reference];
   return `<!doctype html>
-<html ${paletteAttributes} lang="en"><head>
+<html ${paletteAttributes} data-hraness-material="lantern" lang="en"><head>
 ${renderHead(content, { canonicalPath: page.path, description: page.description, title: `${page.title} | Oompa`, jsonLd: { "@context": "https://schema.org", "@type": "TechArticle", headline: page.title, description: page.description, url: `${content.siteUrl}${page.path}`, dateModified: page.reviewDate, author: { "@type": "Organization", name: "Hraness", url: content.links.hraness }, isPartOf: { "@type": "WebSite", name: "Oompa", url: content.siteUrl } } })}
 <link rel="alternate" type="text/markdown" href="${page.path}index.md" title="Markdown">
 </head><body>
@@ -366,14 +343,15 @@ ${renderMarketingHeader(content, page.path)}
   ${page.previewId === undefined ? "" : renderProductPreview(page.previewId, "docs-preview")}
   ${page.sections.map((section) => `<section class="${docsClasses("section")}" id="${escapeHtml(section.id)}" aria-labelledby="${escapeHtml(section.id)}-heading"><h2 id="${escapeHtml(section.id)}-heading">${escapeHtml(section.heading)}</h2>${section.blocks.map((block, index) => renderBlock(block, section.id, index, "h3", "heroNotes")).join("\n")}</section>`).join("\n")}
   ${reference.length === 0 ? "" : `<section class="${docsClasses("reference")}" aria-label="Detailed reference"><h2>Detailed reference</h2><p>Exact commands, recovery steps, and compatibility details for this guide.</p>${reference.map((section) => `<details class="${docsClasses("details")}" id="${escapeHtml(section.id)}"><summary>${escapeHtml(section.heading)}</summary><div class="${docsClasses("detailBody")}">${section.blocks.map((block, index) => renderBlock(block, section.id, index, "h3", "heroNotes")).join("\n")}</div></details>`).join("\n")}</section>`}
+  ${movedReferences.length === 0 ? "" : `<details class="${docsClasses("legacyLinks")}"><summary>Moved reference sections</summary><nav aria-label="Moved reference sections">${movedReferences.map((section) => `<p id="${escapeHtml(section.id)}"><a data-moved-section="${escapeHtml(section.id)}" href="${escapeHtml(docsPathForSection(section.id))}">${escapeHtml(section.heading)} →</a></p>`).join("")}</nav></details>`}
   <nav class="${docsClasses("related")}" aria-label="Continue reading">${page.related.map((item) => `<a class="${docsClasses("relatedLink")}" href="${escapeHtml(item.path)}">${escapeHtml(item.label)} →</a>`).join("")}</nav>
 </main></div>
 ${renderAskAiAboutThis(`${content.siteUrl}${page.path}`)}
 ${renderProjectResources(content)}
-${renderOompaSiteFooter(environment)}
+${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>
 </body></html>\n`;
 };
 
-export const renderDocsPages = (environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment): Readonly<Record<string, string>> => Object.fromEntries(docsPages.map((page) => [page.path, renderDocsHtml(page, environment)]));
+export const renderDocsPages = (): Readonly<Record<string, string>> => Object.fromEntries(docsPages.map((page) => [page.path, renderDocsHtml(page)]));

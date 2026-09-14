@@ -479,9 +479,9 @@ describe("agent-first work apply boundary", () => {
     const secret = "PRIVATE-UNPARSED-WORK-DOCUMENT";
     for (const fixture of [
       { document: { ...request, unexpected: secret }, expectedRequestId: null, expectedVersion: WORK_APPLY_REQUEST_VERSION },
-      { document: { ...request, version: WORK_APPLY_REQUEST_VERSION, presetContract: 1 }, expectedRequestId: requestId, expectedVersion: WORK_APPLY_REQUEST_VERSION },
+      { document: { ...request, version: WORK_APPLY_REQUEST_VERSION, presetContract: 2 }, expectedRequestId: requestId, expectedVersion: WORK_APPLY_REQUEST_VERSION },
       { document: { ...request, version: WORK_APPLY_REQUEST_VERSION, operation: reboundOperation }, expectedRequestId: requestId, expectedVersion: WORK_APPLY_REQUEST_VERSION },
-      { document: { ...request, version: WORK_APPLY_REQUEST_VERSION, presetContract: 1, operation: reboundOperation, unexpected: secret }, expectedRequestId: null, expectedVersion: WORK_APPLY_REQUEST_VERSION },
+      { document: { ...request, version: WORK_APPLY_REQUEST_VERSION, presetContract: 2, operation: reboundOperation, unexpected: secret }, expectedRequestId: null, expectedVersion: WORK_APPLY_REQUEST_VERSION },
       { document: { ...request, operation: { ...operation, unexpected: secret } }, expectedRequestId: requestId, expectedVersion: WORK_APPLY_REQUEST_LEGACY_VERSION },
       { document: { ...request, operation: { ...operation, idempotencyKey: undefined } }, expectedRequestId: requestId, expectedVersion: WORK_APPLY_REQUEST_LEGACY_VERSION },
       { document: { ...request, operation: { ...operation, actorSessionId: "worker-one" } }, expectedRequestId: requestId, expectedVersion: WORK_APPLY_REQUEST_LEGACY_VERSION },

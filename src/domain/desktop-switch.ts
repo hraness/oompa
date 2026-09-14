@@ -1,4 +1,5 @@
-// Durable shapes of the macOS desktop account-switch journal. Storage persists
+// Durable shapes of the retained macOS desktop account-switch journal. The
+// switch feature was removed on 2026-09-10; storage still decodes its rows. Storage persists
 // them and the desktop state machine produces them; neither imports the other.
 
 import type { ProviderAccountAuthority } from "./provider-accounts.ts";

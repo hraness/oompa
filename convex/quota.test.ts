@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { makeFunctionReference } from "convex/server";
 import type { GenericId as Id, Value } from "convex/values";
 import { convexTest } from "convex-test";
+import fc from "fast-check";
 
 import { USAGE_POLL_MIN_INTERVAL_MS } from "../src/daemon/usage-poller";
 import {
@@ -32,6 +33,8 @@ import {
   USAGE_SERVER_ADMISSION_MIN_INTERVAL_MS,
 } from "./usage";
 import {
+  authorityReductionReservationDemand,
+  inspectAuthorityReductionQuota,
   ACCOUNT_RESOURCE_QUOTAS,
   CATEGORY_QUOTAS,
   SERVICE_TOTAL_QUOTA,
@@ -1276,5 +1279,182 @@ describe("hosted quota authority", () => {
       table: "deviceRevocationJobs",
     });
     expect(await categoryUsageFor(world.testRuntime, world.userId, "job")).toEqual(before);
+  });
+});
+
+// These ledger-only fixtures retain hard-authority attribution while varying
+// individual ceilings. They do not insert fake future reservation metadata.
+async function setDiagnosticUsage(
+  world: Awaited<ReturnType<typeof quotaWorld>>,
+  overrides: Partial<Record<QuotaCategory, Partial<{ logicalBytes: number; records: number }>>>,
+  serviceOverride: Partial<{ logicalBytes: number; records: number }> = {},
+) {
+  await world.testRuntime.run(async (ctx) => {
+    const rows = await ctx.db.query("storageUsageByUser")
+      .withIndex("by_user_and_category", (q) => q.eq("userId", world.userId)).collect();
+    let userLogicalBytes = 0;
+    let userRecords = 0;
+    for (const row of rows) {
+      const patch = overrides[row.category];
+      const records = patch?.records ?? row.records;
+      const logicalBytes = records === 0 ? 0 : patch?.logicalBytes ?? Math.max(1, row.logicalBytes);
+      await ctx.db.patch(row._id, { logicalBytes, records });
+      userLogicalBytes += logicalBytes;
+      userRecords += records;
+    }
+    const service = await ctx.db.query("storageUsageService").unique();
+    if (service === null) throw new Error("missing diagnostic service fixture");
+    const serviceRecords = serviceOverride.records === undefined
+      ? serviceOverride.logicalBytes === undefined ? 0 : 1
+      : serviceOverride.records - userRecords;
+    const serviceLogicalBytes = serviceOverride.logicalBytes === undefined
+      ? serviceRecords === 0 ? 0 : 1
+      : serviceOverride.logicalBytes - userLogicalBytes;
+    await ctx.db.patch(service._id, {
+      logicalBytes: userLogicalBytes + serviceLogicalBytes,
+      records: userRecords + serviceRecords,
+      serviceLogicalBytes, serviceRecords, userLogicalBytes, userRecords,
+    });
+  });
+}
+
+const inspectDiagnostic = async (world: Awaited<ReturnType<typeof quotaWorld>>, a = 1, d = 1) =>
+  await world.testRuntime.run(async (ctx) => await inspectAuthorityReductionQuota(ctx, world.userId, a, d));
+
+describe("authority reduction quota ceiling diagnostic", () => {
+  test("exact record demand covers every bounded account/device combination", () => {
+    for (const a of [0, 1]) for (let d = 0; d <= 16; d += 1) {
+      expect(authorityReductionReservationDemand(a, d)).toEqual({
+        accountPairs: a, deviceQuartets: d,
+        paddingBytesLowerBound: 2_048 * (2 * a + 4 * d), totalRecords: 2 * a + 4 * d,
+      });
+    }
+    fc.assert(fc.property(fc.integer(), fc.integer(), (a, d) => {
+      if ((a === 0 || a === 1) && d >= 0 && d <= 16) {
+        expect(authorityReductionReservationDemand(a, d).totalRecords).toBeLessThanOrEqual(66);
+      } else expect(() => authorityReductionReservationDemand(a, d)).toThrow("QUOTA_AUTHORITY_CORRUPT");
+    }), { numRuns: 100 });
+    for (const invalid of [NaN, Infinity, -Infinity, 0.5]) {
+      expect(() => authorityReductionReservationDemand(1, invalid)).toThrow("QUOTA_AUTHORITY_CORRUPT");
+    }
+  });
+
+  test.each(["identity", "job", "device", "security", "receipt"] as const)(
+    "%s record equality fits only that dimension; one fewer slot blocks", async (category) => {
+      const world = await quotaWorld();
+      const needed = category === "job" ? 2 : 1;
+      await setDiagnosticUsage(world, { [category]: { records: CATEGORY_QUOTAS[category].records - needed } });
+      const equal = await inspectDiagnostic(world);
+      expect(equal.state).toBe("observed");
+      if (equal.state !== "observed") throw new Error("unproved diagnostic fixture");
+      expect(equal.ceilings[category]).toEqual({
+        applicable: 1, bytesBlockedByLowerBound: 0, bytesUnknown: 1, recordsBlocked: 0,
+      });
+      await setDiagnosticUsage(world, { [category]: { records: CATEGORY_QUOTAS[category].records - needed + 1 } });
+      const blocked = await inspectDiagnostic(world);
+      if (blocked.state !== "observed") throw new Error("unproved diagnostic fixture");
+      expect(blocked.ceilings[category].recordsBlocked).toBe(1);
+      expect(blocked.ceilings.userTotal.recordsBlocked).toBe(0);
+      expect(blocked.ceilings.serviceTotal.recordsBlocked).toBe(0);
+    },
+  );
+
+  test("user and service record ceilings are separate exact dimensions", async () => {
+    const world = await quotaWorld();
+    const others = await world.testRuntime.run(async (ctx) => {
+      const rows = await ctx.db.query("storageUsageByUser").collect();
+      return rows.filter((row) => !["usage", "chunk", "memory"].includes(row.category))
+        .reduce((sum, row) => sum + row.records, 0);
+    });
+    await setDiagnosticUsage(world, {
+      chunk: { records: 500_000 }, memory: { records: 300_000 - others - 6 }, usage: { records: 3_200_000 },
+    }, { records: SERVICE_TOTAL_QUOTA.records - 6 });
+    const equal = await inspectDiagnostic(world);
+    if (equal.state !== "observed") throw new Error("unproved diagnostic fixture");
+    expect(equal.ceilings.userTotal.recordsBlocked).toBe(0);
+    expect(equal.ceilings.serviceTotal.recordsBlocked).toBe(0);
+    await setDiagnosticUsage(world, { memory: { records: 300_000 - others - 5 } }, {
+      records: SERVICE_TOTAL_QUOTA.records - 5,
+    });
+    const blocked = await inspectDiagnostic(world);
+    if (blocked.state !== "observed") throw new Error("unproved diagnostic fixture");
+    expect(blocked.ceilings.userTotal.recordsBlocked).toBe(1);
+    expect(blocked.ceilings.serviceTotal.recordsBlocked).toBe(1);
+  });
+
+  test.each([-1, 0, 1])("byte headroom floor offset %s never proves byte fit", async (offset) => {
+    const world = await quotaWorld();
+    await setDiagnosticUsage(world, {
+      identity: { logicalBytes: CATEGORY_QUOTAS.identity.logicalBytes - 2_048 - offset },
+    }, { logicalBytes: SERVICE_TOTAL_QUOTA.logicalBytes - 12_288 - offset });
+    const value = await inspectDiagnostic(world);
+    if (value.state !== "observed") throw new Error("unproved diagnostic fixture");
+    for (const key of ["identity", "serviceTotal"] as const) {
+      expect(value.ceilings[key].bytesBlockedByLowerBound).toBe(offset < 0 ? 1 : 0);
+      expect(value.ceilings[key].bytesUnknown).toBe(offset < 0 ? 0 : 1);
+    }
+  });
+
+  test.each([-1, 0, 1])("user byte headroom floor offset %s remains conservative", async (offset) => {
+    const world = await quotaWorld();
+    const others = await world.testRuntime.run(async (ctx) =>
+      (await ctx.db.query("storageUsageByUser").collect())
+        .filter((row) => row.category !== "chunk")
+        .reduce((sum, row) => sum + row.logicalBytes, 0));
+    await setDiagnosticUsage(world, {
+      chunk: { logicalBytes: USER_TOTAL_QUOTA.logicalBytes - others - 12_288 - offset, records: 1 },
+    });
+    const value = await inspectDiagnostic(world);
+    if (value.state !== "observed") throw new Error("unproved diagnostic fixture");
+    expect(value.ceilings.userTotal.bytesBlockedByLowerBound).toBe(offset < 0 ? 1 : 0);
+    expect(value.ceilings.userTotal.bytesUnknown).toBe(offset < 0 ? 0 : 1);
+    expect(value.ceilings.serviceTotal.bytesBlockedByLowerBound).toBe(0);
+  });
+
+  test("a saturated category with no required insert is not applicable", async () => {
+    const world = await quotaWorld();
+    await setDiagnosticUsage(world, { identity: { records: CATEGORY_QUOTAS.identity.records } });
+    const value = await inspectDiagnostic(world, 0, 1);
+    if (value.state !== "observed") throw new Error("unproved diagnostic fixture");
+    expect(value.ceilings.identity).toEqual({
+      applicable: 0, bytesBlockedByLowerBound: 0, bytesUnknown: 0, recordsBlocked: 0,
+    });
+    expect(value.ceilings.device.applicable).toBe(1);
+  });
+
+  test.each(["missing_service", "duplicate_service", "predecessor", "duplicate_category", "negative", "unsafe", "pair", "attribution", "marker"])(
+    "%s preserves unknown authority instead of reporting a ceiling", async (kind) => {
+      const world = await quotaWorld();
+      await world.testRuntime.run(async (ctx) => {
+        const service = await ctx.db.query("storageUsageService").unique();
+        const memory = await ctx.db.query("storageUsageByUser")
+          .withIndex("by_user_and_category", (q) => q.eq("userId", world.userId).eq("category", "memory")).unique();
+        if (service === null || memory === null) throw new Error("missing diagnostic fixture");
+        if (kind === "missing_service") await ctx.db.delete(service._id);
+        else if (kind === "duplicate_service") {
+          const { _id, _creationTime, ...body } = service;
+          void _id; void _creationTime;
+          await ctx.db.insert("storageUsageService", body);
+        } else if (kind === "predecessor") await ctx.db.delete(memory._id);
+        else if (kind === "duplicate_category") {
+          const { _id, _creationTime, ...body } = memory;
+          void _id; void _creationTime;
+          await ctx.db.insert("storageUsageByUser", body);
+        } else if (kind === "negative") await ctx.db.patch(memory._id, { records: -1 });
+        else if (kind === "unsafe") await ctx.db.patch(memory._id, { records: Number.MAX_SAFE_INTEGER + 1 });
+        else if (kind === "pair") await ctx.db.patch(memory._id, { logicalBytes: 1 });
+        else if (kind === "marker") await ctx.db.patch(memory._id, { quotaSchemaVersion: 2 });
+        else await ctx.db.patch(service._id, { userLogicalBytes: service.userLogicalBytes + 1 });
+      });
+      expect(await inspectDiagnostic(world)).toEqual({ state: "authority_unknown" });
+    },
+  );
+
+  test("unrelated resource ledger absence does not invent a reservation ceiling", async () => {
+    const world = await quotaWorld();
+    await world.testRuntime.run(async (ctx) => {
+      for (const row of await ctx.db.query("storageResourceUsageByUser").collect()) await ctx.db.delete(row._id);
+    });
+    expect((await inspectDiagnostic(world)).state).toBe("observed");
   });
 });

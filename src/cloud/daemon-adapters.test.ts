@@ -376,7 +376,7 @@ function adoptPersonalCodexSession(
       computerUse: true,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       observedAt: 2_000,
       permissionProfile: ":workspace",
       pluginCapability: true,
@@ -4055,14 +4055,14 @@ describe("state-backed cloud daemon adapter", () => {
         authority: authority as CloudLocalCommandAuthority,
         idempotencyKey: "00000000-0000-7000-8000-0000000000a2",
         leaseAuthority: { bootGeneration: 1, bootId: "boot_00000001", fence: 1 },
-        payload: { kind: "set_provider", presetContract: 1, provider: "codex" },
+        payload: { kind: "set_provider", presetContract: 2, provider: "codex" },
         sessionPublicId: value.sessionId,
         signal,
       })).toEqual({ code: "APPLIED", state: "applied" });
       expect(commands[1]).toEqual({
         idempotencyKey: "00000000-0000-7000-8000-0000000000a2",
         kind: "session.switch",
-        presetContract: 1,
+        presetContract: 2,
         provider: "codex",
         session: value.sessionId,
       });
@@ -4143,7 +4143,7 @@ describe("state-backed cloud daemon adapter", () => {
         authority: authority as CloudLocalCommandAuthority,
         idempotencyKey: "00000000-0000-7000-8000-000000000007",
         leaseAuthority: { bootGeneration: 1, bootId: "boot_00000001", fence: 1 },
-        payload: { kind: "set_model", preset: "ultra", presetContract: 1 },
+        payload: { kind: "set_model", preset: "ultra", presetContract: 2 },
         sessionPublicId: value.sessionId,
         signal,
       })).toEqual({ code: "APPLIED", state: "applied" });
@@ -5388,7 +5388,7 @@ describe("settings commands and the device registry", () => {
       expect(value.store.requireSession(value.sessionId).preset).toBe("high");
       const signal = new AbortController().signal;
       expect(await adapter.readDeviceRegistryProjection({ signal })).toMatchObject({
-        profileBinding: { preset: "ultra", profileKey: "codex:gpt-5.6-sol:ultra" },
+        profileBinding: { preset: "ultra", profileKey: "codex:gpt-6-astra:ultra" },
         registry: { defaultPreset: "ultra" },
       });
       expect(reads).toBe(1);
@@ -5400,7 +5400,7 @@ describe("settings commands and the device registry", () => {
       expect(reads).toBe(2);
       value.store.setDefaultPreset("fable-max");
       expect(await adapter.readDeviceRegistryProjection({ signal })).toMatchObject({
-        profileBinding: { preset: "ultra", profileKey: "codex:gpt-5.6-sol:ultra" },
+        profileBinding: { preset: "ultra", profileKey: "codex:gpt-6-astra:ultra" },
         registry: { defaultPreset: "ultra" },
       });
       expect(reads).toBe(3);
@@ -5425,7 +5425,7 @@ describe("settings commands and the device registry", () => {
     try {
       expect(value.store.readDefaultPreset()).toBe("ultra");
       expect(await adapter.readDeviceRegistryProjection({ signal: new AbortController().signal })).toMatchObject({
-        profileBinding: { preset: "high", profileKey: "codex:gpt-5.6-sol:max" },
+        profileBinding: { preset: "high", profileKey: "codex:gpt-6-astra:max" },
         registry: { defaultPreset: "high" },
       });
     } finally {
@@ -5565,7 +5565,7 @@ describe("settings commands and the device registry", () => {
       computerUse: true as const,
       enabledApps: [],
       fast: false,
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       observedAt: 2_000,
       permissionProfile: ":workspace" as const,
       pluginCapability: true as const,
@@ -5980,7 +5980,7 @@ async function deviceCommandFixture(options: Readonly<{
     accountPublicId: account.id,
     kind: "session_start" as const,
     preset: "ultra" as const,
-    presetContract: 1 as const,
+    presetContract: 2 as const,
     projectPublicId: project.id,
     prompt: "continue the migration",
     provider: "codex" as const,
@@ -6583,7 +6583,7 @@ describe("device command execution", () => {
         kind: "session.start",
         provider: "codex",
         preset: "ultra",
-        presetContract: 1,
+        presetContract: 2,
       });
       // One device command, two local effects, two distinct derived keys.
       const keys = world.executed.map((command) =>
@@ -6623,7 +6623,7 @@ describe("device command execution", () => {
           accountPublicId: account.id,
           kind: "session_start",
           preset: "ultra",
-          presetContract: 1,
+          presetContract: 2,
           projectPublicId: project.id,
           prompt: "continue",
           provider: "codex",

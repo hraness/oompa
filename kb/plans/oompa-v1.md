@@ -14,6 +14,8 @@ tags:
 
 # Oompa v1
 
+Domain update, 2026-09-10: [the current domain plan](./oompa-app-domain.md) supersedes earlier host choices in this record. Current website and app destinations are `oompa.app` and `app.oompa.app`; prior hosts grant no current routing or authentication authority. Dated delivery evidence remains historical.
+
 ## Canonical site response headers (2026-09-10)
 
 Status: source repair in progress. Production readback after the protected-input operator merge proved the canonical source identity and matching public page and asset content, but found missing declared headers on the well-known data files and canonical example document. Browser interaction success does not satisfy those response-header contracts.
@@ -21,6 +23,14 @@ Status: source repair in progress. Production readback after the protected-input
 The pinned `@vercel/routing-utils` 6.4.0 compiler reproduces the two configuration failures: automatic trailing-slash handling places a terminal well-known rule before header routes, and the former example star parameter misses its empty trailing segment. Use explicit 308 slash-normalization redirects that exclude the well-known boundary and an example pattern that includes `/examples/app/`. Preserve all three header-value sets and the canonical page URLs. The compiler is a development-only regression dependency, not a production runtime or provider upgrade. Its legacy parser is overridden to patched `path-to-regexp` 6.3.0; compare the exact compiled Oompa routes against the unmodified compiler before admission. Pin the existing development-only `js-yaml` dependency to 4.3.2 to resolve the separately observed dependency advisory.
 
 Acceptance requires causal routing regressions, exact header-value and browser-policy contracts, independent full-diff review, fresh current-base Required CI and actual-main admission, then a new guarded source-to-target alias plan and independent live headers, content and browser verification. The already committed alias plan remains terminal; this follow-up does not authorize replay, ledger edits, release republication, or daemon, hosted or new-model activation.
+
+## Shared Paper appearance (2026-09-10)
+
+The marketing site adopts the AICharts-derived Paper theme from the shared design kit: warm neutral surfaces, blue actions, compact Nebula Sans headings, and a wider reading frame. The app uses the same semantic palette and retains its sealed, font-free artifact contract. New visits start with Paper and System appearance. Existing bounded palette/mode preferences retain their storage key and win over the new default; the other named palettes remain available. Inert examples retain their fixed Catppuccin dark appearance and cannot read preferences.
+
+The theme arrives through the existing compiled design-kit and UI boundaries. Oompa imports the opt-in, dependency-free Paper foundation alongside compiler palettes, without standalone component recipes, runtime styles, network assets, or a new package boundary. The public homepage retains its product content, fictional examples, command-line social card, and runtime admission limits.
+
+Status: implementation and stable dependency pins are independently reviewed. Design-kit v0.6.4, UI v0.5.13, and site-footer v0.6.3 share the same compiler contract. Focused preferences, static-shell and browser-oracle checks, full typecheck, six-profile compiled browser acceptance with native custody, and desktop/mobile marketing presentation checks passed. The saved-palette reload runs after the exact per-document resource census and restores Paper/System. Two stale hero-eyebrow assertions now match the approved compact layout while retaining metadata and content checks. The final current-base Required CI and canonical website/app verification remain delivery gates. The domain rollout retains sole alias ownership; this theme change does not authorize a daemon upgrade or hosted command-writer activation.
 
 ## Web appearance (2026-09-08)
 
@@ -219,6 +229,8 @@ The recommended beta permission policy is opt-in during `oompa init`:
 A project is a named canonical directory, not a Git repository. It may contain several repositories. The default project is the user's Documents directory after explicit first-run confirmation. Commands may create a named project, select one, change a session's future directory, and inspect the effective readable and writable roots.
 
 ### Desktop application switching
+
+Removed on 2026-09-10 (`kb/plans/oompa-app-simplification.md`, Phase 5); the journal tables remain as retained history. The text below is the original design record.
 
 `oompa account switch <account>` is an explicit machine mutation with one global lock. It must:
 

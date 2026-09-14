@@ -8,7 +8,7 @@ Never copy retired Oompa v0 data, deployment URLs, deploy keys, authentication k
 
 The provider identity guard pins the intended Convex team to numeric ID `513923` and provider slug `cclrte`. Retired Oompa v0 Convex project ID `2680173` and production deployment ID `4677913` remain permanent denylisted safety tombstones; neither may be recreated, renamed into, or selected by this runbook. The current source repository has GitHub repository ID `1343008607`, and the current web project has Vercel project ID `prj_8ciIt9t9foE3utG45frRN7cxckjS`. Provider names may change. The team identity and numeric resource IDs do not.
 
-Browser app project. The web app at `app.oompa.dev` is a second Vercel project in the same team, separate from the website project above so the two never share an origin, a cache policy, or a Content Security Policy. It has no framework preset, root directory `app`, build command `cd .. && bun install --frozen-lockfile --ignore-scripts && bun run build:app`, install command `true`, and output directory `dist`; source files outside the root directory are enabled because that exact build intentionally enters the repository root. Its tracked ignore command is exactly `test "$VERCEL_ENV" != "production"`, so Vercel builds production and ignores previews. The app requires no deployment-secret input: its Convex deployment origin is pinned in source at `app/src/env.ts` and in the `connect-src` allowlist of `app/vercel.json`. It was created on 2026-09-04 as Vercel project `prj_3olYDT29BrwKO9PLByVq9HlgRkdA` (name `oompa-app`, team `team_UAd1iD2XogJlbFg4h14mRaPM`, production branch `main`, domain `app.oompa.dev`), alongside the website project `prj_8ciIt9t9foE3utG45frRN7cxckjS`. Every production build must receive Vercel's exact lowercase 40-character `VERCEL_GIT_COMMIT_SHA`; a missing or malformed value stops the build. The bundle publishes that commit, repository identity, and package version at the no-store path `/.well-known/oompa-app.json`, which is excluded from the SPA fallback.
+Browser app project. The web app at `app.oompa.app` is a second Vercel project in the same team, separate from the website project above so the two never share an origin, a cache policy, or a Content Security Policy. It has no framework preset, root directory `app`, build command `cd .. && bun install --frozen-lockfile --ignore-scripts && bun run build:app`, install command `true`, and output directory `dist`; source files outside the root directory are enabled because that exact build intentionally enters the repository root. Its tracked ignore command is exactly `test "$VERCEL_ENV" != "production"`, so Vercel builds production and ignores previews. The app requires no deployment-secret input: its Convex deployment origin is pinned in source at `app/src/env.ts` and in the `connect-src` allowlist of `app/vercel.json`. It was created on 2026-09-04 as Vercel project `prj_3olYDT29BrwKO9PLByVq9HlgRkdA` in team `team_UAd1iD2XogJlbFg4h14mRaPM`, alongside the website project `prj_8ciIt9t9foE3utG45frRN7cxckjS`. Its production branch remains `main`; the current canonical domain decision is `app.oompa.app`, selected on 2026-09-10. Every production build must receive Vercel's exact lowercase 40-character `VERCEL_GIT_COMMIT_SHA`; a missing or malformed value stops the build. The bundle publishes that commit, repository identity, and package version at the no-store path `/.well-known/oompa-app.json`, which is excluded from the SPA fallback.
 
 Live projection. Besides the compact stream of completed turns, the daemon streams the current turn's assistant text (and reasoning summaries only when show-thinking is enabled for the session, default off) to the `detail` stream about once per second in redacted, encrypted batches of at most 8 KiB. Detail chunks carry the `live_tail` retention class: each row expires six hours after it is written, a session keeps at most 200 rows, and the `live_tail_chunks` maintenance category sweeps expired rows behind a detail stream epoch so digest-chain verification of the surviving tail stays valid and both the chunk quota and the per-user `live_chunk` resource counter are released. Raw reasoning is never uploaded.
 
@@ -156,6 +156,121 @@ There is one exceptional fresh-source supersession path for a bootstrap or candi
 
 Deployment intents and final documents use canonical SHA-256 JSON, bounded no-follow reads, exclusive mode-`0600` files, descriptor and path identity checks, file and directory sync, and atomic no-replace publication. Retain the `.intent` beside its final evidence until the release is complete.
 
+### Upgrade predecessor quota ledgers before capacity repair
+
+The memory schema adds a quota category and a per-user resource counter.
+Existing accounts need an explicit additive upgrade before ordinary writes or
+command-capacity repair can use the new schema. Deploy the checked forward
+candidate first, retain both its protected deployment evidence and its exact
+predecessor evidence, then run the quota operator from that clean source:
+
+```sh
+run_quota_upgrade() (
+  unset BUN_OPTIONS NODE_OPTIONS LD_AUDIT LD_LIBRARY_PATH LD_ORIGIN_PATH LD_PRELOAD \
+    DYLD_FALLBACK_FRAMEWORK_PATH DYLD_FALLBACK_LIBRARY_PATH DYLD_FRAMEWORK_PATH \
+    DYLD_IMAGE_SUFFIX DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_ROOT_PATH \
+    DYLD_VERSIONED_FRAMEWORK_PATH DYLD_VERSIONED_LIBRARY_PATH &&
+  command bun --no-env-file --config=/dev/null \
+    ./scripts/verify-app-source-launcher.ts quota-upgrade "$@"
+)
+
+run_quota_upgrade status \
+  --source-commit <CANDIDATE_COMMIT> \
+  --deploy-evidence /protected/release/candidate-deploy.json \
+  --previous-deploy-evidence /protected/release/previous-deploy.json \
+  --deployment steady-otter-321 \
+  --team-id 513923 --project-id 2854545 --deployment-id 7654321 \
+  --deployment-url https://steady-otter-321.convex.cloud
+```
+
+`status` makes bounded reads and reports closed schema-3 aggregate counts:
+`legacy`, `legacyEmptyLiveTail`, `unmarkedCurrent`, `incompleteEmptyMemory`,
+`current` and `corrupt`. These six counts sum to `scanned`. It does not publish
+an intent, upgrade an identity or clear the command-capacity hold. If
+the audit reports corruption, stop and diagnose a forward repair; never
+reinitialize existing quota authority or infer a missing counter's value.
+
+Repeat that read command with `diagnose` instead of `status` to identify the
+closed reason counts. It uses the same source, candidate, predecessor, target
+and runtime checks. It reports the first classification failure per identity:
+missing or duplicate authority, invalid counters or markers, exceeded ceilings,
+inconsistent totals, incomplete schema shape, or unexpected legacy detail or
+memory data.
+For an incomplete shape, `missingShapes` groups identical marked or unmarked
+ledgers by their missing categories and resources. It also distinguishes absent,
+zero and nonzero retained memory counters, without exposing their values. Each
+group comes from the same validated rows as its failure; there are at most eight
+groups per page. The groups account for exactly the `schema_shape` count. A
+missing counter alone remains unknown, even when the remaining memory counter
+is zero. Incomplete-memory eligibility additionally requires both owner memory
+indexes to be empty in the same read. Such ledgers count as
+`incompleteEmptyMemory`; ones with owner data report `incomplete_memory_present`.
+The exact older layout described below counts as `legacyEmptyLiveTail` only
+when both memory indexes and the owner detail-stream index are empty.
+`legacy_chunks_present` refuses that layout when any owner detail chunk exists;
+`legacy_memory_present` refuses it when memory data exists. The diagnostic emits
+no identity, raw counter, cursor or content. Global service-authority
+corruption still refuses the scan. Counts are consistent within each bounded
+page; a multi-page scan is not a single snapshot. Diagnosis publishes no repair
+evidence and authorizes neither repair nor activation. Both read commands
+reject mutation acknowledgements and an output evidence path.
+
+For an admissible legacy, empty-live-tail predecessor, unmarked current or
+incomplete-empty-memory ledger, repeat the same command with `repair` instead
+of `status` and add
+`--evidence-path /protected/release/quota-upgrade.json --execute --acknowledge-forward-only`.
+The operator re-audits before writing, binds a protected intent to the exact
+candidate, predecessor, target and runtime, and upgrades at most eight
+identities in each atomic page. An exact eleven-category, six-resource legacy
+ledger receives the two zero memory counters and an identity-row version marker.
+
+The `legacy_empty_live_tail` disposition handles only the exact older unmarked
+eleven-category, five-resource ledger, missing the `memory` category and the
+`live_chunk` and `memory_space` resources. It requires no owner detail chunk:
+`sessionChunks.by_user_and_stream` reads at most one row for that user and
+`stream: "detail"`. Expired chunks, chunks without an expiry and orphan chunks
+all disprove zero, even if no session head remains. Compact-only history is
+preserved and does not block this transition. The mutation also proves that
+both owner memory indexes are empty in the same transaction. It adds exactly
+three zero authority rows and the identity marker; marked or partially filled
+variants of this older layout refuse.
+
+A complete unmarked current ledger receives only the marker. An
+incomplete-empty-memory ledger receives only its missing `memory` category and/or `memory_space` resource.
+This completion requires all fixed predecessor rows, only an absent or current
+identity marker, zero retained memory counters, and no owner `memorySpaces` or
+`memoryOperations`, including orphan operations. It adds an absent marker and
+preserves a current marker. These partial or marked forms never count as legacy.
+Existing fields, counters, IDs, timestamps, service totals and limits remain
+unchanged; no user content is deleted. Other missing authority and nonzero
+retained memory counters refuse. Fresh identities carry the marker from
+initialization.
+
+The operator rechecks that eligibility in each atomic mutation. A read-only
+eligible result does not authorize using stale counters or ignoring later owner
+data. Schema-3 page counts distinguish `changed` identities, six-resource legacy
+`upgraded` identities, five-resource `upgradedLiveTail` identities, newly `marked`
+identities and `repairedMemory` completions. The protected intent and receipt
+bind schema version 3 and fixed policy `empty-live-tail-memory-authority-v1` to
+the exact source and deployment. Historical schema-1 and schema-2 evidence is
+retained and never reused or reinterpreted as authority for this policy. The
+stored identity marker remains `quotaSchemaVersion: 2`; the wire version change
+does not alter current ledger accounting.
+
+After two complete clean audits, the operator publishes a protected completion
+receipt. An interrupted invocation retains its intent; the same bound repair
+first audits current state and never guesses whether an earlier page committed.
+Exact completed replay performs the audits without repeating mutations.
+Provider errors, binding drift or unproven process cleanup remain failures.
+Retain recovery paths and resolve the existing recovery journal before resuming.
+
+This receipt proves only the quota schema upgrade. It authorizes no daemon,
+provider writer or capacity activation. Continue with the command-capacity
+operator below; its two-pass evidence, activation and target-marker gates are
+unchanged. Do not downgrade to code that does not understand the new ledger
+shape. Do not invoke the internal migration manually or bypass the source
+launcher with a package-script alias.
+
 ### Converge command lifecycle capacity before writer rollout
 
 The additive command-lifecycle and durable-job-capacity deployment is a
@@ -171,7 +286,8 @@ during settlement, account for the new physical job shape, exchange the
 authority-reduction rows, or erase every obligation during account deletion.
 Repair forward from the exact currently live candidate instead.
 
-Run the capacity operator immediately after the candidate deployment and
+Run the capacity operator after the candidate deployment and any required
+quota-ledger upgrade, and
 before upgrading current daemons/executors or declaring current command
 writers available. The Vercel app can auto-build from `main` before this gate;
 an early UI deployment is not capacity readiness. Fresh marker-2 enqueue is
@@ -212,6 +328,54 @@ run_command_capacity status \
   --deployment-id 7654321 \
   --deployment-url https://steady-otter-321.convex.cloud
 ```
+
+To distinguish authority-reduction quota ceilings without attempting a repair,
+use the same wrapper and exact candidate/target arguments with
+`diagnose-headroom` in place of `status`:
+
+```sh
+run_command_capacity diagnose-headroom \
+  --source-commit <CANDIDATE_COMMIT> \
+  --deploy-evidence /protected/release/candidate-<CANDIDATE_COMMIT>-deploy.json \
+  --deployment steady-otter-321 \
+  --team-id 513923 \
+  --project-id 2854545 \
+  --deployment-id 7654321 \
+  --deployment-url https://steady-otter-321.convex.cloud
+```
+
+The diagnostic emits a separate version-1 result with
+`state: "diagnostic_complete"`, `repairAuthorized: false` and
+`activationAuthorized: false`. Completion means its bounded observations and
+source/target checks finished. It does not mean quota fits, clear a prior
+hard-quota hold or produce readiness evidence. Status and repair retain their
+version-2 results and existing acceptance requirements.
+
+Only aggregate counts leave the query. The seven fixed ceiling dimensions are
+identity, job, device, security and receipt categories, user total and service
+total. A missing account pair needs two records; each missing non-revoked-device
+quartet needs four. `recordsBlocked` is exact for completing that identity's
+missing sets from the observed ledger. `bytesBlockedByLowerBound` proves a
+refusal only when the required 2048-byte padding per row already exceeds a
+ceiling. All other byte cases remain `bytesUnknown`, including equality at that
+padding floor. Future document metadata is not invented. Counts across ceilings
+can overlap, and service observations do not simulate successively repairing
+every identity.
+
+`ready` remains the existing capacity-classifier count, not quota admission.
+Only `capacityMissing` identities have their quota ledgers evaluated;
+`quotaAuthorityUnknown` preserves corrupt or missing ledger authority without
+mislabeling it as a ceiling. The query creates no reservation, changes no quota,
+and returns no identity, raw usage, timestamp or secret. Cursors remain private
+transport state and are absent from emitted output.
+
+Each page reads at most eight identities under one query snapshot. The operator
+caps the scan at 626 pages and 5000 identities and refuses incomplete coverage.
+Its `per_page_only` consistency does not promise a global snapshot or a stable
+population across pages. Exact source, candidate evidence, runtime attestation,
+numeric target and process-custody checks remain the same as the status path.
+The command rejects execute, acknowledgement, retirement and readiness-evidence
+flags. A completed diagnostic never falls through to repair or activation.
 
 The status command enumerates every identity to prove its account pair and
 every non-revoked device quartet, then enumerates both command tables in all three nonterminal
@@ -455,10 +619,19 @@ committed lockfile with `--frozen-lockfile --ignore-scripts --backend=copyfile`,
 but first applies the complete source proof to the materialized worktree so Bun
 cannot parse checkout-converted package or lockfile bytes. After installation it
 repeats the configuration, raw-blob, index, origin, and protected-main checks in
-both worktrees. Only after those checks may the fresh dependency tree receive
-the credential descriptor. The launcher ignores ambient `TMPDIR` and creates
+both worktrees. In `prove` mode it next runs only `scripts/build-app.ts`, with
+`OOMPA_RELEASE_COMMIT` fixed to that source and both Vercel marker variables
+absent, and requires successful completion of the sealed production build.
+It repeats both complete source checks after that build. Only then may the
+fresh dependency tree receive the credential descriptor. Retained verification
+performs no build. The launcher ignores ambient `TMPDIR` and creates
 its directory as a direct child of the canonical root-owned sticky `/tmp`
-directory, so another operating-system user cannot rename that entry. It
+directory, so another operating-system user cannot rename that entry. An attempted build that fails, signals, throws, or fails either post-build
+source check retains that worktree and all builder recovery records. Its closed
+refusal adds a bounded `retainedBuild` directory locator with `locatorOnly:true`;
+this identifies the originally admitted scratch path, not current custody,
+cleanup permission or permission to retry. Preserve and reconcile it before
+any cleanup. After a successful build and source join, the launcher
 removes its exact registered temporary worktree after the verifier returns,
 verifies that Git no longer lists it, removes the same private directory
 identity, and refuses if cleanup cannot be proven. Every child receives a fixed
@@ -527,7 +700,7 @@ The command uses authenticated Vercel readbacks to require team
 `team_UAd1iD2XogJlbFg4h14mRaPM`, project
 `prj_3olYDT29BrwKO9PLByVq9HlgRkdA`, its GitHub link to repository ID
 `1343008607` on production branch `main`, a `READY` production Git deployment
-at the exact commit, and the `app.oompa.dev` alias attached to that deployment. A
+at the exact commit, and the `app.oompa.app` alias attached to that deployment. A
 project name, automatic hostname, or successful HTTP response is not a
 substitute for those stable identities. The deployment must not be prebuilt,
 and its best-effort provider `source` field must still say `git` as a
@@ -537,11 +710,15 @@ framework, build, install, output, and outside-root-source contract above; its
 dashboard ignore command may be unset because the tracked configuration owns
 that setting, but any other value is refused. The effective deployment must
 carry the exact tracked build, install, output, framework, and ignore command.
-Because the single-deployment response omits root and outside-root fields, a
-second bounded, cursor-paginated `/v7/deployments` readback locates the exact
-deployment under project, commit, branch, target, and state filters and binds
-its complete immutable settings snapshot too. A Git deployment with a
-per-deployment build override is therefore refused. The exact project-domain
+The v13 detail must report all six of those historical settings, including the
+nullable dev command. A second bounded, cursor-paginated `/v7/deployments`
+readback locates the exact deployment under project, commit, branch, target,
+and state filters. Its optional settings may be absent, but every reported
+setting must match, including root and outside-root values if present. Missing
+historical root and outside-root settings are explicitly `not-attested`;
+current project settings never fill them in. Mandatory public artifact equality
+below establishes the served publication, without claiming the historical
+build used a root setting that the provider does not expose. The exact project-domain
 record must be verified,
 unredirected, production-scoped, and directly configured through a Vercel
 `A` or `CNAME` record rather than an HTTP proxy. The project must have no live
@@ -555,7 +732,7 @@ even while the production alias points at the candidate, so the verifier
 refuses that state.
 
 Between two complete provider samples, the command fetches a freshly
-cache-busted `https://app.oompa.dev/.well-known/oompa-app.json` without Vercel
+cache-busted `https://app.oompa.app/.well-known/oompa-app.json` without Vercel
 authentication and parses it as strict JSON. It requires exactly this document:
 
 ```json
@@ -587,10 +764,44 @@ an active rolling release, active Skew Protection, any live project route, an
 active WAF redirect, an observed provider or protected-main change during the
 at-most-five-minute sample, or a non-READY deployment stops the observation.
 
+The same sample also compares every artifact in the fresh local app publication
+with its exact public URL, plus `/` with the local `index.html`. All public
+requests exclude credentials, refuse redirects and unexpected origins, use a
+fresh nonce and enforce the seven source-defined security headers; both HTML
+entry responses and the marker require `no-store`. Actual response lengths and
+SHA-256 digests must equal the complete local inventory. The marker is compared
+as exact canonical bytes as well as parsed identity. The local reader joins the
+publication record to its actual package, lockfile, marker environment and full
+`app/dist` inventory before and after network observation. The launcher's
+successful sealed build supplies compiler-completion provenance; parsing a
+publication record alone does not reconstruct that provenance.
+
+The accepted inventory allows at most 64 files, 8 MiB per artifact, and 32 MiB
+across all public artifact response bytes, including the additional `/` read.
+All provider, marker and artifact requests share the 128-request, five-minute
+observation budget and per-request deadline. Existing local builder readers
+retain their own 4,096-file, 64-MiB-file and 256-MiB census limits; the smaller
+public limits do not claim stronger local preallocation bounds. The receipt
+contains the complete manifest and its digest, explicit byte counters and
+source/package/lock/publication bindings. It proves equality for the named
+publication and canonical entry only; it does not enumerate unlisted remote
+files or prove their absence. Source and provider samples still cannot rule out
+an unobserved move away and restoration between reads.
+
+The bulk-redirect read requests page 1 with ten records per page. A response
+without pagination is accepted only as the exact empty form
+`{redirects:[],version:null}`, corroborated by an authenticated empty versions
+list. The firewall configuration list supplies its full active configuration
+for the existing identity and redirect checks. Only explicit
+`{active:null,draft:null,versions:[]}` proves an unconfigured firewall; its
+receipt records null configuration ID, version and enabled state together.
+HTTP errors and missing fields never establish absence.
+
 `--evidence-path` must be an absolute normalized path naming an absent direct
 child of a protected mode-`0700` evidence directory. The command publishes one
-schema-version-2 canonical, self-digested, mode-`0600`, single-link document
+schema-version-4 canonical, self-digested, mode-`0600`, single-link document
 through no-follow and atomic no-replace checks, then syncs and revalidates it.
+Earlier proof versions require a fresh observation with the current verifier.
 It never overwrites or treats an exact replay as success. Standard output is
 only a bounded non-secret echo for observation; shell redirection of stdout is
 not evidence. Standard error is one closed refusal code. Neither stream
@@ -629,10 +840,10 @@ credential, under the evidence boundary.
 `bun run hosted:configure` accepts one strict JSON object with exactly these fields:
 
 ```json
-{"attentionResendApiKey":"<attention-secret>","authEmailReplyTo":"ben@substrate.run","resendApiKey":"<sign-in-secret>","siteUrl":"https://oompa.dev"}
+{"attentionResendApiKey":"<attention-secret>","authEmailReplyTo":"ben@substrate.run","resendApiKey":"<sign-in-secret>","siteUrl":"https://oompa.app"}
 ```
 
-`siteUrl` must be one HTTPS origin. For the Oompa `v0.1.0` authority it is exactly `https://oompa.dev`, the final canonical origin. Do not substitute `https://hra.vercel.app` or an automatic deployment hostname: configuration is one-shot, while staging aliases move and rehearsal may replace candidate deployments. `resendApiKey` must be a Resend sending key. Oompa pins every OTP sender to `Oompa sign-in <oompa@auth.hraness.com>` in source; the operator cannot replace it with an environment value. `authEmailReplyTo` must be one lowercase canonical mailbox without an apostrophe that is monitored and verified to receive mail. The sending-only `auth.hraness.com` and `news.hraness.com` domains are rejected. If the runtime variable is absent, Oompa falls back to the receive-capable `ben@substrate.run` mailbox. The helper generates a fresh 2048-bit RS256 private key, its matching public JWKS, and a 256-bit HMAC secret locally with WebCrypto.
+`siteUrl` must be one HTTPS origin. For the Oompa `v0.1.0` authority it is exactly `https://oompa.app`, the final canonical origin. Do not substitute `https://hra.vercel.app` or an automatic deployment hostname: configuration is one-shot, while staging aliases move and rehearsal may replace candidate deployments. `resendApiKey` must be a Resend sending key. Oompa pins every OTP sender to `Oompa sign-in <oompa@auth.hraness.com>` in source; the operator cannot replace it with an environment value. `authEmailReplyTo` must be one lowercase canonical mailbox without an apostrophe that is monitored and verified to receive mail. The sending-only `auth.hraness.com` and `news.hraness.com` domains are rejected. If the runtime variable is absent, Oompa falls back to the receive-capable `ben@substrate.run` mailbox. The helper generates a fresh 2048-bit RS256 private key, its matching public JWKS, and a 256-bit HMAC secret locally with WebCrypto.
 
 `attentionResendApiKey` is a separate sending key for attention email. Both
 keys must use the strict `re_` token format, be 8 to 512 characters long, and
@@ -934,6 +1145,15 @@ row per table and reports only zero-or-one occupancy; it does not expose a
 candidate, recipient, delivery record, fault record, or execution lease. Keep
 this flag on the inactive checkpoint only; a later reviewed enablement phase
 must define its own production proof.
+At this exact inactive checkpoint, `OOMPA_ATTENTION_RESEND_API_KEY` may be
+absent when all six other managed names are present and
+`--require-attention-key-ready` was not requested. The normal source,
+bootstrap and admission checks still decide `preflight_passed` or `live`.
+The environment observation remains unchanged: `missingRequiredNames` still
+lists the absent attention key and `requiredNamesPresent` remains `false`.
+Without the requested exact inactive observation, all seven names remain
+required for a passing status. Disabled notification control, nonzero
+generation, occupied outbox or safety faults cannot use this exception.
 Add `--require-attention-key-ready` together with `--require-passed` to require
 the current runtime's separate boolean credential check. Its named internal
 query returns only `{dedicatedKeyReady}`, which hosted status exposes as
@@ -944,6 +1164,9 @@ control is inactive. Without this flag, status makes no credential-readiness
 claim. A true value does not prove Resend account identity, key domain scope,
 sender verification, consent, or notification enablement. Combine it with
 `--require-attention-inactive` when checking a still-inactive configured target.
+With `--require-passed`, this explicit key gate requires the attention
+environment name as well as the separate credential-readiness result;
+inactive control never substitutes for either check.
 Malformed, unavailable, or ambiguous provider reads exit one; unresolved local
 custody exits 75.
 
@@ -964,8 +1187,9 @@ Convex-owned runtime configuration, not an Oompa-managed protected value, so it
 is intentionally neither required nor reported by this command.
 
 `preflight_passed` means the bound release attestation names the supplied
-source commit, the seven managed names are present, and the deployment presents
-the exact first-bootstrap authority frame with open generation-zero admission.
+source commit, the managed names satisfy the requirements above, including
+the narrowly defined inactive attention-key exception, and the deployment
+presents the exact first-bootstrap authority frame with open generation-zero admission.
 `live` means the same runtime and environment facts hold, the first invitation
 was accepted (the control row carries a durable accepted timestamp ordered
 after bootstrap completion), and admission is open at any generation. An

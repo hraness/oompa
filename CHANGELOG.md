@@ -1,23 +1,65 @@
 # Changelog
 
+## v0.8.2 candidate (unreleased)
+
+- Interactive root help shows a compact ASCII orange-circle introduction on a capable terminal. Redirected help, JSON, version, nested help and errors retain their existing output. No daemon, provider, store or command authority changes.
+- This patch needs its own exact immutable artifact admission. The v0.8.0 canonical GitHub artifact is admitted; its optional npm mirror failed before publication and is not admitted. Its historical entry below retains the candidate wording from that source. Capacity activation, daemon startup and intended-target gates remain unchanged.
+
+## v0.8.1
+
+Immutable GitHub release admission completed in [release run 34781400584](https://github.com/hraness/oompa/actions/runs/34781400584), attempt 1, from source `135a69bd592e41c3c1649241f3310ff41fc7e81e`. The canonical archive is `hraness-oompa-0.8.1.tgz` (1,707,906 bytes, SHA-256 `e84d6efe6779c359bf013663e50c8d9e4a43e380d837e92ac755e55e8c559208`). The optional npm mirror failed before publication and is not admitted. Daemon startup and hosted command writers remain capacity-gated; this release does not claim live provider qualification.
+
 Every entry names the release or the plan wave it belongs to. Unreleased work sits under the wave that produced it until a version ships.
+
+## Desktop switching removed (unreleased)
+
+- The macOS ChatGPT desktop account switch is removed: `oompa account switch`, `oompa account switch-recover`, the `src/desktop` state machine, its daemon port and the doctor's `desktop` recovery block are gone, and the website no longer documents it. The `desktop_switches`, `desktop_switch_authority` and `desktop_switch_resolutions` tables, their migrations and the retained journal decoders stay, so an existing state root opens unchanged. Plan: `kb/plans/oompa-app-simplification.md`, Phase 5.
+
+## Astra binding (unreleased)
+
+Codex `high` and `ultra` bind to Astra again. Plan: `kb/plans/oompa-app-simplification.md`, Phases 4a–4b.
+
+- New and explicitly reselected Codex `high` and `ultra` sessions, Work plans and provider switches use contract 2: `gpt-6-astra` at `max` and `ultra` reasoning. Established contract 1 Sol sessions keep their exact route until a preset is explicitly reselected; same-alias reselection moves the session to Astra. Existing Works retain their frozen contract and may settle their existing tasks; a new Astra task graph needs a new Work. No stored contract is renumbered or reinterpreted.
+- Remote and local writes that name either rebound alias, and preset-omitted Codex switches, now carry contract 2. A browser or CLI built before this change targeting a current daemon, or the reverse, fails closed before any provider effect, as the `presetContract` fence was designed to do.
+- The CLI help, website preset copy, release notes and routing contract name Astra Max and Astra Ultra as the active Codex mapping. Browser labels stay `Codex High` and `Codex Ultra`; registry version 1 still projects only the alias.
+
+## Automatic effort (unreleased)
+
+- New browser conversations use Astra Max for conservatively bounded prompts and Ultra otherwise, with an Automatic effort off switch in Settings. The choice is fixed in the ordinary command before submission. Existing sessions, explicit CLI choices and the shadow router remain unchanged.
+
+## Usage history (unreleased)
+
+- The grid links to Codex daily usage history in Settings (`#/settings/usage`). Recent, unexpired reports show their last reported remaining percentage; missing, unreadable, stale or expired reports show unknown. Historical window values and reset instants remain available in dated expandable reports.
+- The existing v1 payload, 24-hour upload cadence and quota bounds are unchanged. Live usage, Claude observations, reset credits, throughput and runway remain unfinished work under `kb/plans/oompa-app-simplification.md` Phase 6 and `kb/plans/provider-usage-management.md` Phases 8–9.
+
+## Inline conversations (unreleased)
+
+The web app keeps every conversation in its grid card and asks only for a prompt and a machine. Plan: `kb/plans/oompa-app-simplification.md`.
+
+- The lock is gone. An enrolled, approved browser opens the account key when the page loads and drops it when the page closes or its authority fails; there is no Lock button, lock screen, idle lock or `Ctrl+L`.
+- The conversation screen and its `#/session/<id>` route are removed. Each card holds a bounded, scrollable conversation with earlier turns on demand; responses older than the newest fold to one line and open in place; the newest response and a streaming turn stay open. An old conversation link lands on the grid.
+- The start box and every card composer are multi-line: `Enter` sends, `Shift+Enter` breaks a line.
+- Starting a session names a machine only. The app picks the machine's first signed-in Codex account, else its first signed-in Claude Code account, that provider's best preset, and the machine's default project. The account, project and model pickers leave the app; the per-session model and Fast controls leave the card menu (the CLI keeps them). Approvals and the provider switch stay in the card menu.
+- Device registry version 1 gains an optional `defaultProjectPublicId`, always one of its listed projects. An older registry without it still starts sessions on its first project.
+- Card headers, drag handles, kebab menus and subagent chips are tighter.
 
 ## v0.8.0 candidate (unreleased)
 
 Provider account visibility, local automatic usage policy controls, and recovery hardening. This candidate is not yet admitted. The [v0.7.1 immutable installation notes](https://github.com/hraness/hra/blob/v0.7.1/docs/beta-release-notes.md#install) remain the installation path for the admitted artifact. Artifact admission does not clear daemon startup, hosted capacity or intended-target gates.
 
-- HRA is renamed to Oompa. The package is `@hraness/oompa`, the command is `oompa`, the repository is `hraness/oompa`, and the public surfaces are `oompa.dev` and `app.oompa.dev`. The product mark is an orange circle. Oompa installs into its own `~/.bun/install/oompa` authority and publishes only the `oompa` command; an existing `hra` installation keeps running from its old root until removed. The control-plane state root, persisted schema names, hash and encryption domains, the v1 provider preamble and host-tool manifest, opaque token prefixes and public marker paths keep their historical bytes, so existing sessions, profiles and recovery journals continue unchanged.
+- HRA is renamed to Oompa. The package is `@hraness/oompa`, the command is `oompa`, the repository is `hraness/oompa`, and the public surfaces are `oompa.app` and `app.oompa.app`. The product mark is an orange circle. Oompa installs into its own `~/.bun/install/oompa` authority and publishes only the `oompa` command; an existing `hra` installation keeps running from its old root until removed. The control-plane state root, persisted schema names, hash and encryption domains, the v1 provider preamble and host-tool manifest, opaque token prefixes and public marker paths keep their historical bytes, so existing sessions, profiles and recovery journals continue unchanged.
 - `OOMPA_*` environment names replace `HRA_*`. `HRA_CONVEX_URL`, the Convex secrets and the scheduler lease variables remain accepted as legacy aliases; a contradictory pair refuses before any effect.
-- Attention email adds body version 2 with the Oompa sender, subject and `app.oompa.dev` links. Version 1 rows retry with their original bytes.
+- Attention email body version 3 uses `app.oompa.app` links. Earlier HRA and Oompa body versions retain their exact stored bytes on retries.
 - The local and cloud efficiency plugins are `oompa-local-efficiency` and `oompa-cloud-efficiency`; their bootstrap and repository adoption migrate the previous `hra-*` managed blocks, rule files, profile files and command names in place.
 - `oompa account list --provider codex|claude` returns a separately versioned cached account order, default marker, readiness and observation times without refreshing providers or changing selection. The unqualified listing is unchanged.
 - `oompa usage auto status|on|off|inherit` reads or changes the inherited default and per-provider overrides. Changes require an observed revision and caller-owned idempotency key. Effective Codex disable suppresses new reset-credit dispatches, including retries, while preserving uncertain attempts and already admitted operations.
 - Provider recovery preserves exact historical account, profile, effect and timestamp evidence. Terminal attachment acknowledgement, queued-input settlement and Claude launch-reservation cleanup fail closed when authority or prior-process custody cannot be proved.
 - Additive local storage migrations retain the admitted schema 50 predecessor and append the provider-usage and custody foundation through schema 60. Genuine historical fixtures and explicitly identified synthetic compatibility cases verify migration and refusal boundaries; they do not prove live provider acceptance.
-- Automatic account movement, managed-send forwarding, account order and activation commands, Claude native fallback, and the planned hosted/browser usage view remain unavailable. Existing explicit account selection and provider-specific platform limits are unchanged.
+- Automatic account movement, managed-send forwarding, account order and activation commands, Claude native fallback, and the planned live usage meter remain unavailable. Existing explicit account selection and provider-specific platform limits are unchanged.
 
 ## Release reliability follow-up (unreleased)
 
+- Source tests that open an empty control-plane store now copy one migrated current-schema template per test process instead of replaying the complete migration chain per test. The opt-in is explicit per fixture; historical fixture archives and every test that inspects the migration ledger, schema cohorts or first-open behaviour keep the real migration path, and a contract test proves the template is row-identical to a real migration under the same clock and time zone.
 - The npm provenance verifier includes stdin in its existing 60-second deadline and waits for the owned child, input and both output readers before reporting verification success. A failed operation gets a bounded five-second collection window; unproved collection remains a failure. Both release callers preserve the private TUF cache on every verification failure. Cryptographic identity checks, environment and byte bounds are unchanged. This source repair is not part of the immutable v0.7.1 artifact, and no evidence links the cleanup defect to that release's delayed registry visibility.
 - Current installation and status guidance records v0.7.1 admission while preserving daemon, hosted capacity and intended-target gates. The recovery runbook requires read-only reconciliation of exact public bytes and original provenance before complete same-run recovery, never artifact replacement or speculative republication.
 

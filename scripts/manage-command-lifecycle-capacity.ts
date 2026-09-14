@@ -16,8 +16,15 @@ import { ConvexHttpClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
 import { z } from "zod";
 
-import { SERVICE_TOTAL_QUOTA } from "../convex/quota";
-import { commandLifecycleCapacityVersion } from "../convex/validators";
+import {
+  AUTHORITY_REDUCTION_QUOTA_CEILINGS,
+  emptyAuthorityReductionQuotaCeilings,
+  SERVICE_TOTAL_QUOTA,
+} from "../convex/quota";
+import {
+  authorityReductionCapacityReservation,
+  commandLifecycleCapacityVersion,
+} from "../convex/validators";
 import { isUuidV7 } from "../src/cloud/contracts";
 import { createBoundedAuthorityFetch, type AuthorityFetcher } from "./bounded-authority-fetch";
 import {
@@ -75,6 +82,7 @@ const pageSize = 8;
 // A single table/state cannot exceed the service-wide record ceiling. Keep the
 // loop bounded while making every quota-valid deployment exhaustible.
 const maximumPagesPerScope = Math.ceil(SERVICE_TOTAL_QUOTA.records / pageSize);
+const maximumHeadroomPages = Math.ceil(SERVICE_TOTAL_QUOTA.identities / pageSize) + 1;
 const maximumRepairPasses = 4;
 const maximumExplicitRetirements = 64;
 const sourceCommitPattern = /^[0-9a-f]{40}$/u;
@@ -143,6 +151,82 @@ const authorityReductionHeadroomPage = z.object({
     || (value.mode === "repair" && value.capacityMissing !== 0)
   ) context.addIssue({ code: "custom", message: "authority_reduction_counts_invalid" });
 });
+const headroomCount = z.number().int().min(0).max(pageSize);
+const quotaCeilingCounts = z.object({
+  applicable: headroomCount,
+  bytesBlockedByLowerBound: headroomCount,
+  bytesUnknown: headroomCount,
+  recordsBlocked: headroomCount,
+}).strict().superRefine((value, context) => {
+  if (
+    value.recordsBlocked > value.applicable
+    || value.bytesBlockedByLowerBound + value.bytesUnknown !== value.applicable
+  ) context.addIssue({ code: "custom", message: "quota_ceiling_counts_invalid" });
+});
+export const authorityReductionQuotaDiagnosticPageSchema = z.object({
+  activationAuthorized: z.literal(false),
+  byteCost: z.literal("padding_lower_bound_only"),
+  capacityMissing: headroomCount,
+  ceilings: z.object({
+    device: quotaCeilingCounts, identity: quotaCeilingCounts, job: quotaCeilingCounts,
+    receipt: quotaCeilingCounts, security: quotaCeilingCounts,
+    serviceTotal: quotaCeilingCounts, userTotal: quotaCeilingCounts,
+  }).strict(),
+  consistency: z.literal("page_snapshot"),
+  continueCursor: z.string().max(4_096),
+  demand: z.object({
+    accountPairs: z.number().int().min(0).max(pageSize),
+    deviceQuartets: z.number().int().min(0).max(16 * pageSize),
+    paddingBytesLowerBound: z.number().int().min(0).max(66 * pageSize * 2_048),
+    totalRecords: z.number().int().min(0).max(66 * pageSize),
+  }).strict(),
+  evaluated: headroomCount,
+  isDone: z.boolean(),
+  kind: z.literal("authority_reduction_quota_diagnostic"),
+  orphanEligible: headroomCount,
+  orphanPending: headroomCount,
+  quotaAuthorityUnknown: headroomCount,
+  ready: headroomCount,
+  repairAuthorized: z.literal(false),
+  scanned: headroomCount,
+  schemaVersion: z.literal(1),
+  topologyBlocked: headroomCount,
+}).strict().superRefine((value, context) => {
+  const { accountPairs, deviceQuartets, paddingBytesLowerBound, totalRecords } = value.demand;
+  const { device, identity, job, receipt, security, serviceTotal, userTotal } = value.ceilings;
+  if (
+    value.ready + value.capacityMissing + value.topologyBlocked
+      + value.orphanPending + value.orphanEligible !== value.scanned
+    || value.evaluated + value.quotaAuthorityUnknown !== value.capacityMissing
+    || accountPairs > value.capacityMissing
+    || deviceQuartets > 16 * value.capacityMissing
+    || accountPairs + deviceQuartets < value.capacityMissing
+    || totalRecords !== 2 * accountPairs + 4 * deviceQuartets
+    || paddingBytesLowerBound !== totalRecords * authorityReductionCapacityReservation.length
+    || AUTHORITY_REDUCTION_QUOTA_CEILINGS.some((key) =>
+      value.ceilings[key].applicable > value.evaluated)
+    || job.applicable !== value.evaluated
+    || userTotal.applicable !== value.evaluated || serviceTotal.applicable !== value.evaluated
+    || identity.applicable > accountPairs
+    || identity.applicable < accountPairs - value.quotaAuthorityUnknown
+    || device.applicable > deviceQuartets
+    || device.applicable * 16 + value.quotaAuthorityUnknown * 16 < deviceQuartets
+    || device.applicable !== receipt.applicable || device.applicable !== security.applicable
+    || identity.applicable + device.applicable < value.evaluated
+    || accountPairs + deviceQuartets
+      < identity.applicable + device.applicable + value.quotaAuthorityUnknown
+  ) context.addIssue({ code: "custom", message: "quota_diagnostic_counts_invalid" });
+});
+
+type QuotaDiagnosticPage = z.infer<typeof authorityReductionQuotaDiagnosticPageSchema>;
+export type CommandHeadroomDiagnosticResult = Readonly<
+  Omit<QuotaDiagnosticPage, "consistency" | "continueCursor" | "isDone"> & {
+    consistency: "per_page_only";
+    pages: number;
+    state: "diagnostic_complete";
+  }
+>;
+
 const lifecycleRepair = z.object({
   state: z.enum(["absent", "terminal", "terminalized", "reserved", "exact"]),
 }).strict();
@@ -321,7 +405,7 @@ export type CommandCapacityActivationReceipt = z.infer<
   typeof commandCapacityActivationReceiptSchema
 >;
 
-type CapacityAction = "status" | "repair";
+type CapacityAction = "status" | "repair" | "diagnose-headroom";
 type CapacityArguments = Readonly<{
   action: CapacityAction;
   deployEvidencePath: string;
@@ -336,6 +420,7 @@ type CapacityFailureCode =
   | "authority_reduction_orphan_cleanup_eligible"
   | "authority_reduction_orphan_cleanup_pending"
   | "authority_reduction_topology_blocked"
+  | "headroom_diagnostic_incomplete"
   | "candidate_deploy_evidence_invalid"
   | "convex_target_refused"
   | "operation_binding_changed"
@@ -435,7 +520,7 @@ export function parseCommandCapacityArguments(arguments_: readonly string[]): Ca
   }
   const values = [...parsed.otherArguments];
   const action = values.shift();
-  if (action !== "status" && action !== "repair") {
+  if (action !== "status" && action !== "repair" && action !== "diagnose-headroom") {
     throw new CapacityOperatorError("usage_invalid");
   }
   let acknowledge = false;
@@ -521,7 +606,7 @@ export function parseCommandCapacityArguments(arguments_: readonly string[]): Ca
     || new Set(explicitRetirements.map((entry) =>
       `${entry.commandType}:${entry.commandPublicId}`))
       .size !== explicitRetirements.length
-    || (action === "status" && (
+    || (action !== "repair" && (
       execute
       || acknowledge
       || acknowledgeRetirement
@@ -804,9 +889,18 @@ type CapacityOptions = Readonly<{
   verifyTarget?: ConvexTargetVerifier;
 }>;
 
+export function manageCommandLifecycleCapacity(
+  options: CapacityOptions & Readonly<{ action: "diagnose-headroom" }>,
+): Promise<CommandHeadroomDiagnosticResult>;
+export function manageCommandLifecycleCapacity(
+  options: CapacityOptions & Readonly<{ action: "repair" | "status" }>,
+): Promise<CommandCapacityResult>;
+export function manageCommandLifecycleCapacity(
+  options: CapacityOptions,
+): Promise<CommandCapacityResult | CommandHeadroomDiagnosticResult>;
 export async function manageCommandLifecycleCapacity(
   options: CapacityOptions,
-): Promise<CommandCapacityResult> {
+): Promise<CommandCapacityResult | CommandHeadroomDiagnosticResult> {
   const requestedRetirements = options.explicitRetirements ?? [];
   const protectedPaths = [
     options.deployEvidencePath,
@@ -818,13 +912,14 @@ export async function manageCommandLifecycleCapacity(
       : [options.retirementEvidencePath, `${options.retirementEvidencePath}.intent`]),
   ];
   if (
-    !sourceCommitPattern.test(options.sourceCommit)
+    !["status", "repair", "diagnose-headroom"].includes(options.action)
+    || !sourceCommitPattern.test(options.sourceCommit)
     || !isAbsolute(options.deployEvidencePath)
     || (options.action === "repair"
       && (options.evidencePath === undefined || !isAbsolute(options.evidencePath)))
-    || (options.action === "status" && options.evidencePath !== undefined)
-    || (options.action === "status" && options.retirementEvidencePath !== undefined)
-    || (options.action === "status" && requestedRetirements.length !== 0)
+    || (options.action !== "repair" && options.evidencePath !== undefined)
+    || (options.action !== "repair" && options.retirementEvidencePath !== undefined)
+    || (options.action !== "repair" && requestedRetirements.length !== 0)
     || (options.retirementEvidencePath !== undefined
       && !isAbsolute(options.retirementEvidencePath))
     || (requestedRetirements.length > 0 && options.retirementEvidencePath === undefined)
@@ -1533,6 +1628,67 @@ export async function manageCommandLifecycleCapacity(
     }
   };
 
+  if (options.action === "diagnose-headroom") {
+    await proveBinding();
+    try {
+      const totals = {
+        capacityMissing: 0, evaluated: 0, orphanEligible: 0, orphanPending: 0,
+        quotaAuthorityUnknown: 0, ready: 0, scanned: 0, topologyBlocked: 0,
+      };
+      const demand = { accountPairs: 0, deviceQuartets: 0, paddingBytesLowerBound: 0, totalRecords: 0 };
+      const ceilings = emptyAuthorityReductionQuotaCeilings();
+      const cursors = new Set<string>();
+      let cursor: string | null = null;
+      for (let pageIndex = 0; pageIndex < maximumHeadroomPages; pageIndex += 1) {
+        const page: QuotaDiagnosticPage = await invokeParsed(
+          "commandLifecycle:auditAuthorityReductionQuotaCeilingsPage",
+          { expectedRuntimeAttestation: candidate.after, paginationOpts: { cursor, numItems: pageSize } },
+          "command-capacity-headroom-diagnostic",
+          authorityReductionQuotaDiagnosticPageSchema,
+        );
+        for (const key of Object.keys(totals) as (keyof typeof totals)[]) totals[key] += page[key];
+        if (totals.scanned > SERVICE_TOTAL_QUOTA.identities) {
+          throw new CapacityOperatorError("headroom_diagnostic_incomplete");
+        }
+        for (const key of Object.keys(demand) as (keyof typeof demand)[]) demand[key] += page.demand[key];
+        for (const key of AUTHORITY_REDUCTION_QUOTA_CEILINGS) {
+          const target = ceilings[key];
+          const source = page.ceilings[key];
+          target.applicable += source.applicable;
+          target.bytesBlockedByLowerBound += source.bytesBlockedByLowerBound;
+          target.bytesUnknown += source.bytesUnknown;
+          target.recordsBlocked += source.recordsBlocked;
+        }
+        if (page.isDone) {
+          return {
+            ...totals,
+            activationAuthorized: false,
+            byteCost: "padding_lower_bound_only",
+            ceilings,
+            consistency: "per_page_only",
+            demand,
+            kind: "authority_reduction_quota_diagnostic",
+            pages: pageIndex + 1,
+            repairAuthorized: false,
+            schemaVersion: 1,
+            state: "diagnostic_complete",
+          };
+        }
+        if (page.continueCursor.length === 0 || cursors.has(page.continueCursor)) {
+          throw new CapacityOperatorError("provider_result_invalid");
+        }
+        cursors.add(page.continueCursor);
+        cursor = page.continueCursor;
+      }
+      throw new CapacityOperatorError("headroom_diagnostic_incomplete");
+    } finally {
+      // A poisoned owner must retain its original recovery error and archive;
+      // a source recheck cannot replace uncertain collection with source drift.
+      guard.assertMayProceed();
+      await proveBinding();
+    }
+  }
+
   if (options.action === "status") {
     const observed = await scan(false);
     return {
@@ -1875,6 +2031,7 @@ export async function manageCommandLifecycleCapacity(
   }
   throw new CapacityOperatorError("readiness_debt_remaining");
   } finally {
+    if (options.action === "diagnose-headroom") guard.assertMayProceed();
     await providerSource.cleanup();
   }
 }
@@ -1931,7 +2088,7 @@ export async function executeCommandLifecycleCapacity(options: ExecuteOptions): 
       ...result,
       candidateDeployEvidence: parsed.deployEvidencePath,
       sourceCommit: parsed.sourceCommit,
-      version: 2,
+      version: result.state === "diagnostic_complete" ? 1 : 2,
     })}\n`);
     return 0;
   } catch (error: unknown) {

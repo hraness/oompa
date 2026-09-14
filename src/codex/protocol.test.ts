@@ -1735,12 +1735,12 @@ describe("runtime capability resolution", () => {
       serviceTier: null,
     });
     expect(resolvePreset(capabilities, "high", presetRequirements.high, true)).toMatchObject({
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       effort: "max",
       serviceTier: "priority",
     });
     expect(resolvePreset(capabilities, "ultra", presetRequirements.ultra, false)).toMatchObject({
-      model: "gpt-5.6-sol",
+      model: "gpt-6-astra",
       effort: "ultra",
     });
   });
@@ -1780,7 +1780,7 @@ describe("runtime capability resolution", () => {
     ];
     fc.assert(fc.property(fc.shuffledSubarray(catalog, { minLength: 5, maxLength: 5 }), (models) => {
       expect(resolvePreset({ ...capabilities, models }, "low", presetRequirements.low, false).model).toBe("gpt-5.6-luna");
-      expect(resolvePreset({ ...capabilities, models }, "high", presetRequirements.high, false).model).toBe("gpt-5.6-sol");
+      expect(resolvePreset({ ...capabilities, models }, "high", presetRequirements.high, false).model).toBe("gpt-6-astra");
     }));
     const lookalikesOnly = {
       ...capabilities,

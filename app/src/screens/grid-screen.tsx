@@ -10,16 +10,14 @@ import {
   type ReactNode,
 } from "react";
 
-import { ComposerAttachmentChips } from "../components/attachment-chips";
-import { AttachIcon, SettingsIcon } from "../components/icons";
+import { ComposerTextarea } from "../components/composer-textarea";
+import { SettingsIcon } from "../components/icons";
 import { SessionCard } from "../components/session-card";
-import { ChoiceGroup } from "../components/settings-list";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import { UsageMeter } from "../components/usage-meter";
 import { useCardOrder } from "../data/card-order";
-import { useSubmitCommand } from "../data/commands";
-import { useComposerAttachments } from "../data/composer-attachments";
-import { holdSentAttachment } from "../data/sent-attachments";
+import { useAutomaticEffort } from "../data/automatic-effort";
+import { browserStartDecision, browserStartEffortHint } from "../model/automatic-effort";
 import {
   deviceCommandCommittedRowUnavailableMessage,
   DeviceCommandResponseInvalidError,
@@ -28,30 +26,16 @@ import {
 } from "../data/device-commands";
 import { useDeviceRegistries } from "../data/registry";
 import { useSessionHeads } from "../data/session-heads";
-import { useCustody } from "../custody/custody-context";
 import { navigate } from "../routing/router";
-import { sessionRoute, settingsRoute } from "../routing/route";
+import { settingsRoute } from "../routing/route";
 import {
-  defaultSessionStartPreset,
-  defaultSessionStartPresetForProvider,
   deviceCommandNotice,
   sessionStartCommand,
   sessionStartTargetHint,
   sessionStartTargetLabel,
   sessionStartTargets,
-  type PresetChoice,
 } from "../model/device-commands";
-import { presetLabels } from "../model/settings-commands";
-import {
-  attachmentAcceptAttribute,
-  attachmentSendSupported,
-  buildSendPayload,
-} from "../model/attachments";
-import {
-  orderSessionCards,
-  resolveComposerTarget,
-  type SessionCardSummary,
-} from "../model/session-view";
+import { orderSessionCards, type SessionCardSummary } from "../model/session-view";
 import { gridScreenStyles } from "./grid-screen.stylex";
 
 function sameSummary(left: SessionCardSummary, right: SessionCardSummary): boolean {
@@ -63,22 +47,6 @@ function sameSummary(left: SessionCardSummary, right: SessionCardSummary): boole
     && left.state === right.state
     && left.title === right.title;
 }
-
-const codexPresetOptions: readonly Readonly<{ label: string; value: PresetChoice }>[] = [
-  { label: presetLabels.low, value: "low" },
-  { label: presetLabels.high, value: "high" },
-  { label: presetLabels.ultra, value: "ultra" },
-];
-const claudePresetOptions: readonly Readonly<{ label: string; value: PresetChoice }>[] = [
-  { label: presetLabels["fable-max"], value: "fable-max" },
-];
-
-const presetOptionsForProvider = (
-  provider: "codex" | "claude",
-): readonly Readonly<{ label: string; value: PresetChoice }>[] =>
-  provider === "claude"
-    ? claudePresetOptions
-    : codexPresetOptions;
 
 /** The card under the pointer during a drag, resolved from the DOM. */
 function cardUnderPointer(clientX: number, clientY: number): string | null {
@@ -102,40 +70,25 @@ function cardUnderPointer(clientX: number, clientY: number): string | null {
  * arrangement is a sequence of session ids, not a set of coordinates. Every
  * visual state of the drag is a class.
  *
- * The composer has two modes. With a session selected it steers that session,
- * as it has since W2. With nothing selected it starts a real session on a
- * machine through the `session_start` device command, addressed by the account
- * and project public ids the device registry projects — never by a path.
- *
- * Attachments belong to the steer mode only, and the paste, the drop, and the
- * picker are wired up only there. A start is a device command carrying a prompt,
- * with no field for a file and no session yet to hold one, so a reader who
- * attaches something while starting is told to open the session and attach it
- * there rather than having it dropped in silence.
+ * The composer at the top only starts sessions: each card carries its own
+ * conversation and follow-up box. A start is a device command carrying a
+ * prompt and addressed to a machine; the account, preset and project are the
+ * machine's defaults, resolved by `sessionStartTargets`, never by a path. The
+ * browser may choose Max effort once for a conservatively bounded start. There is
+ * no field for a file, so attachments belong to the card composer only.
  */
-export function GridScreen({
-  onSelect,
-  selectedSessionId,
-}: Readonly<{
-  onSelect: (sessionPublicId: string) => void;
-  selectedSessionId: string | null;
-}>): ReactNode {
-  const custody = useCustody();
+export function GridScreen(): ReactNode {
   const { heads, isLoading, loadMore, status } = useSessionHeads();
-  const submit = useSubmitCommand();
   const submitDeviceCommand = useSubmitDeviceCommand();
   const registries = useDeviceRegistries();
   const cardOrder = useCardOrder();
+  const automaticEffort = useAutomaticEffort();
 
   const [summaries, setSummaries] = useState<Readonly<Record<string, SessionCardSummary>>>({});
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [targetKey, setTargetKey] = useState<string | null>(null);
-  const [projectPublicId, setProjectPublicId] = useState<string | null>(null);
-  const [preset, setPreset] = useState<PresetChoice>(defaultSessionStartPreset);
-  const attach = useComposerAttachments();
-  const pickerRef = useRef<HTMLInputElement>(null);
 
   const handleUnavailable = useCallback(() => {
     setNotice(deviceCommandCommittedRowUnavailableMessage);
@@ -176,39 +129,16 @@ export function GridScreen({
     () => orderSessionCards(known, cardOrder.order),
     [cardOrder.order, known],
   );
-  const steerTarget = useMemo(
-    () => selectedSessionId === null
-      ? null
-      : resolveComposerTarget(ordered, selectedSessionId),
-    [ordered, selectedSessionId],
-  );
-  const starting = selectedSessionId === null;
 
   const targets = useMemo(() => sessionStartTargets(registries.machines), [registries.machines]);
+  // The picker follows the registry: a machine that disappears between renders
+  // is replaced rather than left addressing something gone.
   const startTarget = useMemo(
-    () => targets.find((entry) =>
-      `${entry.targetDevicePublicId}:${entry.accountPublicId}` === targetKey)
+    () => targets.find((entry) => entry.targetDevicePublicId === targetKey)
       ?? targets[0]
       ?? null,
     [targetKey, targets],
   );
-  const presetOptions = startTarget === null
-    ? codexPresetOptions
-    : presetOptionsForProvider(startTarget.provider);
-  // The picker follows the registry: an account or project that disappears
-  // between renders is replaced rather than left addressing something gone.
-  const project = useMemo(
-    () => startTarget?.projects.find((entry) => entry.publicId === projectPublicId)
-      ?? startTarget?.projects[0]
-      ?? null,
-    [projectPublicId, startTarget],
-  );
-
-  useEffect(() => {
-    if (startTarget === null) return;
-    if (presetOptions.some((option) => option.value === preset)) return;
-    setPreset(defaultSessionStartPresetForProvider(startTarget.provider));
-  }, [preset, presetOptions, startTarget]);
 
   // Once the started session shows up in the grid, the command notice has done
   // its job and the composer goes quiet again.
@@ -220,76 +150,33 @@ export function GridScreen({
     return undefined;
   }, [heads.length, startCommand?.state]);
 
-  const open = useCallback((sessionPublicId: string) => {
-    onSelect(sessionPublicId);
-    navigate(sessionRoute(sessionPublicId));
-  }, [onSelect]);
+  const canSubmit = message.trim().length > 0 && !sending && startTarget !== null;
+  const startDecision = useMemo(() => startTarget === null ? null : browserStartDecision({
+    automatic: automaticEffort.enabled, provider: startTarget.provider, prompt: message.trim(),
+  }), [automaticEffort.enabled, startTarget, message]);
 
-  const canSubmit = message.trim().length > 0
-    && !sending
-    && !attach.busy
-    && (starting
-      ? startTarget !== null && project !== null
-      : steerTarget !== null && headById.get(steerTarget.publicId) !== undefined);
-
-  const send = (event: { preventDefault: () => void }) => {
-    event.preventDefault();
+  const start = () => {
     const text = message.trim();
-    if (!canSubmit) return;
-    // A new session is a device command carrying a prompt and nothing else, so
-    // there is nowhere for an attachment to ride. Say so rather than dropping
-    // it silently: the reader can open the session and attach there.
-    if (starting && attach.attachments.length > 0) {
-      setNotice("A new session starts with text only. Open it, then attach files there.");
-      return;
-    }
-    if (attach.sendRefusal !== null) {
-      setNotice(attach.sendRefusal);
-      return;
-    }
-    if (attach.attachments.length > 0 && !attachmentSendSupported()) {
-      setNotice("This build does not carry attachments to the machine yet.");
-      return;
-    }
+    if (!canSubmit || startDecision === null) return;
+    // Capture one exact decision with this prompt and command. Uncertain
+    // outcomes remain tracked by their original command id; never reroute them.
+    const decision = startDecision;
     setSending(true);
     setNotice(null);
-    const run = starting && startTarget !== null && project !== null
-      ? submitDeviceCommand({
-          payload: sessionStartCommand({
-            accountPublicId: startTarget.accountPublicId,
-            preset,
-            projectPublicId: project.publicId,
-            prompt: text,
-            provider: startTarget.provider,
-          }),
-          targetDevicePublicId: startTarget.targetDevicePublicId,
-        }).then((commandPublicId) => {
-          setStartCommandHandle({ publicId: commandPublicId, responseValidated: true });
-          setMessage("");
-        })
-      : (() => {
-          const head = steerTarget === null ? undefined : headById.get(steerTarget.publicId);
-          if (head === undefined) return Promise.resolve();
-          const attachments = attach.attachments;
-          return submit({
-            executionDevicePublicId: head.executionDevicePublicId,
-            payload: buildSendPayload({ attachments, message: text }),
-            sessionPublicId: head.publicId,
-          }).then(() => {
-            for (const item of attachments) {
-              if (item.kind !== "image") continue;
-              holdSentAttachment({
-                bytes: item.bytes,
-                digest: item.digest,
-                mediaType: item.mediaType,
-              });
-            }
-            setMessage("");
-            attach.clear();
-            setNotice(`Sent to ${steerTarget?.title ?? "the session"}.`);
-          });
-        })();
-    void run
+    void submitDeviceCommand({
+      payload: sessionStartCommand({
+        accountPublicId: startTarget.accountPublicId,
+        preset: decision.preset,
+        projectPublicId: startTarget.projectPublicId,
+        prompt: text,
+        provider: startTarget.provider,
+      }),
+      targetDevicePublicId: startTarget.targetDevicePublicId,
+    })
+      .then((commandPublicId) => {
+        setStartCommandHandle({ publicId: commandPublicId, responseValidated: true });
+        setMessage("");
+      })
       .catch((failure: unknown) => {
         if (failure instanceof DeviceCommandResponseInvalidError) {
           // The mutation resolved, so the generated command may already run
@@ -397,13 +284,9 @@ export function GridScreen({
     };
   }, [dragging, moveCard]);
 
-  const hint = starting
-    ? startTarget === null || project === null
-      ? "No machine here can start a session yet. Sign an account in on a machine, add a project, and leave `oompa remote allow device-commands` set."
-      : sessionStartTargetHint(startTarget)
-    : steerTarget === null
-      ? "Nothing to send to yet."
-      : `Sends to ${steerTarget.title}. Clear the selection to start a new session.`;
+  const hint = startTarget === null
+    ? "No machine here can start a session yet. Sign an account in on a machine, run `oompa init --yes`, and leave `oompa remote allow device-commands` set."
+    : `${sessionStartTargetHint({ ...startTarget, preset: startDecision?.preset ?? startTarget.preset })} ${startDecision === null ? "" : browserStartEffortHint(startDecision)}`;
 
   return (
     <div {...stylex.props(gridScreenStyles.root)}>
@@ -421,90 +304,45 @@ export function GridScreen({
           </Button>
           <form
             {...stylex.props(gridScreenStyles.form)}
-            onDragLeave={attach.onDragLeave}
-            onDragOver={starting ? undefined : attach.onDragOver}
-            onDrop={starting ? undefined : attach.onDrop}
-            onSubmit={send}
+            onSubmit={(event) => {
+              event.preventDefault();
+              start();
+            }}
           >
-            <input
-              accept={attachmentAcceptAttribute}
-              aria-hidden="true"
-              {...stylex.props(gridScreenStyles.fileInput)}
-              multiple
-              onChange={attach.onPick}
-              ref={pickerRef}
-              tabIndex={-1}
-              type="file"
-            />
-            {starting ? null : (
-              <Button
-                aria-label="Attach a file"
-                disabled={steerTarget === null}
-                onClick={() => { pickerRef.current?.click(); }}
-                size="icon"
-                variant="ghost"
-              >
-                <AttachIcon />
-              </Button>
-            )}
-            <Input
-              aria-label={starting ? "Start a new session" : "Send a follow-up"}
-              disabled={starting ? startTarget === null : steerTarget === null}
-              onChange={(event) => { setMessage(event.target.value); }}
-              onPaste={starting ? undefined : attach.onPaste}
-              placeholder={starting ? "Start a new session" : "Send a follow-up"}
+            <ComposerTextarea
+              aria-label="Start a new session"
+              disabled={startTarget === null}
+              onChange={setMessage}
+              onSubmit={start}
+              placeholder="Start a new session. Shift+Enter for a new line."
               value={message}
             />
             <Button disabled={!canSubmit} type="submit">
-              {starting ? "Start" : "Send"}
+              Start
             </Button>
           </form>
-          <Button onClick={custody.lock} size="small" variant="ghost">Lock</Button>
           <AppearanceButton />
         </div>
-        {starting && startTarget !== null ? (
-          <div {...stylex.props(gridScreenStyles.controls)}>
+        <div {...stylex.props(gridScreenStyles.controls)}>
+          {targets.length > 0 ? (
             <label {...stylex.props(gridScreenStyles.label)}>
-              <span>Account</span>
+              <span>Machine</span>
               <select
                 {...stylex.props(gridScreenStyles.select)}
-                onChange={(event) => {
-                  setTargetKey(event.target.value);
-                  setProjectPublicId(null);
-                }}
-                value={`${startTarget.targetDevicePublicId}:${startTarget.accountPublicId}`}
+                onChange={(event) => { setTargetKey(event.target.value); }}
+                value={startTarget?.targetDevicePublicId ?? ""}
               >
                 {targets.map((entry) => (
-                  <option
-                    key={`${entry.targetDevicePublicId}:${entry.accountPublicId}`}
-                    value={`${entry.targetDevicePublicId}:${entry.accountPublicId}`}
-                  >
+                  <option key={entry.targetDevicePublicId} value={entry.targetDevicePublicId}>
                     {sessionStartTargetLabel(entry)}
                   </option>
                 ))}
               </select>
             </label>
-            <label {...stylex.props(gridScreenStyles.label)}>
-              <span>Project</span>
-              <select
-                {...stylex.props(gridScreenStyles.select)}
-                onChange={(event) => { setProjectPublicId(event.target.value); }}
-                value={project?.publicId ?? ""}
-              >
-                {startTarget.projects.map((entry) => (
-                  <option key={entry.publicId} value={entry.publicId}>{entry.label}</option>
-                ))}
-              </select>
-            </label>
-            <ChoiceGroup
-              label="Model"
-              onSelect={setPreset}
-              options={presetOptions}
-              value={preset}
-            />
-          </div>
-        ) : null}
-        <p {...stylex.props(gridScreenStyles.quiet)}>{hint}</p>
+          ) : null}
+          <p {...stylex.props(gridScreenStyles.quiet)}>{hint}</p>
+        </div>
+        <UsageMeter />
         {startNotice === null ? null : (
           <p
             {...stylex.props(startNotice.tone === "error" ? gridScreenStyles.danger : gridScreenStyles.quiet)}
@@ -521,10 +359,6 @@ export function GridScreen({
         {notice === null ? null : (
           <p {...stylex.props(gridScreenStyles.quiet)} role="status">{notice}</p>
         )}
-        {attach.notice === null ? null : (
-          <p {...stylex.props(gridScreenStyles.danger)} role="status">{attach.notice}</p>
-        )}
-        <ComposerAttachmentChips attachments={attach.attachments} onRemove={attach.remove} />
       </header>
 
       <main {...stylex.props(gridScreenStyles.main)}>
@@ -533,11 +367,9 @@ export function GridScreen({
         ) : null}
         {!isLoading && heads.length === 0 ? (
           <p {...stylex.props(gridScreenStyles.quietBody)}>
-            {!starting
-              ? "No sessions are available for a follow-up. Check your machines and accounts in Settings."
-              : startTarget === null || project === null
-                ? "No sessions yet. Check your machines and accounts in Settings before starting a session."
-                : "No sessions yet. Type a prompt above to start one on a machine."}
+            {startTarget === null
+              ? "No sessions yet. Check your machines and accounts in Settings before starting a session."
+              : "No sessions yet. Type a prompt above to start one on a machine."}
           </p>
         ) : null}
         <div {...stylex.props(gridScreenStyles.cardGrid)}>
@@ -545,7 +377,6 @@ export function GridScreen({
             <SessionCard
               head={head}
               key={head.publicId}
-              onOpen={open}
               onSummary={reportSummary}
               ordering={{
                 arranged: cardOrder.arranged,
@@ -559,7 +390,6 @@ export function GridScreen({
                 onMove: moveInDisplayedOrder,
                 onReset: cardOrder.reset,
               }}
-              selected={head.publicId === selectedSessionId}
             />
           ))}
         </div>

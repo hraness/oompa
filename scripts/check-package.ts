@@ -49,7 +49,7 @@ const packageSchema = z.object({
   engines: z.object({ bun: z.literal("1.3.14") }).strict(),
   exports: z.object({ ".": z.literal("./src/index.ts") }).strict(),
   files: z.array(z.string()).min(1),
-  homepage: z.literal("https://oompa.dev"),
+  homepage: z.literal("https://oompa.app"),
   license: z.literal("MIT"),
   name: z.literal("@hraness/oompa"),
   publishConfig: z.object({
@@ -61,7 +61,7 @@ const packageSchema = z.object({
     url: z.literal("git+https://github.com/hraness/oompa.git"),
   }).strict(),
   scripts: z.record(z.string(), z.string()),
-  version: z.literal("0.8.0"),
+  version: z.literal("0.8.2"),
 }).passthrough();
 
 type ProcessResult = Readonly<{

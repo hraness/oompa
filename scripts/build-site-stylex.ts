@@ -45,12 +45,12 @@ function record(value: unknown): Record<string, unknown> {
 /** Read Vite's actual RollupOutput, never a guessed staging inventory.
  * Vite's single-stylesheet mode requires a JavaScript entry importing CSS.
  * Its one empty entry stays bound to the graph but is never published. */
-export function snapshotSiteFoundation(value: unknown, expectedFontHashes: readonly string[], expectedEntrySource: string): SiteFoundation {
+export function snapshotSiteFoundation(value: unknown, expectedFontHashes: readonly string[], expectedEntrySource: string, expectedImageHashes: readonly string[]): SiteFoundation {
   assert.ok(isAbsolute(expectedEntrySource), "Static foundation entry identity must be absolute");
   const outputs = Array.isArray(value) ? value : [value];
   assert.equal(outputs.length, 1, "Static foundation must have one Rollup output");
   const output = record(outputs[0]).output;
-  assert.ok(Array.isArray(output) && output.length === 15, "Static foundation must emit one empty entry, one CSS file and thirteen WOFF2 files");
+  assert.ok(Array.isArray(output) && output.length === 18, "Static foundation must emit one empty entry, one CSS file, fourteen WOFF2 files and two exact preset SVGs");
   let privateEntryPath: string | undefined;
   const artifacts = output.map((value): SiteArtifact => {
     const item = record(value);
@@ -68,7 +68,7 @@ export function snapshotSiteFoundation(value: unknown, expectedFontHashes: reado
       return artifact.parse({ path: item.fileName, bytes: Buffer.byteLength(item.code), sha256: hash(item.code) });
     }
     assert.equal(item.type, "asset", "Unexpected static foundation output type");
-    assert.match(item.fileName, /^assets\/[A-Za-z0-9_.[\]-]+\.(?:css|woff2)$/u);
+    assert.match(item.fileName, /^assets\/[A-Za-z0-9_.[\]-]+\.(?:css|woff2|svg)$/u);
     assert.ok(typeof item.source === "string" || item.source instanceof Uint8Array);
     const bytes = typeof item.source === "string" ? Buffer.byteLength(item.source) : item.source.byteLength;
     assert.ok(bytes <= 16 * 1024 * 1024, "Static foundation asset exceeded its bound");
@@ -78,12 +78,19 @@ export function snapshotSiteFoundation(value: unknown, expectedFontHashes: reado
   assert.equal(new Set(artifacts.map(({ path }) => path)).size, artifacts.length);
   const css = artifacts.filter(({ path }) => path.endsWith(".css"));
   assert.equal(css.length, 1, "Static site must have one complete foundation");
-  assert.equal(expectedFontHashes.length, 13, "Static site font scope changed");
+  assert.equal(expectedFontHashes.length, 14, "Static site font scope changed");
   expectedFontHashes.forEach((value) => sha.parse(value));
   assert.deepEqual(
     artifacts.filter(({ path }) => path.endsWith(".woff2")).map(({ sha256 }) => sha256).sort(),
     [...expectedFontHashes].sort(),
     "Compiled fonts differ from the complete approved WOFF2 inventory",
+  );
+  assert.equal(expectedImageHashes.length, 2, "Static marketing field scope changed");
+  expectedImageHashes.forEach((value) => sha.parse(value));
+  assert.deepEqual(
+    artifacts.filter(({ path }) => path.endsWith(".svg")).map(({ sha256 }) => sha256).sort(),
+    [...expectedImageHashes].sort(),
+    "Compiled marketing field differs from the exact approved SVG inventory",
   );
   assert.ok(css[0] !== undefined);
   return { cssPath: `graphs/foundation/${css[0].path}`, privateEntryPath, artifacts };
@@ -137,20 +144,20 @@ export function prepareSiteDocument(html: string, foundationPath: string): strin
 }
 
 /** Admit only the closed captured renderer surface, never an arbitrary path map. */
-export function captureSiteDocuments(value: unknown, environment: Readonly<Record<string, string | undefined>>): ReadonlyMap<string, string> {
+export function captureSiteDocuments(value: unknown): ReadonlyMap<string, string> {
   const renderers = record(value);
   const documents = new Map<string, string>();
   for (const [index, name] of ["renderSiteHtml", "renderPrivacyHtml", "renderPreviewHtml"].entries()) {
     const render: unknown = Object.getOwnPropertyDescriptor(renderers, name)?.value;
     const path = routes[index];
     assert.ok(typeof render === "function" && path !== undefined, "Captured renderer export changed");
-    const html = (render as (content: undefined, environment: Readonly<Record<string, string | undefined>>) => unknown)(undefined, environment);
+    const html = (render as (content: undefined) => unknown)(undefined);
     assert.equal(typeof html, "string", "Static renderer must return an HTML string");
     documents.set(path, html as string);
   }
   const renderDocs: unknown = Object.getOwnPropertyDescriptor(renderers, "renderDocsPages")?.value;
   assert.ok(typeof renderDocs === "function", "Captured documentation renderer export changed");
-  const docs = record((renderDocs as (environment: Readonly<Record<string, string | undefined>>) => unknown)(environment));
+  const docs = record((renderDocs as () => unknown)());
   assert.equal(Object.getPrototypeOf(docs), Object.prototype, "Documentation renderer must return an ordinary route map");
   const descriptors = Object.getOwnPropertyDescriptors(docs);
   assert.deepEqual(Reflect.ownKeys(descriptors).sort(), [...docsRoutes].sort(), "Documentation renderer routes changed");
@@ -174,8 +181,8 @@ export type SiteStylexOutput = Readonly<{
  * in the task's ignored build directory for diagnosis. */
 export async function buildSiteStylex(options: Readonly<{
   sourceRoot: string;
-  environment: Readonly<Record<string, string | undefined>>;
   fonts: readonly Readonly<{ path: string; bytes: Uint8Array }>[];
+  images: readonly Readonly<{ path: string; bytes: Uint8Array }>[];
 }>): Promise<SiteStylexOutput> {
   const root = await realpath(options.sourceRoot);
   const temporaryRoot = join(root, "tmp");
@@ -202,7 +209,7 @@ export async function buildSiteStylex(options: Readonly<{
     // Relative URLs survive the finalized graphs/foundation/ projection.
     base: "./", configFile: false, envFile: false, mode: "production",
     plugins: [stylexVite({ generation, graphId: "foundation", rootDirectory: root })],
-  }), expectedFonts, join(root, "site/foundation.ts"));
+  }), expectedFonts, join(root, "site/foundation.ts"), options.images.map(({ bytes }) => hash(bytes)).sort());
   const foundationPath = foundation.cssPath;
   const renderer = await collectBunStylexGraph({
     build: { minify: true, sourcemap: "none" }, generation, graphId: "renderer", rootDirectory: root,
@@ -214,7 +221,7 @@ export async function buildSiteStylex(options: Readonly<{
   const rendererRoot = join(generation.directory, renderer.outputRoot);
   assert.deepEqual(await artifactForFile(rendererRoot, entry.path), entry);
   const module: unknown = await import(pathToFileURL(join(rendererRoot, entry.path)).href);
-  for (const [path, html] of captureSiteDocuments(module, options.environment)) {
+  for (const [path, html] of captureSiteDocuments(module)) {
     const prepared = await prepareStylexProducedTemplate(generation, path);
     await writeFile(prepared.sourcePath, prepareSiteDocument(html, foundationPath), { flag: "wx", mode: 0o644 });
     await sealStylexProducedTemplate(generation, path);

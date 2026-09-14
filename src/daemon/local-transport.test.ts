@@ -239,7 +239,7 @@ const sourceSemanticLocalCommands = (): readonly LocalCommand[] => [
     provider: "codex",
     preset: "high",
     fast: false,
-    presetContract: 1,
+    presetContract: 2,
   }),
   parseLocalCommand({
     kind: "session.preset",
@@ -251,13 +251,13 @@ const sourceSemanticLocalCommands = (): readonly LocalCommand[] => [
     session: localContractSessionId,
     provider: "codex",
     preset: "high",
-    presetContract: 1,
+    presetContract: 2,
   }),
   parseLocalCommand({
     kind: "session.switch",
     session: localContractSessionId,
     provider: "codex",
-    presetContract: 1,
+    presetContract: 2,
   }),
   declaredHighWorkCreateCommand(),
   existingHighRouteTaskAddCommand(),
@@ -464,7 +464,7 @@ describe("local daemon transport", () => {
         });
       }
       for (const request of requests.slice(0, affected.length)) {
-        expect(request.presetContract).toBe(1);
+        expect(request.presetContract).toBe(2);
       }
       for (const request of requests.slice(affected.length)) {
         expect(Object.hasOwn(request, "presetContract")).toBe(false);
@@ -509,7 +509,7 @@ describe("local daemon transport", () => {
     const affected = sourceSemanticLocalCommands();
     for (const command of affected) {
       expect(await callRawLocalDaemon(paths, envelope(command))).toMatchObject({ ok: false });
-      expect(await callRawLocalDaemon(paths, envelope(command, 2))).toMatchObject({ ok: false });
+      expect(await callRawLocalDaemon(paths, envelope(command, 1))).toMatchObject({ ok: false });
     }
     const oldUnauthoredStart = parseLocalCommand({
       account: localContractAccountId,
@@ -520,34 +520,34 @@ describe("local daemon transport", () => {
     });
     expect(await callRawLocalDaemon(paths, envelope(oldUnauthoredStart)))
       .toMatchObject({ ok: false });
-    expect(await callRawLocalDaemon(paths, envelope(oldUnauthoredStart, 1)))
+    expect(await callRawLocalDaemon(paths, envelope(oldUnauthoredStart, 2)))
       .toMatchObject({ ok: false });
     expect(handled).toEqual([]);
 
     for (const command of affected) {
-      expect(await callRawLocalDaemon(paths, envelope(command, 1))).toMatchObject({ ok: true });
+      expect(await callRawLocalDaemon(paths, envelope(command, 2))).toMatchObject({ ok: true });
     }
     const affectedHandled = handled.length;
     expect(affectedHandled).toBe(affected.length);
 
     const staleAuthoredStart = parseLocalCommand({
       ...affected[0]!,
-      presetContract: 2,
+      presetContract: 1,
     });
-    expect(await callRawLocalDaemon(paths, envelope(staleAuthoredStart, 1)))
+    expect(await callRawLocalDaemon(paths, envelope(staleAuthoredStart, 2)))
       .toMatchObject({ ok: true });
     expect(handled.at(-1)).toEqual(staleAuthoredStart);
-    expect(await callRawLocalDaemon(paths, envelope(staleAuthoredStart, 2)))
+    expect(await callRawLocalDaemon(paths, envelope(staleAuthoredStart, 1)))
       .toMatchObject({ ok: false });
 
     const staleAuthoredSwitch = parseLocalCommand({
       ...affected[2]!,
-      presetContract: 2,
+      presetContract: 1,
     });
-    expect(await callRawLocalDaemon(paths, envelope(staleAuthoredSwitch, 1)))
+    expect(await callRawLocalDaemon(paths, envelope(staleAuthoredSwitch, 2)))
       .toMatchObject({ ok: true });
     expect(handled.at(-1)).toEqual(staleAuthoredSwitch);
-    expect(await callRawLocalDaemon(paths, envelope(staleAuthoredSwitch, 2)))
+    expect(await callRawLocalDaemon(paths, envelope(staleAuthoredSwitch, 1)))
       .toMatchObject({ ok: false });
 
     const stable = stableLocalCommands();
@@ -555,13 +555,15 @@ describe("local daemon transport", () => {
       expect(await callRawLocalDaemon(paths, envelope(command))).toMatchObject({ ok: true });
     }
     expect(handled).toHaveLength(affected.length + stable.length + 2);
-    expect(await callRawLocalDaemon(paths, envelope(stable[2]!, 1))).toMatchObject({ ok: false });
+    expect(await callRawLocalDaemon(paths, envelope(stable[2]!, 2))).toMatchObject({ ok: false });
     expect(handled).toHaveLength(affected.length + stable.length + 2);
 
+    // The envelope marker is the build's active contract (2, Astra) even when
+    // the Work document itself declares its own route contract.
     const staleV2 = versionedWorkCommand(declaredHighWorkCreateCommand(), 2);
-    expect(await callRawLocalDaemon(paths, envelope(staleV2, 1))).toMatchObject({ ok: true });
+    expect(await callRawLocalDaemon(paths, envelope(staleV2, 2))).toMatchObject({ ok: true });
     expect(handled.at(-1)).toEqual(staleV2);
-    expect(await callRawLocalDaemon(paths, envelope(staleV2, 2))).toMatchObject({ ok: false });
+    expect(await callRawLocalDaemon(paths, envelope(staleV2, 1))).toMatchObject({ ok: false });
 
     const stableV2 = versionedWorkCommand(existingWorkJoinCommand());
     expect(await callRawLocalDaemon(paths, envelope(stableV2))).toMatchObject({ ok: true });

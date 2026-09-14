@@ -87,7 +87,8 @@ session ID. The new process is held under durable process authority.
   and personal Claude runtime scopes are fenced independently.
 - Every admitted session operation resolves both the personal runtime port and
   the personal provider home from its private binding. Account login, logout,
-  usage, plugins, and Desktop switching continue to use only isolated homes.
+  usage, and plugins continue to use only isolated homes (Desktop switching
+  was removed on 2026-09-10).
 - The installation boundary injects personal provider homes. Production uses
   the current user's canonical homes; live acceptance uses only fixture-owned
   homes and therefore cannot read or mutate the operator's provider state.

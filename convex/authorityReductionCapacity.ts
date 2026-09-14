@@ -415,14 +415,21 @@ export async function inspectLegacyOtpOrphanCandidate(
     : { disposition: "orphan_cleanup_pending" };
 }
 
-export async function classifyAuthorityReductionCapacityForUser(
+export type AuthorityReductionCapacityInspection = Readonly<{
+  accountPairs: 0 | 1;
+  deviceQuartets: number;
+  disposition: "capacity_missing";
+  missing: number;
+}> | Readonly<{
+  disposition: Exclude<AuthorityReductionCapacityDisposition, "capacity_missing">;
+  missing: number;
+}>;
+
+export async function inspectAuthorityReductionCapacityForUser(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
   now: number,
-): Promise<Readonly<{
-  disposition: AuthorityReductionCapacityDisposition;
-  missing: number;
-}>> {
+): Promise<AuthorityReductionCapacityInspection> {
   const [user, deletionJobs, devices] = await Promise.all([
     ctx.db.get(userId),
     ctx.db.query("accountDeletionJobs")
@@ -448,24 +455,38 @@ export async function classifyAuthorityReductionCapacityForUser(
         ? { disposition: "topology_blocked", missing: 1 }
         : { disposition: orphan.disposition, missing: 1 };
     }
-    let missing = (await loadAccountDeletionCapacity(ctx, userId)).kind === "legacy" ? 1 : 0;
+    const accountPairs = (await loadAccountDeletionCapacity(ctx, userId)).kind === "legacy" ? 1 : 0;
+    let deviceQuartets = 0;
     for (const device of devices) {
       const capacity = await loadDeviceRevocationCapacity(ctx, userId, device._id);
       if (device.status === "revoked") {
         if (capacity.kind !== "legacy") return { disposition: "topology_blocked", missing: 1 };
       } else if (capacity.kind === "legacy") {
-        missing += 1;
+        deviceQuartets += 1;
       }
     }
+    const missing = accountPairs + deviceQuartets;
     return missing === 0
       ? { disposition: "ready", missing: 0 }
-      : { disposition: "capacity_missing", missing };
+      : { accountPairs, deviceQuartets, disposition: "capacity_missing", missing };
   } catch (error: unknown) {
     if (isCapacityCorruption(error)) {
       return { disposition: "topology_blocked", missing: 1 };
     }
     throw error;
   }
+}
+
+export async function classifyAuthorityReductionCapacityForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  now: number,
+): Promise<Readonly<{
+  disposition: AuthorityReductionCapacityDisposition;
+  missing: number;
+}>> {
+  const { disposition, missing } = await inspectAuthorityReductionCapacityForUser(ctx, userId, now);
+  return { disposition, missing };
 }
 
 export async function backfillAuthorityReductionCapacityForUser(

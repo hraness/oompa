@@ -2,11 +2,11 @@ import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 // Source layering. Runtime imports flow one way:
-// domain -> storage -> daemon -> { cli, claude, cloud, codex, desktop }.
+// domain -> storage -> daemon -> { cli, claude, cloud, codex }.
 // Ports in src/daemon/ports.ts are implemented by adapters through
 // `import type`, so type-only imports may point upward where noted below.
 // Test files are exempt: they compose the whole tree on purpose.
-const sourceDirectories = ["claude", "cli", "cloud", "codex", "daemon", "desktop", "storage"];
+const sourceDirectories = ["claude", "cli", "cloud", "codex", "daemon", "storage"];
 const compositionRoots = "(cli|index)(\\.ts)?";
 
 const siblingDirectoryPattern = (directories) =>
@@ -82,7 +82,7 @@ export default tseslint.config(
     ignores: ["**/*.test.ts"],
     rules: layerRules([
       forbidSiblings(
-        ["claude", "cli", "cloud", "codex", "desktop"],
+        ["claude", "cli", "cloud", "codex"],
         "src/storage imports domain and storage. Move shared shapes into src/domain.",
       ),
       forbidSiblings(
@@ -98,7 +98,7 @@ export default tseslint.config(
     ignores: ["**/*.test.ts"],
     rules: layerRules([
       forbidSiblings(
-        ["claude", "cli", "cloud", "codex", "desktop"],
+        ["claude", "cli", "cloud", "codex"],
         "src/daemon imports domain, storage, and daemon at runtime. Adapters reach it through `import type` of src/daemon/ports.ts.",
         true,
       ),
@@ -110,7 +110,7 @@ export default tseslint.config(
     ignores: ["**/*.test.ts"],
     rules: layerRules([
       forbidSiblings(
-        ["desktop", "storage"],
+        ["storage"],
         "src/cli imports domain, daemon, and cli. Provider and storage effects go through the daemon.",
       ),
       {
@@ -133,7 +133,7 @@ export default tseslint.config(
     ignores: ["**/*.test.ts"],
     rules: layerRules([
       forbidSiblings(
-        ["claude", "cli", "cloud", "daemon", "desktop", "storage"],
+        ["claude", "cli", "cloud", "daemon", "storage"],
         "src/codex imports codex and domain only.",
       ),
       forbidCompositionRoots,
@@ -144,24 +144,8 @@ export default tseslint.config(
     ignores: ["**/*.test.ts"],
     rules: layerRules([
       forbidSiblings(
-        ["cli", "cloud", "codex", "daemon", "desktop", "storage"],
+        ["cli", "cloud", "codex", "daemon", "storage"],
         "src/claude imports claude and domain only.",
-      ),
-      forbidCompositionRoots,
-    ]),
-  },
-  {
-    files: ["src/desktop/**/*.ts"],
-    ignores: ["**/*.test.ts"],
-    rules: layerRules([
-      forbidSiblings(
-        ["cli", "cloud", "codex"],
-        "src/desktop imports desktop and domain at runtime.",
-      ),
-      forbidSiblings(
-        ["daemon", "storage"],
-        "src/desktop may import only types from src/daemon (ports) and src/storage (paths).",
-        true,
       ),
       forbidCompositionRoots,
     ]),
@@ -171,8 +155,8 @@ export default tseslint.config(
     ignores: ["**/*.test.ts"],
     rules: layerRules([
       forbidSiblings(
-        ["cli", "desktop"],
-        "src/cloud imports cloud, domain, storage, daemon, and codex. It never imports the CLI, desktop, or provider-runtime adapters.",
+        ["cli"],
+        "src/cloud imports cloud, domain, storage, daemon, and codex. It never imports the CLI or provider-runtime adapters.",
       ),
       forbidCompositionRoots,
     ]),
@@ -211,6 +195,7 @@ export default tseslint.config(
       "app/fixtures/browser/io.ts", "app/fixtures/browser/main.tsx",
       "app/fixtures/product/io.ts", "app/fixtures/product/main.tsx",
       "app/fixtures/product/fixtures.ts", "app/fixtures/product/definition.test.ts",
+      "app/fixtures/product/usage.ts",
     ],
     rules: layerRules([
       {
@@ -229,7 +214,9 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.mjs"],
+    // The immutable checker is plain JavaScript with an adjacent declaration;
+    // retain syntax/rule lint while its canonical admission validates its bytes.
+    files: ["scripts/**/*.mjs", "site/vendor/marketing-preset/check.mjs", "site/vendor/lantern-material/check.mjs"],
     ...tseslint.configs.disableTypeChecked,
   },
 );

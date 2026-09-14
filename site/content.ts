@@ -204,10 +204,10 @@ const {
 } = hostedSignupCopy(hostedSignup);
 
 const links = {
-  admittedInstall: "https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install",
-  app: "https://app.oompa.dev",
+  admittedInstall: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact",
+  app: "https://app.oompa.app",
   contributing: "https://github.com/hraness/oompa/blob/main/CONTRIBUTING.md",
-  documentation: "https://oompa.dev/docs/",
+  documentation: "https://oompa.app/docs/",
   github: "https://github.com/hraness/oompa",
   hraness: "https://hraness.com/",
   privateSecurityReport: "https://github.com/hraness/oompa/security/advisories/new",
@@ -259,7 +259,7 @@ const privacyBlocks: readonly ContentBlock[] = [
     text("Oompa uses Resend to deliver verification email. Resend receives the recipient email address, sender identity, one-time verification code and message content, and ordinary delivery metadata. It receives no provider credentials or encrypted session projection."),
   ),
   paragraph(
-    text("Oompa uses anonymous, cookieless PostHog analytics on the public oompa.dev pages to count page views and page leaves and measure selected Web Vitals. Collection runs only on the canonical production host, honors Do Not Track, keeps its visitor identifier in memory, and disables person profiles, autocapture, heatmaps, feature flags, surveys, conversations, and session recording. PostHog receives the canonical route, bounded referral classification, browser performance measurements, a cookieless visitor identifier, and ordinary request metadata such as IP address, user agent, and time. Oompa sends no form values, account identity, provider or session data, URL query, or fragment. Vercel serves oompa.dev, and GitHub hosts the source repository, releases, and release downloads; those providers receive ordinary request metadata when visited."),
+    text("Oompa uses anonymous, cookieless PostHog analytics on the public oompa.app pages to count page views and page leaves and measure selected Web Vitals. Collection runs only on the canonical production host, honors Do Not Track, keeps its visitor identifier in memory, and disables person profiles, autocapture, heatmaps, feature flags, surveys, conversations, and session recording. PostHog receives the canonical route, bounded referral classification, browser performance measurements, a cookieless visitor identifier, and ordinary request metadata such as IP address, user agent, and time. Oompa sends no form values, account identity, provider or session data, URL query, or fragment. Vercel serves oompa.app, and GitHub hosts the source repository, releases, and release downloads; those providers receive ordinary request metadata when visited."),
   ),
   paragraph(
     text("Device credentials are bearer credentials, not hardware-bound proofs. Connection and generation fencing blocks a copied credential from creating a second concurrent connection or surviving revocation, but an uncontested, unrevoked copy can impersonate that device until it is detected and revoked."),
@@ -293,17 +293,17 @@ export const siteDocumentPaths: readonly string[] = [
 export const publicReleaseState: "live" | "release-ready" | "staged" = "staged";
 
 const betaInstallCommand = buildOompaGlobalInstallCommand(
-  "https://github.com/hraness/oompa/releases/download/v0.8.0/hraness-oompa-0.8.0.tgz",
+  "https://github.com/hraness/oompa/releases/download/v0.8.2/hraness-oompa-0.8.2.tgz",
 );
 
 const productName = "Oompa";
 const tagline = "Workspace for Codex and Claude Code";
 const providerRoadmap = "Codex and Claude Code, side by side.";
-const releaseVersion = "0.8.0";
-export const admittedReleaseVersion = "0.7.1";
-const admittedReleaseRun = "34367591503";
+const releaseVersion = "0.8.2";
+export const admittedReleaseVersion = "0.8.1";
+const admittedReleaseRun = "34781400584";
 export const isAdmittedRelease = (version: string): boolean => version === admittedReleaseVersion;
-const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its immutable installation notes for the existing artifact.`;
+const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its verified installation notes for the existing artifact. The v0.8.1 npm mirror is not admitted.`;
 const daemonRolloutNotice = `Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v${admittedReleaseVersion} daemon or the v${releaseVersion} candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.`;
 
 /** The existing exact release evidence also belongs in the new status guide. */
@@ -313,10 +313,10 @@ export const releaseAdmissionNotice: ContentBlock = {
   content: [
     text("The "),
     link(`v${admittedReleaseVersion} artifacts`, `https://github.com/hraness/oompa/releases/tag/v${admittedReleaseVersion}`),
-    text(" passed immutable GitHub and npm release admission in "),
+    text(" passed immutable GitHub release admission in "),
     link(`release run ${admittedReleaseRun}`, `https://github.com/hraness/oompa/actions/runs/${admittedReleaseRun}`),
-    text(`, attempt 2. That evidence does not admit v${releaseVersion}. Use the predecessor's `),
-    link("immutable installation notes", links.admittedInstall),
+    text(`, attempt 1. Its optional npm mirror failed before publication and is not admitted. That evidence does not admit v${releaseVersion}. Use the predecessor's `),
+    link("verified installation notes", links.admittedInstall),
     text(". The candidate command below remains unavailable until its own admission. The website and optional hosted sync are live; artifact admission does not authorize current-daemon startup or hosted command writers."),
   ],
 };
@@ -379,19 +379,19 @@ export const publicContent: PublicContent = {
   thesis: `${productName} brings your Codex and Claude Code sessions into one workspace. Follow the work in your browser, direct it from your terminal, and keep execution on your own machines.`,
   description: `A workspace for Codex and Claude Code, in your browser or terminal. Local CLI v${releaseVersion} is a release candidate; v${admittedReleaseVersion} remains admitted; daemon and hosted command-writer rollout remains blocked on capacity.`,
   daemonRolloutNotice,
-  statusLine: `Status: public beta. ${isAdmittedRelease(releaseVersion) ? `Local CLI v${releaseVersion} is the fully admitted public artifact.` : `Local CLI v${releaseVersion} is a release candidate, not an admitted artifact; v${admittedReleaseVersion} remains the fully admitted public artifact.`} Codex runs on macOS and Linux, Claude Code on Linux; hosted sync is live as an ${hostedBetaLabel}. Current daemon and hosted command-writer rollout remains blocked on capacity.`,
+  statusLine: `Status: public beta. ${isAdmittedRelease(releaseVersion) ? `Local CLI v${releaseVersion} is the fully admitted public artifact.` : `Local CLI v${releaseVersion} is a release candidate, not an admitted artifact; v${admittedReleaseVersion} remains the admitted canonical GitHub artifact.`} Codex runs on macOS and Linux, Claude Code on Linux; hosted sync is live as an ${hostedBetaLabel}. Current daemon and hosted command-writer rollout remains blocked on capacity.`,
   badges,
   maintainer: {
     name: "Hraness",
     url: links.hraness,
   },
   socialCard: {
-    alt: `${productName} command-line card showing offline diagnostics and read-only status · v${releaseVersion} candidate · daemon rollout blocked on capacity · oompa.dev`,
+    alt: `${productName} command-line card showing offline diagnostics and read-only status · v${releaseVersion} candidate · daemon rollout blocked on capacity · oompa.app`,
     height: 630,
     path: "/social-card.png",
     width: 1200,
   },
-  siteUrl: "https://oompa.dev",
+  siteUrl: "https://oompa.app",
   installCommand: betaInstallCommand,
   installNotice,
   initCommand: "oompa init --yes",
@@ -421,7 +421,7 @@ export const publicContent: PublicContent = {
     pillars: [
       {
         label: "See the whole workspace",
-        summary: "A grid of sessions shows what is running and what needs your attention. Open a card to read the conversation.",
+        summary: "A grid of sessions shows what is running and what needs your attention. Read and reply inside each card.",
       },
       {
         label: "Pick up the next turn",
@@ -493,7 +493,7 @@ export const publicContent: PublicContent = {
     },
     {
       label: "Analytics you can audit",
-      detail: "oompa.dev counts page views anonymously, without cookies, only on the production host, and honors Do Not Track. The privacy page lists every field.",
+      detail: "oompa.app counts page views anonymously, without cookies, only on the production host, and honors Do Not Track. The privacy page lists every field.",
     },
   ],
   questions: [
@@ -503,7 +503,7 @@ export const publicContent: PublicContent = {
     },
     {
       question: "Can I start using it now?",
-      answer: [text(`The website, web app, and hosted sync are available in ${hostedBetaLabel}. The admitted v${admittedReleaseVersion} CLI has its own `), link("immutable install instructions", `https://github.com/hraness/oompa/tree/v${admittedReleaseVersion}#get-started`), text(" and "), link("admitted release's immutable installation notes", links.admittedInstall), text(`.${isAdmittedRelease(releaseVersion) ? "" : ` The v${releaseVersion} candidate is not yet admitted.`} Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass. `), link("Check the setup status", "/docs/status/"), text(" before initialization or daemon startup.")],
+      answer: [text(`The website, web app, and hosted sync are available in ${hostedBetaLabel}. The admitted v${admittedReleaseVersion} CLI has its own `), link("verified installation notes", links.admittedInstall), text(`.${isAdmittedRelease(releaseVersion) ? "" : ` The v${releaseVersion} candidate is not yet admitted.`} Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass. `), link("Check the setup status", "/docs/status/"), text(" before initialization or daemon startup.")],
     },
     {
       question: "Does Oompa use my API keys or provider subscription?",
@@ -519,7 +519,7 @@ export const publicContent: PublicContent = {
     },
     {
       question: "Which platforms are supported?",
-      answer: [text(`The CLI requires Bun ${publicPins.bun}. Codex execution supports macOS and Linux; Claude Code execution supports Linux. The web interface can follow paired machines from a browser. ChatGPT desktop account switching is macOS-only.`)],
+      answer: [text(`The CLI requires Bun ${publicPins.bun}. Codex execution supports macOS and Linux; Claude Code execution supports Linux. The web interface can follow paired machines from a browser.`)],
     },
   ],
   maker: {
@@ -564,7 +564,7 @@ export const publicContent: PublicContent = {
       blocks: [
         { kind: "notice", label: "Candidate installation unavailable", content: [text(installNotice), text(" Read the "), link(`v${admittedReleaseVersion} installation notes`, links.admittedInstall), text(".")] },
         paragraph(
-          text(`Oompa requires Bun 1.3.14 plus curl with HTTPS and TLS 1.2 support. The CLI and local daemon support macOS and Linux. Codex effects run on both platforms; Claude Code effects run on Linux only. Oompa refuses new Claude Code effects on macOS pending authenticated isolated-Keychain and detached-read acceptance. Supported ChatGPT desktop account switching is macOS-only. Native protected-input control loads only when a terminal prompt needs it and supports the standard macOS, glibc, and x64 or arm64 musl library names. ${isAdmittedRelease(releaseVersion) ? "Install the admitted release's reviewed immutable tag, then verify the binary before initialization:" : "Only after immutable GitHub release admission, install the candidate's reviewed immutable tag, then verify the binary before initialization:"}`),
+          text(`Oompa requires Bun 1.3.14 plus curl with HTTPS and TLS 1.2 support. The CLI and local daemon support macOS and Linux. Codex effects run on both platforms; Claude Code effects run on Linux only. Oompa refuses new Claude Code effects on macOS pending authenticated isolated-Keychain and detached-read acceptance. Native protected-input control loads only when a terminal prompt needs it and supports the standard macOS, glibc, and x64 or arm64 musl library names. ${isAdmittedRelease(releaseVersion) ? "Install the admitted release's reviewed immutable tag, then verify the binary before initialization:" : "Only after immutable GitHub release admission, install the candidate's reviewed immutable tag, then verify the binary before initialization:"}`),
         ),
         {
           kind: "commands",
@@ -576,7 +576,7 @@ export const publicContent: PublicContent = {
           ],
         },
         paragraph(
-          text("The single install command removes ambient Bun, Node, and native-library injection variables before either download or Bun startup, disables Bun dotenv loading, and selects /dev/null as the only Bun configuration. Curl and the loader independently cap the streamed preflight at 512 KiB, and the loader refuses an overrun before transpilation or installation. It then verifies and executes the exact v0.8.0 preflight from Oompa's protected source tag and passes it the exact release archive URL. The preflight requires GitHub repository ID 1343008607, a published immutable v0.8.0 release, and one uploaded archive whose byte length and SHA-256 match GitHub's immutable release metadata. It creates a fresh random private staging root, downloads the archive into a private file there, and gives Bun only a verified in-memory snapshot of those exact bytes. The reviewed normalizer verifies the private archive again, derives its bounded package-file manifest, and compares every extracted Oompa package path and SHA-256 while measuring the completion receipt. Local archives and official archives use separate full-digest version namespaces, so a local package cannot populate or replace the official cache entry. Oompa then verifies the tagged preflight and normalizer, exact package identity, zero-lifecycle manifest, CLI SHA-256, and complete staged tree under protected descriptor and ACL custody. Bun 1.3.14 resolves the package's exact dependency versions from the configured package registry trust boundary with lifecycle scripts disabled; the release archive does not claim to contain that dependency closure. The detached staging worker and its Bun package-install child repeat the runtime neutralization while retaining the configured registry, proxy, and certificate trust inputs needed for dependency resolution. The prior verified command remains active throughout staging. Publication atomically replaces only the $BUN_INSTALL/bin/oompa symlink after every check succeeds and fsyncs its directory. If installation is interrupted, the next invocation of that exact release's installer recovers or removes only the proven private stage; another release's installer refuses the durable intent. The invoking shell, PATH-selected pinned Bun binary, configured package registry and transport trust, operating system, and same-UID account remain trust boundaries. Existing trustedDependencies remain unchanged."),
+          text("The single install command removes ambient Bun, Node, and native-library injection variables before either download or Bun startup, disables Bun dotenv loading, and selects /dev/null as the only Bun configuration. Curl and the loader independently cap the streamed preflight at 512 KiB, and the loader refuses an overrun before transpilation or installation. It then verifies and executes the exact v0.8.2 preflight from Oompa's protected source tag and passes it the exact release archive URL. The preflight requires GitHub repository ID 1343008607, a published immutable v0.8.2 release, and one uploaded archive whose byte length and SHA-256 match GitHub's immutable release metadata. It creates a fresh random private staging root, downloads the archive into a private file there, and gives Bun only a verified in-memory snapshot of those exact bytes. The reviewed normalizer verifies the private archive again, derives its bounded package-file manifest, and compares every extracted Oompa package path and SHA-256 while measuring the completion receipt. Local archives and official archives use separate full-digest version namespaces, so a local package cannot populate or replace the official cache entry. Oompa then verifies the tagged preflight and normalizer, exact package identity, zero-lifecycle manifest, CLI SHA-256, and complete staged tree under protected descriptor and ACL custody. Bun 1.3.14 resolves the package's exact dependency versions from the configured package registry trust boundary with lifecycle scripts disabled; the release archive does not claim to contain that dependency closure. The detached staging worker and its Bun package-install child repeat the runtime neutralization while retaining the configured registry, proxy, and certificate trust inputs needed for dependency resolution. The prior verified command remains active throughout staging. Publication atomically replaces only the $BUN_INSTALL/bin/oompa symlink after every check succeeds and fsyncs its directory. If installation is interrupted, the next invocation of that exact release's installer recovers or removes only the proven private stage; another release's installer refuses the durable intent. The invoking shell, PATH-selected pinned Bun binary, configured package registry and transport trust, operating system, and same-UID account remain trust boundaries. Existing trustedDependencies remain unchanged."),
         ),
         { kind: "subheading", text: "Update runbook" },
         paragraph(
@@ -958,11 +958,11 @@ export const publicContent: PublicContent = {
             text("These commands are part of the "),
             code(`v${admittedReleaseVersion}`),
             ...(isAdmittedRelease(releaseVersion) ? [
-              text(" admitted local CLI release. Its immutable artifacts passed GitHub and npm release admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
+              text(" admitted local CLI release. Its immutable GitHub artifact passed admission; the optional npm mirror is not admitted. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
             ] : [
               text(" admitted local CLI release and are retained in the "),
               code(`v${releaseVersion}`),
-              text(" candidate. The predecessor's immutable artifacts passed GitHub and npm release admission; the candidate requires its own admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
+              text(" candidate. The predecessor's immutable GitHub artifact passed admission; its optional npm mirror is not admitted and the candidate requires its own admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
             ]),
           ],
         },
@@ -1006,7 +1006,7 @@ export const publicContent: PublicContent = {
           text("Each task carries an exact account ID, project ID, preset, and Fast setting. Oompa never chooses another subscription from quota, availability, usage, or incidental ordering. A provider limit blocks or fails that attempt. It does not rotate the task to another account. Explicit tasks on separate accounts may run in parallel."),
         ),
         paragraph(
-          text("Each Work also freezes the meaning of its High and Ultra routes when it is created. A fresh affected version 2 request must name the current contract 1 Sol meaning. A fresh affected version 1 request is refused because that format does not identify whether its author meant Sol or Astra; stable version 1 requests remain admissible. An existing contract 2 Work whose coordinator and participating session authorities remain supported keeps Astra for already-declared tasks and remains readable, claimable, reviewable, and settleable. A Work associated with a retired Devin session remains readable but is fenced from mutation and execution. Current tooling does not append a new High or Ultra task to a historical contract 2 Work because the alias now means Sol; create a new Work for a new Sol task graph. Low has the same exact Luna Max meaning under both contracts and remains compatible. Exact same-key replay of an already-applied version 1 or version 2 mutation returns its historical result without adding a task or provider effect. Reusing that key with another version or contract is a conflict, not a request to reinterpret the historical operation."),
+          text("Each Work also freezes the meaning of its High and Ultra routes when it is created. A fresh affected version 2 request must name the current contract 2 Astra meaning. A fresh affected version 1 request is refused because that format does not identify whether its author meant Sol or Astra; stable version 1 requests remain admissible. An existing contract 1 Work whose coordinator and participating session authorities remain supported keeps Sol for already-declared tasks and remains readable, claimable, reviewable, and settleable. A Work associated with a retired Devin session remains readable but is fenced from mutation and execution. Current tooling does not append a new High or Ultra task to a contract 1 Work because the alias now means Astra; create a new Work for a new Astra task graph. Low has the same exact Luna Max meaning under both contracts and remains compatible. Exact same-key replay of an already-applied version 1 or version 2 mutation returns its historical result without adding a task or provider effect. Reusing that key with another version or contract is a conflict, not a request to reinterpret the historical operation."),
         ),
         paragraph(
           text("Readiness is derived from the open work state, time bounds, accepted dependency submissions, and absence of a live or ambiguous attempt. A final assistant message is not completion. The worker submits a bounded structured result and evidence; declared independent reviews and Oompa-owned completion gates must accept the exact submission revision."),
@@ -1406,8 +1406,8 @@ export const publicContent: PublicContent = {
         ),
         list(
           [code("low"), text(": Codex Luna Max, currently "), code("gpt-5.6-luna"), text(" with "), code("max"), text(" reasoning.")],
-          [code("high"), text(": Codex Sol Max, currently "), code("gpt-5.6-sol"), text(" with "), code("max"), text(" reasoning.")],
-          [code("ultra"), text(": Codex Sol Ultra, currently "), code("gpt-5.6-sol"), text(" with "), code("ultra"), text(" reasoning.")],
+          [code("high"), text(": Codex Astra Max, currently "), code("gpt-6-astra"), text(" with "), code("max"), text(" reasoning.")],
+          [code("ultra"), text(": Codex Astra Ultra, currently "), code("gpt-6-astra"), text(" with "), code("ultra"), text(" reasoning.")],
           [code("fable-max"), text(": Claude Code Fable, currently "), code("claude-fable-5-1"), text(" with "), code("max"), text(" reasoning.")],
           [code("fast on|off"), text(": a Codex-only, explicit per-turn Fast or Standard overlay. Claude Code refuses Fast instead of ignoring it. A prior Fast value cannot leak into the next turn.")],
         ),
@@ -1416,11 +1416,11 @@ export const publicContent: PublicContent = {
           code("high"),
           text(" or "),
           code("ultra"),
-          text(", and explicit selections of either preset, use the Sol mapping above. The "),
+          text(", and explicit selections of either preset, use the Astra mapping above (contract 2). The "),
           code("low"),
           text(" and "),
           code("fable-max"),
-          text(" bindings are unchanged. Codex sessions already bound to historical contract 2 keep their exact Astra model and effort until a preset is explicitly selected; unrelated metadata edits, restart recovery, and queued work do not reinterpret an established session."),
+          text(" bindings are unchanged. Codex sessions already bound to contract 1 keep their exact Sol model and effort until a preset is explicitly selected; unrelated metadata edits, restart recovery, and queued work do not reinterpret an established session."),
         ),
         paragraph(
           code("oompa init"),
@@ -1452,30 +1452,6 @@ export const publicContent: PublicContent = {
         ),
         paragraph(
           text("Pinned Codex 0.153.2 has no safely separated install, enablement, and OAuth lifecycle surface: its available lifecycle path can combine installation with enablement and may then open browser authorization. Oompa therefore does not expose plugin install, enable, disable, OAuth, or permission effects. The pinned tool-suggestion form that can invoke that compound plugin or connector lifecycle is also rejected before admission. Other standard MCP forms are brokered only when their pinned schema fits Oompa's closed primitive-field contract. The interaction exposes bounded field names, types, requiredness, constraints, and allowed choices; titles, descriptions, defaults, and answers stay off the public and durable display. Protected submissions are checked for exact required fields, types, bounds, formats, choices, and the absence of additional properties before response preparation. Opaque openai/form, unsupported schema constructs, and URL elicitation fail before durable admission and receive a safe unsupported-capability response with no schema, submitted value, or URL echo. The schema-11 security migration terminalizes and replaces any prerelease URL record before interaction reads. Oompa will keep extended-form and URL handoff unavailable until each has a closed protected path."),
-        ),
-      ],
-    },
-    {
-      id: "desktop-account-switching",
-      heading: "Desktop account switching",
-      blocks: [
-        paragraph(
-          code("oompa account switch <profile>"),
-          text(" is experimental and macOS-only in the first beta. The current compatibility gate accepts only the signed OpenAI ChatGPT application at "),
-          code("/Applications/ChatGPT.app"),
-          text(" with reviewed version, build, CDHash, and isolated-profile launch hooks. Unsupported or changed bundles fail before quit."),
-        ),
-        paragraph(
-          text("A switch requires a signed-in target with a verified provider email, takes one machine-global lock, rejects multiple exact app processes, and refuses an unsettled earlier switch. It journals the target generation, gracefully quits the exact process, waits for exit, relaunches once with the target's isolated Codex and desktop-data roots, and binds read-only account verification to that launched PID, executable, CDHash, and environment."),
-        ),
-        paragraph(
-          text("The experimental desktop switch never copies "),
-          code("auth.json"),
-          text(", swaps one token, changes Keychain blindly, responds to a provider limit, or retries an uncertain switch. An uncertain quit, transition, or relaunch becomes "),
-          code("recovery_required"),
-          text(" and preserves both profiles. Run "),
-          code("oompa account switch-recover"),
-          text(" to reconcile only the current attempt. Recovery performs bounded read-only bundle, process, environment, and account observations; it never quits or launches the app. It releases the switch authority only when those observations prove the target account is active or prove that no target instance remains."),
         ),
       ],
     },
@@ -1585,7 +1561,7 @@ export const publicContent: PublicContent = {
             "oompa device approve <device-id-or-prefix> --fingerprint <value> [--idempotency-key <uuidv7>] [--json]",
             "oompa device revoke <device-id-or-prefix> [--idempotency-key <uuidv7>] [--json]",
             "oompa account add <label>",
-            "oompa account login <profile> [--provider <codex|claude>] [--device-code] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]",
+            "oompa account login <profile> [--provider <codex|claude>] [--device-code] [--manual-browser] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]",
             "oompa account login-cancel <profile> [--provider codex]",
             "oompa account login-cancel <profile> --provider claude --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited",
             "oompa account login-cancel <profile> --provider devin --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited",
@@ -1596,8 +1572,6 @@ export const publicContent: PublicContent = {
             "oompa account show <profile> --provider devin  (retired local history and cleanup only)",
             "oompa account usage [profile] [--refresh]",
             "oompa account usage-history <profile> [--from <UTC-RFC3339>] [--through <UTC-RFC3339>] [--limit <1..100>] [--cursor <cursor>]",
-            "oompa account switch <profile>",
-            "oompa account switch-recover",
             "oompa plugin list <account> [--project <project>] [--refresh]",
             "oompa plugin show <account> <plugin> [--project <project>] [--refresh]",
             "oompa project add --path <directory> [--name <name>]",
@@ -1703,7 +1677,7 @@ export const publicContent: PublicContent = {
           code("--preset high --preset-contract 1"),
           text("; v0.5.0 High and Ultra both meant Sol. Use "),
           code("--preset-contract 2"),
-          text(" only for an untagged Astra-era request whose original runtime evidence actually meant Astra. Neither selector can resume a contractless prepared row. Contract 2 cannot authorize a fresh effect under the current Sol binding; contract 1 can authorize the exact Sol request when the key has no stored row, just as a newly generated key can. If the originating meaning cannot be proved, use the retained old release rather than guessing. A contractless prepared row has no supported cancellation or retirement command. It must reach a terminal settlement through exact replay under the originating release, or the update remains blocked. Do not use a fresh key or "),
+          text(" for an untagged Astra-era request whose original runtime evidence actually meant Astra. Neither selector can resume a contractless prepared row. Contract 1 cannot authorize a fresh effect under the current Astra binding; contract 2 can authorize the exact Astra request when the key has no stored row, just as a newly generated key can. If the originating meaning cannot be proved, use the retained old release rather than guessing. A contractless prepared row has no supported cancellation or retirement command. It must reach a terminal settlement through exact replay under the originating release, or the update remains blocked. Do not use a fresh key or "),
           code("session abandon"),
           text(" as a workaround; that command applies only to an existing recovery-required session and never cancels prepared start or switch authority. "),
           code("session preset"),

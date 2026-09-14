@@ -24,22 +24,25 @@ close before reporting acceptance. Uncertain collection stays failed.
 
 ## Continuous integration
 
-CI runs the complete gate in four isolated jobs on both macOS and Ubuntu.
-Three jobs run `bun run test:source --shard=1/3`, `--shard=2/3` and
-`--shard=3/3`. Pinned Bun partitions the complete source-file discovery across
-those jobs, retaining serial tests and isolated file globals. The fourth job,
+CI runs the complete gate in seven isolated jobs on both macOS and Ubuntu.
+Six jobs run `bun run test:source --shard=1/6` through `--shard=6/6`. Pinned
+Bun partitions the complete source-file discovery across those jobs, retaining
+serial tests and isolated file globals. The seventh job,
 `bun run check:ci-remainder`, runs every other command from `bun run check`,
 in its original order. All jobs retain the same pinned dependencies, complete
 governed Git history and Linux native verification. Source jobs have a finite
-40-minute job limit; the remainder and browser jobs retain their 20-minute
-limits. Every test retains its own deadline. The larger source allowance
-accommodates measured serial suite duration, not retries or skipped failures.
-The `Required` check succeeds only when all eight jobs and the separate
+75-minute job limit. The macOS remainder has 25 minutes; the Ubuntu remainder
+and browser jobs retain 20 minutes. The macOS allowance includes setup and
+post-job cleanup after an observed successful 19-minute, 36-second gate that
+reached the former job limit during cleanup. Every test retains its own
+deadline. These finite job allowances cover measured work, without retries
+or skipped failures.
+The `Required` check succeeds only when all fourteen jobs and the separate
 compiled app/site browser job succeed.
 
 The workflow regression tests compare the expanded phase commands with the
 full gate and reject omitted or duplicated commands. They also require all
-three source shards and prove whole-file coverage and failure propagation with
+six source shards and prove whole-file coverage and failure propagation with
 the pinned runner. Update that contract when changing the gate. Source-file
 sharding does not split a large individual test: independent cases still need
 separate tests within the unchanged per-test deadline.

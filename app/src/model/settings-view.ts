@@ -123,6 +123,8 @@ export type MachineView = Readonly<{
   daemonVersion: string;
   defaultApprovalMode: ApprovalMode;
   defaultPreset: PresetChoice;
+  /** Null when the daemon predates the projection; the first project stands in. */
+  defaultProjectPublicId: string | null;
   deviceCommandsAllowed: boolean;
   devicePublicId: string;
   /** Current hosted device authority; a stale registry can outlive this row. */
@@ -237,6 +239,7 @@ export function toMachineView(input: MachineViewInput): MachineView {
     daemonVersion: payload.daemonVersion,
     defaultApprovalMode: payload.defaultApprovalMode,
     defaultPreset: payload.defaultPreset,
+    defaultProjectPublicId: payload.defaultProjectPublicId ?? null,
     deviceCommandsAllowed: payload.deviceCommandsAllowed ?? true,
     devicePublicId: input.devicePublicId,
     deviceStatus: input.device?.status ?? null,

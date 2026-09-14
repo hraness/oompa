@@ -1,5 +1,5 @@
 /**
- * Social card composition for oompa.dev.
+ * Social card composition for oompa.app.
  *
  * Link unfurlers on X, LinkedIn, Slack, iMessage, and Discord render PNG
  * previews but not SVG, so the build rasterizes this card to a 1200x630 PNG
@@ -55,7 +55,7 @@ export const socialCardLines = (content: PublicContent = publicContent): SocialC
   return {
     commands: [`$ ${content.doctorCommand}`, "$ oompa status --json"],
     comment: "# Daemon rollout blocked on capacity",
-    tagline: `CLI candidate v${content.releaseVersion} · oompa.dev`,
+    tagline: `CLI candidate v${content.releaseVersion} · oompa.app`,
     title: content.productName,
   };
 };

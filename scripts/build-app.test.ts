@@ -29,7 +29,7 @@ afterAll(async () => {
 const entry = "/fixture/app/src/main.tsx";
 const faviconBytes = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Oompa">\n  <circle cx="32" cy="32" r="27" fill="#f58220" stroke="#ad430d" stroke-width="2"/>\n</svg>\n');
 const faviconTag = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,${faviconBytes.toString("base64")}">`;
-const shell = `<!doctype html>\n<html lang="en" data-palette="catppuccin" data-theme="dark"><head>${faviconTag}<meta name="viewport" content="width=device-width, viewport-fit=cover"><meta name="color-scheme" content="dark light"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex, nofollow"><title>Oompa</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>\n`;
+const shell = `<!doctype html>\n<html lang="en" data-hraness-theme="paper" data-palette="paper" data-theme="light"><head>${faviconTag}<meta name="viewport" content="width=device-width, viewport-fit=cover"><meta name="color-scheme" content="dark light"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex, nofollow"><title>Oompa</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>\n`;
 const chunk = (name: string, code: string, isEntry = false) => ({
   code, facadeModuleId: isEntry ? entry : null, fileName: `assets/${name}.js`, isEntry, map: null, type: "chunk",
 });
@@ -202,7 +202,7 @@ describe("registered authored shell", () => {
     const foundation = '<link rel="stylesheet" href="/graphs/client/assets/style-ghi.css">';
     const recipes = `<link rel="stylesheet" href="${APP_CSS_PLACEHOLDER}">`;
     const bootstrap = '<script src="/graphs/client/assets/appearance-jkl.js"></script>';
-    const paletteClass = getDesignPaletteTheme("catppuccin", "dark").className;
+    const paletteClass = getDesignPaletteTheme("paper", "light").className;
     expect(rendered.indexOf(foundation)).toBeLessThan(rendered.indexOf(recipes));
     expect(rendered.indexOf(recipes)).toBeLessThan(rendered.indexOf(bootstrap));
     expect(rendered.indexOf(bootstrap)).toBeLessThan(rendered.indexOf("</head>"));
@@ -223,8 +223,8 @@ describe("registered authored shell", () => {
       shell.replace("<head>", '<head><base href="/elsewhere/">'),
       shell.replace('<div id="root">', '<div style="color:red" id="root">'),
       shell.replace("Oompa", APP_CSS_PLACEHOLDER),
-      shell.replace('data-palette="catppuccin"', 'data-palette="gruvbox"'),
-      shell.replace('data-theme="dark"', 'data-theme="light"'),
+      shell.replace('data-palette="paper"', 'data-palette="gruvbox"'),
+      shell.replace('data-theme="light"', 'data-theme="dark"'),
       shell.replace('<html lang="en"', '<html class="other" lang="en"'),
       shell.replace('<script type="module" src="/src/main.tsx"></script>', '<!--<script type="module" src="/src/main.tsx"></script>-->'),
     ]) expect(() => prepareAppShell(changed, graph)).toThrow();

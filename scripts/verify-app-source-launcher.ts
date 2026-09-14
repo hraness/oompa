@@ -20,6 +20,9 @@ const maximumOutputBytes = 64 * 1024;
 const maximumSourceManifestBytes = 2 * 1024 * 1024;
 const maximumCredentialBytes = 8 * 1024;
 const sourceHashReadBytes = 64 * 1024;
+const maximumCapturedSourceFiles = 4_096;
+const maximumCapturedSourceFileBytes = 8 * 1024 * 1024;
+const maximumCapturedSourceBytes = 128 * 1024 * 1024;
 const sourceCommitPattern = /^[0-9a-f]{40}$/u;
 const deploymentIdPattern = /^dpl_[A-Za-z0-9]{20,80}$/u;
 const releaseVersionPattern = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
@@ -88,9 +91,16 @@ type CommandCapacityArguments = Readonly<{
   sourceCommit: string;
 }>;
 
+type QuotaUpgradeArguments = Readonly<{
+  mode: "quota-upgrade";
+  operatorArguments: readonly string[];
+  sourceCommit: string;
+}>;
+
 export type HostedProtectedLauncherArguments =
   | AppSourceProofLauncherArguments
-  | CommandCapacityArguments;
+  | CommandCapacityArguments
+  | QuotaUpgradeArguments;
 
 type CommandResult = Readonly<{
   exitCode: number;
@@ -190,7 +200,7 @@ export const parseAppSourceProofLauncherArguments = (
   arguments_: readonly string[],
 ): HostedProtectedLauncherArguments => {
   const [mode, ...rest] = arguments_;
-  if (mode === "command-capacity") {
+  if (mode === "command-capacity" || mode === "quota-upgrade") {
     const sourceIndexes = rest
       .map((argument, index) => argument === "--source-commit" ? index : -1)
       .filter((index) => index >= 0);
@@ -454,13 +464,14 @@ const gitBlobDigest = (size: number, update: (hash: ReturnType<typeof createHash
   return hash.digest("hex");
 };
 
-const rawTrackedBlobDigest = (root: string, tracked: TrackedBlob): string => {
+const rawTrackedBlobDigest = (root: string, tracked: TrackedBlob, maximumBytes = Number.MAX_SAFE_INTEGER): Readonly<{ digest: string; bytes: number }> => {
   if (tracked.path === "" || isAbsolute(tracked.path)) fail("verifier_source_invalid");
   const path = resolve(root, tracked.path);
   if (path === root || !path.startsWith(`${root}${sep}`) || realpathSync(dirname(path)) !== dirname(path)) {
     fail("verifier_source_invalid");
   }
   const initial = lstatSync(path);
+  if (!Number.isSafeInteger(initial.size) || initial.size < 0 || initial.size > maximumBytes) fail("verifier_source_invalid");
   if (tracked.mode === "120000") {
     if (!initial.isSymbolicLink()) fail("verifier_source_invalid");
     const target = readlinkSync(path, { encoding: "buffer" });
@@ -468,7 +479,7 @@ const rawTrackedBlobDigest = (root: string, tracked: TrackedBlob): string => {
     if (target.byteLength !== initial.size || !sameFileIdentity(initial, final)) {
       fail("verifier_source_invalid");
     }
-    return gitBlobDigest(target.byteLength, (hash) => { hash.update(target); });
+    return { digest: gitBlobDigest(target.byteLength, (hash) => { hash.update(target); }), bytes: target.byteLength };
   }
   const executable = (initial.mode & 0o111) !== 0;
   if (
@@ -481,7 +492,7 @@ const rawTrackedBlobDigest = (root: string, tracked: TrackedBlob): string => {
     descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const opened = fstatSync(descriptor);
     if (!sameFileIdentity(initial, opened) || !opened.isFile()) fail("verifier_source_invalid");
-    return gitBlobDigest(opened.size, (hash) => {
+    const digest = gitBlobDigest(opened.size, (hash) => {
       const buffer = Buffer.allocUnsafe(sourceHashReadBytes);
       let remaining = opened.size;
       while (remaining > 0) {
@@ -491,8 +502,9 @@ const rawTrackedBlobDigest = (root: string, tracked: TrackedBlob): string => {
         remaining -= count;
       }
       const final = fstatSync(descriptor);
-      if (!sameFileIdentity(opened, final)) fail("verifier_source_invalid");
+      if (!sameFileIdentity(opened, final) || !sameFileIdentity(final, lstatSync(path))) fail("verifier_source_invalid");
     });
+    return { digest, bytes: opened.size };
   } finally {
     if (descriptor >= 0) closeSync(descriptor);
   }
@@ -502,25 +514,35 @@ const assertRawTrackedSource = (
   root: string,
   committed: ReadonlyMap<string, TrackedBlob>,
   index: ReadonlyMap<string, TrackedBlob>,
+  captured = false,
 ): void => {
   if (committed.size !== index.size) fail("verifier_source_invalid");
+  if (captured && committed.size > maximumCapturedSourceFiles) fail("verifier_source_invalid");
+  let remaining = maximumCapturedSourceBytes;
   for (const [path, tracked] of committed) {
+    if (captured && (path.length > 4_096 || resolve(root, path).length > 4_096
+      || path.split("/").some((part) => part === "" || part === "." || part === ".."))) fail("verifier_source_invalid");
     const indexed = index.get(path);
     if (
       indexed === undefined
       || indexed.mode !== tracked.mode
       || indexed.objectId !== tracked.objectId
-      || rawTrackedBlobDigest(root, tracked) !== tracked.objectId
     ) fail("verifier_source_invalid");
+    const observed = rawTrackedBlobDigest(root, tracked, captured ? Math.min(maximumCapturedSourceFileBytes, remaining) : undefined);
+    if (observed.digest !== tracked.objectId) fail("verifier_source_invalid");
+    if (captured) remaining -= observed.bytes;
   }
 };
+
+type CapturedSource = Readonly<{ sourceTree: string; committed: ReadonlyMap<string, TrackedBlob> }>;
 
 const assertExactSource = (
   root: string,
   sourceCommit: string,
   runCommand: NonNullable<AppSourceProofLauncherDependencies["runCommand"]>,
   requireRemoteMain = true,
-): void => {
+  capture = false,
+): CapturedSource | undefined => {
   try {
     const git = (arguments_: readonly string[], outputLimit = maximumOutputBytes): string =>
       requireSilentSuccessfulCommand(
@@ -555,7 +577,7 @@ const assertExactSource = (
       ["ls-files", "--stage", "-z"],
       maximumSourceManifestBytes,
     ));
-    assertRawTrackedSource(root, committed, index);
+    assertRawTrackedSource(root, committed, index, capture);
     const fetchOrigins = git(["remote", "get-url", "--all", "origin"]).trim().split("\n");
     const pushOrigins = git(["remote", "get-url", "--push", "--all", "origin"]).trim().split("\n");
     if (
@@ -575,6 +597,65 @@ const assertExactSource = (
         fail("verifier_source_invalid");
       }
     }
+    if (capture) {
+      const sourceTree = git(["rev-parse", "--verify", `${sourceCommit}^{tree}`]).trim();
+      if (!sourceCommitPattern.test(sourceTree)) fail("verifier_source_invalid");
+      return { sourceTree, committed };
+    }
+  } catch (error: unknown) {
+    if (error instanceof AppSourceProofLauncherError) throw error;
+    fail("verifier_source_invalid");
+  }
+};
+
+/** Recheck the operator's exact local source without network, installation or credentials. */
+export const assertHostedOperatorSource = (
+  { repositoryRoot, sourceCommit }: Readonly<{ repositoryRoot: string; sourceCommit: string }>,
+): void => {
+  try {
+    if (
+      !isNormalizedAbsolutePath(repositoryRoot)
+      || realpathSync(repositoryRoot) !== repositoryRoot
+      || !sourceCommitPattern.test(sourceCommit)
+    ) fail("verifier_source_invalid");
+    assertExactSource(repositoryRoot, sourceCommit, defaultRunCommand, false);
+  } catch (error: unknown) {
+    if (error instanceof AppSourceProofLauncherError) throw error;
+    fail("verifier_source_invalid");
+  }
+};
+
+/**
+ * Admit exact local source once and retain its private bounded content manifest.
+ * The synchronous fence performs no Git or subprocess work. It checks captured
+ * tracked bytes/modes and root continuity, not later HEAD, index, origin,
+ * untracked files or remote main. It grants no executable or owner authority.
+ */
+export const captureHostedOperatorSource = (
+  { repositoryRoot, sourceCommit }: Readonly<{ repositoryRoot: string; sourceCommit: string }>,
+): Readonly<{ sourceCommit: string; sourceTree: string; assertCapturedContentCurrent(): void }> => {
+  try {
+    if (!isNormalizedAbsolutePath(repositoryRoot) || repositoryRoot.length > 4_096
+      || realpathSync(repositoryRoot) !== repositoryRoot || !sourceCommitPattern.test(sourceCommit)) fail("verifier_source_invalid");
+    const root = lstatSync(repositoryRoot);
+    if (!root.isDirectory() || root.isSymbolicLink()) fail("verifier_source_invalid");
+    const assertRoot = (): void => {
+      const current = lstatSync(repositoryRoot);
+      if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== root.dev || current.ino !== root.ino
+        || current.mode !== root.mode || current.uid !== root.uid || realpathSync(repositoryRoot) !== repositoryRoot) fail("verifier_source_invalid");
+    };
+    const admitted = assertExactSource(repositoryRoot, sourceCommit, defaultRunCommand, false, true);
+    if (admitted === undefined) fail("verifier_source_invalid");
+    const committed = new Map([...admitted.committed].map(([path, blob]) => [path, Object.freeze({ ...blob })]));
+    const assertCapturedContentCurrent = (): void => {
+      try {
+        assertRoot();
+        assertRawTrackedSource(repositoryRoot, committed, committed, true);
+        assertRoot();
+      } catch { fail("verifier_source_invalid"); }
+    };
+    assertCapturedContentCurrent();
+    return Object.freeze({ sourceCommit, sourceTree: admitted.sourceTree, assertCapturedContentCurrent });
   } catch (error: unknown) {
     if (error instanceof AppSourceProofLauncherError) throw error;
     fail("verifier_source_invalid");
@@ -652,11 +733,19 @@ const registeredWorktrees = (document: string): ReadonlySet<string> => new Set(
 const renderFailure = (
   error: unknown,
   stderr: Readonly<{ write(value: string): unknown }>,
+  retainedBuildIdentity?: ScratchDirectoryIdentity,
 ): number => {
   const code = error instanceof AppSourceProofLauncherError
     ? error.code
     : "verifier_execution_failed";
-  stderr.write(`${JSON.stringify({ code, schemaVersion: 1, status: "refused" })}\n`);
+  // This identity came only from fixed-namespace scratch admission. Report its
+  // original path without turning a fresh lookup into recovery authority.
+  const retainedBuild = retainedBuildIdentity !== undefined
+    && retainedBuildIdentity.path.length <= 512
+    && isNormalizedAbsolutePath(retainedBuildIdentity.path)
+    ? { directory: retainedBuildIdentity.path, locatorOnly: true } : undefined;
+  stderr.write(`${JSON.stringify({ code, schemaVersion: 1, status: "refused",
+    ...(retainedBuild === undefined ? {} : { retainedBuild }) })}\n`);
   return 1;
 };
 
@@ -670,6 +759,7 @@ export const executeAppSourceProofLauncher = (
   let scratchDirectory: string | undefined;
   let scratchIdentity: ScratchDirectoryIdentity | undefined;
   let worktreeAddAttempted = false;
+  let buildNeedsRecovery = false;
   let credentialDescriptor = -1;
   let result: CommandResult | undefined;
   let failure: unknown;
@@ -690,7 +780,8 @@ export const executeAppSourceProofLauncher = (
     if (!isNormalizedAbsolutePath(rootInput) || realpathSync(rootInput) !== rootInput) {
       fail("verifier_source_invalid");
     }
-    const requireRemoteMain = expected.mode !== "command-capacity";
+    const hostedOperator = expected.mode === "command-capacity" || expected.mode === "quota-upgrade";
+    const requireRemoteMain = !hostedOperator;
     assertExactSource(rootInput, expected.sourceCommit, runCommand, requireRemoteMain);
 
     const createdScratch = (
@@ -734,13 +825,29 @@ export const executeAppSourceProofLauncher = (
 
     assertExactSource(rootInput, expected.sourceCommit, runCommand, requireRemoteMain);
     assertExactSource(worktree, expected.sourceCommit, runCommand, requireRemoteMain);
+    if (expected.mode === "prove") {
+      // The fresh, source-verified scratch checkout owns this fixed sealed build.
+      // A failed attempt retains its exact source worktree and builder records.
+      // No credential is opened before successful completion and source rechecks.
+      buildNeedsRecovery = true;
+      requireSuccessfulCommand(runCommand([
+        dependencies.runtimePath ?? process.execPath,
+        "--no-env-file", "--config=/dev/null", join(worktree, "scripts", "build-app.ts"),
+      ], { cwd: worktree, environment: { ...appSourceProofChildEnvironment(), OOMPA_RELEASE_COMMIT: expected.sourceCommit } }),
+      "verifier_install_failed");
+      assertExactSource(rootInput, expected.sourceCommit, runCommand, requireRemoteMain);
+      assertExactSource(worktree, expected.sourceCommit, runCommand, requireRemoteMain);
+      buildNeedsRecovery = false;
+    }
     const verifier = join(worktree, "scripts", "verify-app-source.ts");
-    const command = expected.mode === "command-capacity"
+    const command = hostedOperator
       ? [
           dependencies.runtimePath ?? process.execPath,
           "--no-env-file",
           "--config=/dev/null",
-          join(worktree, "scripts", "manage-command-lifecycle-capacity.ts"),
+          join(worktree, "scripts", expected.mode === "command-capacity"
+            ? "manage-command-lifecycle-capacity.ts"
+            : "manage-quota-upgrade.ts"),
           ...expected.operatorArguments,
         ]
       : expected.mode === "prove"
@@ -787,7 +894,7 @@ export const executeAppSourceProofLauncher = (
     result = runCommand(command, credentialDescriptor < 0
       ? {
           cwd: worktree,
-          ...(expected.mode === "command-capacity"
+          ...(hostedOperator
             ? {
                 environment: commandCapacityChildEnvironment(
                   dependencies.runtimeEnvironment ?? process.env,
@@ -796,7 +903,7 @@ export const executeAppSourceProofLauncher = (
             : {}),
         }
       : { credentialDescriptor, cwd: worktree });
-    const admittedExitCodes = expected.mode === "command-capacity" ? [0, 1, 75] : [0, 1];
+    const admittedExitCodes = hostedOperator ? [0, 1, 75] : [0, 1];
     if (
       result.signal !== null
       || !admittedExitCodes.includes(result.exitCode)
@@ -813,7 +920,7 @@ export const executeAppSourceProofLauncher = (
         failure = new AppSourceProofLauncherError("provider_credentials_refused");
       }
     }
-    if (scratchDirectory !== undefined && scratchIdentity !== undefined) {
+    if (scratchDirectory !== undefined && scratchIdentity !== undefined && !buildNeedsRecovery) {
       let cleanupFailed = false;
       try {
         assertSameScratchDirectory(scratchIdentity);
@@ -864,7 +971,7 @@ export const executeAppSourceProofLauncher = (
       }
     }
   }
-  if (failure !== undefined) return renderFailure(failure, dependencies.stderr);
+  if (failure !== undefined) return renderFailure(failure, dependencies.stderr, buildNeedsRecovery ? scratchIdentity : undefined);
   if (result === undefined) return renderFailure(
     new AppSourceProofLauncherError("verifier_execution_failed"),
     dependencies.stderr,

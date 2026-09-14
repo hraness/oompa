@@ -50,6 +50,7 @@ import { launchMenubar } from "./cli/menubar";
 import { InvalidCommandResponseError, renderFailure, renderProtectedInteractionDetail, renderRootStatus, renderSuccess, safeDiagnostic, safeJson, terminalSafe, type Output } from "./cli/render";
 import { redactCompleteSensitiveText } from "./cli/sensitive-text";
 import { compileShellLine, formatShellPrompt, shellHelp, type ShellSelection } from "./cli/shell";
+import { terminalIntro } from "./cli-intro";
 import {
   enumerateUnsettledSessionInteractions,
   pendingInteractionStateKey,
@@ -108,9 +109,12 @@ import {
   createClaudeLoginSignalCustody,
   resolvePinnedClaudeRuntime,
   runClaudeForegroundLogin,
+  resolveClaudeLoginBrowserMode,
+  spawnBunClaudeProcess,
   type ClaudeHostToolPublicResult,
   type ClaudeHostToolResponseWritten,
   type ClaudeForegroundLoginResult,
+  type ClaudeLoginBrowserMode,
   type ClaudeLoginSignalCustody,
   type ClaudeLoginSignalSource,
   type PinnedClaudeRuntime,
@@ -180,7 +184,8 @@ import {
   ClaudeHostToolCallbackServer,
   claudeHostToolCallbackSocketPath,
 } from "./daemon/claude-host-tool-transport";
-import { PinnedClaudeRuntimeManager } from "./daemon/claude-runtime-adapter";
+import { PinnedClaudeRuntimeManager, type ClaudeProcessFactory } from "./daemon/claude-runtime-adapter";
+import { observeClaudeProcess, type ClaudeProcessObservation } from "./claude/process-observation";
 import { PinnedCodexRuntimeManager } from "./daemon/codex-runtime-adapter";
 import {
   BoundedPersonalSessionDiscovery,
@@ -199,7 +204,6 @@ import { SessionEventCursorCodec } from "./daemon/session-event-cursor";
 import { CommandFailure, OompaService } from "./daemon/service";
 import { AccountUsagePoller } from "./daemon/usage-poller";
 import { UsageHistoryCursorCodec } from "./daemon/usage-history-cursor";
-import { ExactChatGptBundlePort, LocalDesktopSwitchPort, PidBoundDesktopAccountRuntime } from "./desktop/index";
 import {
   assertInstallationHome,
   createProductionInstallation,
@@ -1276,6 +1280,7 @@ export type CliMainInput = Readonly<{
   attachmentBlobStore?: AttachmentBlobStore;
   /** Narrow test seam around Claude's foreground-only authentication command. */
   runClaudeForegroundLogin?: (input: Readonly<{
+    browserMode: ClaudeLoginBrowserMode;
     configDir: string;
     signal: AbortSignal;
     signalCustody: ClaudeLoginSignalCustody;
@@ -3321,6 +3326,7 @@ export type RunDaemonOptions = Readonly<{
     transport: CanonicalMemoryTransport,
   ) => CanonicalMemoryTransport;
   liveAcceptanceClaudeProof?: LiveAcceptanceClaudeProofPort;
+  liveAcceptancePersonalClaudeProof?: LiveAcceptancePersonalClaudeProofPort;
   stopSignal?: AbortSignal;
 }>;
 
@@ -3341,6 +3347,24 @@ export type LiveAcceptanceClaudeProofPort = Readonly<{
   closeDaemonGeneration(generation: number | null): void;
 }>;
 
+/**
+ * Structural observation only for the explicit live-acceptance installation.
+ * The repository-only caller owns its status policy and effect observations;
+ * the daemon retains runtime resolution, spawn, identity, bytes and collection.
+ */
+export type LiveAcceptancePersonalClaudeProofPort = Readonly<{
+  executablePath: string;
+  environment: Readonly<Record<string, string>>;
+  beginDaemonGeneration(generation: number): void;
+  assertRuntimeRequest(input: ResolvePinnedClaudeRuntimeOptions): void;
+  runtimeAdmitted(runtime: PinnedClaudeRuntime): void;
+  runtimeFailed(): void;
+  prepareLaunch(launch: Parameters<ClaudeProcessFactory>[0]): ClaudeProcessObservation;
+  observeWrites(): Readonly<{ userWriteAttempts: number; acceptedUserWrites: number; acknowledgmentWithheld: boolean }>;
+  closeAdmission(): void;
+  closeDaemonGeneration(generation: number | null): Promise<void>;
+}>;
+
 async function runDaemonLifecycle(
   installation: OompaInstallation,
   stopLatch: DaemonStopLatch,
@@ -3348,6 +3372,7 @@ async function runDaemonLifecycle(
     transport: CanonicalMemoryTransport,
   ) => CanonicalMemoryTransport,
   liveAcceptanceClaudeProof?: LiveAcceptanceClaudeProofPort,
+  liveAcceptancePersonalClaudeProof?: LiveAcceptancePersonalClaudeProofPort,
 ): Promise<number> {
   assertInstallationHome(installation);
   const paths = installation.paths;
@@ -3381,6 +3406,12 @@ async function runDaemonLifecycle(
   let resolveStop!: () => void;
   const stopped = new Promise<void>((resolve) => { resolveStop = resolve; });
   let stopRequested = false;
+  let personalClaudeProofFailure: unknown;
+  const closePersonalClaudeProofAdmission = () => {
+    try { liveAcceptancePersonalClaudeProof?.closeAdmission(); } catch (error: unknown) {
+      personalClaudeProofFailure ??= error;
+    }
+  };
   const closeCloudLifecycle = (): Promise<void> => {
     if (cloudLifecycle === undefined) return Promise.resolve();
     cloudLifecycleShutdown ??= cloudLifecycle.close();
@@ -3389,6 +3420,7 @@ async function runDaemonLifecycle(
   const requestStop = () => {
     if (stopRequested) return;
     stopRequested = true;
+    closePersonalClaudeProofAdmission();
     if (usagePoller !== undefined) usagePollerShutdown ??= usagePoller.close();
     if (adoptionPoller !== undefined) adoptionPollerShutdown ??= adoptionPoller.close();
     void closeCloudLifecycle().catch(() => undefined);
@@ -3449,6 +3481,7 @@ async function runDaemonLifecycle(
     daemonAuthority = new DaemonAuthorityFence(daemonLock, { generation, bootId });
     const activeDaemonAuthority = daemonAuthority;
     checkpointBoot();
+    liveAcceptancePersonalClaudeProof?.beginDaemonGeneration(generation);
     const serviceReference: { current?: OompaService } = {};
     claudeHostToolAuthority = new ClaudeHostToolBindingAuthority();
     const activeClaudeHostToolAuthority = claudeHostToolAuthority;
@@ -3618,6 +3651,35 @@ async function runDaemonLifecycle(
       },
     });
     personalClaude = new PinnedClaudeRuntimeManager({
+      ...(liveAcceptancePersonalClaudeProof === undefined ? {} : {
+        resolveRuntime: async (input: ResolvePinnedClaudeRuntimeOptions) => {
+          liveAcceptancePersonalClaudeProof.assertRuntimeRequest(input);
+          let runtime: PinnedClaudeRuntime;
+          try {
+            runtime = await resolvePinnedClaudeRuntime({
+              ...input,
+              executablePath: liveAcceptancePersonalClaudeProof.executablePath,
+              environment: liveAcceptancePersonalClaudeProof.environment,
+            });
+          } catch (error: unknown) {
+            liveAcceptancePersonalClaudeProof.runtimeFailed();
+            throw error;
+          }
+          liveAcceptancePersonalClaudeProof.runtimeAdmitted(runtime);
+          return runtime;
+        },
+        processFactory: (launch: Parameters<ClaudeProcessFactory>[0]) => {
+          const observation = liveAcceptancePersonalClaudeProof.prepareLaunch(launch);
+          const child = spawnBunClaudeProcess({
+            argv: launch.argv,
+            configDir: launch.configDir,
+            configHome: launch.configHome,
+            projectRoot: launch.projectRoot,
+            environment: liveAcceptancePersonalClaudeProof.environment,
+          });
+          return observeClaudeProcess(child, observation);
+        },
+      }),
       configHome: personalClaudeConfigHomeForInstallation(installation),
       configDirFor: () => personalHomes.claudeConfigDir,
       isCurrent: (authority) =>
@@ -3939,17 +4001,6 @@ async function runDaemonLifecycle(
       cloudAdapter.bindMemorySummarySource(async ({ devicePublicId, signal }) =>
         await memorySummary.read({ devicePublicId, signal }));
     }
-    const desktop = process.platform === "darwin" && installation.desktopSwitching
-      ? (() => {
-          const bundle = new ExactChatGptBundlePort("/Applications/ChatGPT.app");
-          return new LocalDesktopSwitchPort({
-            paths,
-            store: activeStore,
-            runtime: new PidBoundDesktopAccountRuntime({ codex, bundle }),
-            bundle,
-          });
-        })()
-      : undefined;
     const { service: activeService, executeAuthenticatedLocal } = OompaService.createLocalComposition({
       store: activeStore,
       paths,
@@ -3977,7 +4028,6 @@ async function runDaemonLifecycle(
       proseResponder: new AiGatewayProseResponder({
         readKey: async () => await gatewayKeys.read(),
       }),
-      ...(desktop === undefined ? {} : { desktop }),
       requestStop,
     });
     serviceReference.current = activeService;
@@ -4042,10 +4092,16 @@ async function runDaemonLifecycle(
         if (command.kind !== "daemon.status") return data;
         const daemon = identityFromReceipt(daemonLock.receipt);
         if (daemon === null) throw new Error("Daemon authority identity is not published.");
+        const acceptance = liveAcceptancePersonalClaudeProof?.observeWrites();
         return {
           ...(typeof data === "object" && data !== null ? data : {}),
           running: true,
           daemon,
+          ...(acceptance === undefined ? {} : { liveAcceptancePersonalClaude: Object.freeze({
+            userWriteAttempts: acceptance.userWriteAttempts,
+            acceptedUserWrites: acceptance.acceptedUserWrites,
+            acknowledgmentWithheld: acceptance.acknowledgmentWithheld,
+          }) }),
         };
       },
     });
@@ -4060,7 +4116,8 @@ async function runDaemonLifecycle(
     if (!(error instanceof DaemonBootInterruptedError)) runError = error;
   } finally {
     if (stopLatch.deliver === requestStop) stopLatch.deliver = undefined;
-    runError ??= unhandledRejectionError;
+    closePersonalClaudeProofAdmission();
+    runError ??= unhandledRejectionError ?? personalClaudeProofFailure;
     if (usagePoller !== undefined) usagePollerShutdown ??= usagePoller.close();
     if (adoptionPoller !== undefined) adoptionPollerShutdown ??= adoptionPoller.close();
     if (service !== undefined) serviceShutdown ??= service.close();
@@ -4168,6 +4225,22 @@ async function runDaemonLifecycle(
       }
     }
 
+    if (liveAcceptancePersonalClaudeProof !== undefined) {
+      try {
+        await joinBeforeDeadline(
+          "Personal Claude acceptance process collection",
+          liveAcceptancePersonalClaudeProof.closeDaemonGeneration(generation ?? null),
+        );
+      } catch (error: unknown) {
+        // This collector must prove every observed child and both actual native
+        // streams joined. A rejection is custody uncertainty, not a benign
+        // operation error; preserve the ordinary forced-recovery boundary.
+        const failure = new DaemonJoinDeadlineError("Personal Claude acceptance process collection", 5_000);
+        failure.cause = error;
+        runError = failure;
+      }
+    }
+
     if (runError instanceof DaemonJoinDeadlineError || runError instanceof LocalDaemonShutdownTimeoutError) {
       const diagnostic = safeDaemonFailure(runError);
       await daemonLock.publish({
@@ -4214,6 +4287,7 @@ export async function runDaemon(
     (
       options.liveAcceptanceCanonicalMemoryTransportDecorator !== undefined
       || options.liveAcceptanceClaudeProof !== undefined
+      || options.liveAcceptancePersonalClaudeProof !== undefined
     )
     && installation.kind !== "live_acceptance"
   ) {
@@ -4238,6 +4312,7 @@ export async function runDaemon(
       stopLatch,
       options.liveAcceptanceCanonicalMemoryTransportDecorator,
       options.liveAcceptanceClaudeProof,
+      options.liveAcceptancePersonalClaudeProof,
     );
   } finally {
     stopLatch.deliver = undefined;
@@ -5149,6 +5224,7 @@ async function executeClaudeAccountAuthentication(
   output: Output,
   input: CliMainInput,
 ): Promise<number> {
+  const browserMode = resolveClaudeLoginBrowserMode(invocation.browserMode);
   const isTerminalDescriptor = input.isTerminalDescriptor ?? isatty;
   if (
     invocation.json
@@ -5190,7 +5266,12 @@ async function executeClaudeAccountAuthentication(
   if (status.data.recovery !== undefined) {
     return renderFailure({
       code: "RECOVERY_REQUIRED",
-      details: status.data.recovery,
+      details: {
+        ...status.data.recovery,
+        sameKeyReplayCommand: claudeAccountLoginCommand(
+          status.data.account.id, status.data.recovery.idempotencyKey, browserMode,
+        ),
+      },
       message: status.data.recovery.diagnostic,
     }, invocation.json, output);
   }
@@ -5257,8 +5338,12 @@ async function executeClaudeAccountAuthentication(
           ? 143
           : 0;
     }
-    const grant = prepared.data.login;
-    const exactReplayCommand = claudeAccountLoginCommand(prepared.data.account.id, grant.idempotencyKey);
+    const grant = Object.freeze({
+      ...prepared.data.login,
+      accountId: prepared.data.account.id,
+      browserMode,
+    });
+    const exactReplayCommand = claudeAccountLoginCommand(grant.accountId, grant.idempotencyKey, grant.browserMode);
     // Retain prepare-bound custody through path revalidation, spawn, child join,
     // and the exact daemon completion RPC.
     let foreground: ClaudeForegroundLoginResult | undefined = signalCustody.interruptedBy === null
@@ -5312,7 +5397,13 @@ async function executeClaudeAccountAuthentication(
     }
     if (foreground === undefined) {
       try {
+        if (grant.browserMode === "owner_manual") {
+          output.writeStderr(`Claude login for Oompa profile ${terminalSafe(prepared.data.account.label)}.\n`
+            + "Close all prior private/incognito windows, then open one fresh private window; keep normal browser sessions unchanged.\n"
+            + "Copy Claude's printed link unchanged into that window. Check the intended account before approving sign-in.\n");
+        }
         foreground = await (input.runClaudeForegroundLogin ?? runClaudeForegroundLogin)({
+          browserMode: grant.browserMode,
           configDir: preflight.configDir,
           runtime: preflight.runtime,
           signal: controller.signal,
@@ -5321,7 +5412,7 @@ async function executeClaudeAccountAuthentication(
         });
       } catch {
         return claudeLoginRecovery({
-          accountId: prepared.data.account.id,
+          accountId: grant.accountId,
           attemptId: grant.attemptId,
           idempotencyKey: grant.idempotencyKey,
           providerGeneration: grant.providerGeneration,
@@ -5331,7 +5422,7 @@ async function executeClaudeAccountAuthentication(
     }
     const complete = localCommandSchema.parse({
       kind: "account.claude-login.complete",
-      account: prepared.data.account.id,
+      account: grant.accountId,
       attemptId: grant.attemptId,
       idempotencyKey: grant.idempotencyKey,
       providerGeneration: grant.providerGeneration,
@@ -5343,7 +5434,7 @@ async function executeClaudeAccountAuthentication(
     } catch (error: unknown) {
       if (!(error instanceof LocalDaemonIndeterminateError)) throw error;
       return claudeLoginRecovery({
-        accountId: prepared.data.account.id,
+        accountId: grant.accountId,
         attemptId: grant.attemptId,
         idempotencyKey: grant.idempotencyKey,
         providerGeneration: grant.providerGeneration,
@@ -5352,7 +5443,7 @@ async function executeClaudeAccountAuthentication(
     }
     if (!completedResponse.ok) {
       return claudeLoginRecovery({
-        accountId: prepared.data.account.id,
+        accountId: grant.accountId,
         attemptId: grant.attemptId,
         idempotencyKey: grant.idempotencyKey,
         providerGeneration: grant.providerGeneration,
@@ -5362,13 +5453,13 @@ async function executeClaudeAccountAuthentication(
     const completed = claudeLoginCompleteResponseSchema.safeParse(completedResponse.data);
     if (
       !completed.success
-      || completed.data.account.id !== prepared.data.account.id
+      || completed.data.account.id !== grant.accountId
       || completed.data.login.attemptId !== grant.attemptId
       || completed.data.login.idempotencyKey !== grant.idempotencyKey
       || completed.data.login.providerGeneration !== grant.providerGeneration
     ) {
       return claudeLoginRecovery({
-        accountId: prepared.data.account.id,
+        accountId: grant.accountId,
         attemptId: grant.attemptId,
         idempotencyKey: grant.idempotencyKey,
         providerGeneration: grant.providerGeneration,
@@ -5392,7 +5483,7 @@ async function executeClaudeAccountAuthentication(
         details: {
           accountSelector: completed.data.account.id,
           accountState: "signed_out",
-          nextCommand: claudeAccountLoginCommand(completed.data.account.id),
+          nextCommand: claudeAccountLoginCommand(completed.data.account.id, undefined, grant.browserMode),
           provider: "claude",
         },
         message: "Claude Code finished without an authenticated session in this account's isolated profile.",
@@ -6199,6 +6290,9 @@ async function executeUsageRefreshAll(
 
 function renderHelp(invocation: Extract<CliInvocation, { kind: "help" }>, output: Output): number {
   const resolved = resolveUsage(invocation.group, invocation.leaf);
+  if (!invocation.json && invocation.group === undefined && invocation.leaf === undefined && output === processOutput) {
+    output.writeStdout(terminalIntro({ isTTY: process.stdout.isTTY, columns: process.stdout.columns, term: process.env.TERM }));
+  }
   output.writeStdout(invocation.json
     ? `${safeJson({ ok: true, version: 1, command: "help", data: resolved })}\n`
     : `${resolved.usage}\n`);
@@ -6512,7 +6606,6 @@ export async function main(
     const replayableLocalMutation = invocation?.kind === "command"
       && (
         invocation.command.kind === "account.logout"
-        || invocation.command.kind === "account.switch"
         || invocation.command.kind === "usage.auto.set"
         || invocation.command.kind === "session.start"
         || invocation.command.kind === "session.send"

@@ -21,5 +21,5 @@ Oompa is a control plane for Codex and Claude Code. Codex runs through Oompa's e
 - Rotate, pool, or fail over between accounts or providers automatically.
 - Hold, read, or forward any provider credential.
 - Route through a learned model router or a cost cascade.
-- Pretend provider-specific features have parity: Codex account, usage, plugin, desktop, and native transcript operations remain Codex-specific until an independently reviewed Claude Code contract exists.
+- Pretend provider-specific features have parity: Codex account, usage, plugin, and native transcript operations remain Codex-specific until an independently reviewed Claude Code contract exists.
 - Offer Claude login from the web surface. Codex web linking uses its provider-owned device-code flow.

@@ -3694,12 +3694,14 @@ implements CloudDaemonLocalSourcePort, CloudCommandExecutorPort, CloudDeviceComm
   ): Promise<CloudDeviceRegistryProjection> {
     if (input.signal.aborted) throw input.signal.reason;
     const accounts = this.#deviceRegistryAccounts(input.signal);
-    const projects = this.#store.listProjects()
-      .slice(0, deviceRegistryLimits.projects)
-      .map((project) => ({
-        label: registryLabel(project.label, "Project"),
-        publicId: project.id,
-      }));
+    const listedProjects = this.#store.listProjects().slice(0, deviceRegistryLimits.projects);
+    const projects = listedProjects.map((project) => ({
+      label: registryLabel(project.label, "Project"),
+      publicId: project.id,
+    }));
+    // The default is projected only when it is within the listed bound, so
+    // the registry never names a project it does not list.
+    const defaultProjectPublicId = listedProjects.find((project) => project.default)?.id;
     const scheduledTasks: DeviceRegistryScheduledTask[] = this.#store.createSessionTaskStore()
       .listAll(deviceRegistryLimits.scheduledTasks)
       .map((task) => ({
@@ -3752,6 +3754,7 @@ implements CloudDaemonLocalSourcePort, CloudCommandExecutorPort, CloudDeviceComm
       daemonVersion: registryLabel(OOMPA_VERSION, "unknown", deviceRegistryLimits.versionCharacters),
       defaultApprovalMode: this.#store.readDefaultApprovalMode(),
       defaultPreset,
+      ...(defaultProjectPublicId === undefined ? {} : { defaultProjectPublicId }),
       deviceCommandsAllowed: deviceCommandPolicy.deviceCommandsAllowed,
       heartbeatAt: this.#registryNow(),
       machineLabel: this.#machineLabel,

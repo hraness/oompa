@@ -74,6 +74,14 @@ export function EnrollmentScreen() {
         );
       case "needs_bind":
       case "active":
+        return (
+          <>
+            <CardTitle>Opening your account</CardTitle>
+            <CardDescription>
+              Unwrapping the account key with the device key that never left this browser.
+            </CardDescription>
+          </>
+        );
       case "unknown":
       default:
         return (
@@ -97,6 +105,11 @@ export function EnrollmentScreen() {
           {custody.enrollment === "needs_registration" ? (
             <Button disabled={custody.busy} onClick={() => { void custody.enroll(); }}>
               Enroll this browser
+            </Button>
+          ) : null}
+          {custody.state === "unlocking" && custody.error !== null ? (
+            <Button disabled={custody.busy} onClick={() => { void custody.unlock(); }}>
+              Try again
             </Button>
           ) : null}
           {custody.enrollment === "awaiting_approval" ? (

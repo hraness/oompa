@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import fc from "fast-check";
 import {
   existsSync,
   mkdtempSync,
@@ -13,6 +14,7 @@ import { join } from "node:path";
 import {
   capabilityPlatformSupported,
   hostAccessRequiredCode,
+  hostCommandDigest,
   hostAccessRequiredExitCode,
   inheritedLeaseCovers,
   parseHostRunArguments,
@@ -24,8 +26,11 @@ import {
   resolveSlopcameraRuntimeRoot,
   resolveCapabilityStateRoot,
   resolveHostResourceStateRoot,
+  runHostCommand,
 } from "./host-run";
 import { slopcameraRuntimeDirectory } from "./runtime-pin";
+import { commandDigest } from "./telemetry";
+import { queueRegistryRoot, readQueueSnapshot, requestQueueHandoff } from "./queue-observer";
 
 describe("host-wide resource wrapper", () => {
   test("uses the established 1/2/all weighted model", () => {
@@ -78,6 +83,79 @@ describe("host-wide resource wrapper", () => {
     });
   });
 
+  test("shares a task UUID only when explicitly supplied", () => {
+    const taskId = "00000000-0000-4000-8000-000000000001";
+    expect(parseHostRunArguments([`--task-id=${taskId}`, "--", "true"]).taskId).toBe(taskId);
+    expect(parseHostRunArguments(["--", "true"]).taskId).toBeUndefined();
+    expect(() => parseHostRunArguments([`--task-id=${taskId}`, `--task-id=${taskId}`, "--", "true"])).toThrow("only once");
+    for (const value of ["", "private-title", "/private/task", "line\nbreak"]) {
+      expect(() => parseHostRunArguments([`--task-id=${value}`, "--", "true"])).toThrow("explicit UUID");
+    }
+  });
+
+  test("cancellation while holding capability and awaiting CPU refuses handoff throughout release", async () => {
+    const root = mkdtempSync(join(tmpdir(), "oompa-queue-cancel-"));
+    const stateRoot = join(root, "state");
+    const modulePath = join(root, "runtime.js");
+    const waiting = join(root, "waiting");
+    const releasing = join(root, "releasing");
+    const finish = join(root, "finish");
+    writeFileSync(modulePath, `
+      import { closeSync, existsSync, openSync, writeFileSync } from "node:fs";
+      export function createHostResourceCoordinator(options) {
+        return { async withLease(_claims, callback, leaseOptions) {
+          if (!options.profile.id.includes("capabilities")) {
+            writeFileSync(${JSON.stringify(waiting)}, "waiting");
+            await new Promise((_resolve, reject) => {
+              const abort = () => reject(new Error("canceled"));
+              if (leaseOptions.signal.aborted) abort();
+              else leaseOptions.signal.addEventListener("abort", abort, { once: true });
+            });
+          }
+          const fd = openSync("/dev/null", "r");
+          try { return await callback({ inheritedFileDescriptor: fd }); }
+          finally {
+            writeFileSync(${JSON.stringify(releasing)}, "releasing");
+            const deadline = performance.now() + 5000;
+            while (!existsSync(${JSON.stringify(finish)}) && performance.now() < deadline) await Bun.sleep(10);
+            closeSync(fd);
+          }
+        } };
+      }
+    `);
+    const environment: NodeJS.ProcessEnv = { ...process.env, OOMPA_LOCAL_EFFICIENCY_STATE_ROOT: stateRoot,
+      OOMPA_SLOPCAMERA_HOST_RESOURCES_MODULE: modulePath, OOMPA_LOCAL_EFFICIENCY_TELEMETRY: "off", OOMPA_LOCAL_EFFICIENCY_QUEUE: "on" };
+    delete environment.OOMPA_LOCAL_EFFICIENCY_LEASE;
+    delete environment.HRA_LOCAL_EFFICIENCY_LEASE;
+    const wrapper = Bun.spawn([process.execPath, join(import.meta.dir, "host-run.ts"), "--lane=browser-auth", "--label=cancel-cpu", "--", "/synthetic/must-not-start"],
+      { cwd: root, env: environment, stdout: "ignore", stderr: "pipe" });
+    const output = new Response(wrapper.stderr).text();
+    const until = async (path: string) => {
+      for (let attempt = 0; attempt < 400 && !existsSync(path); attempt += 1) await Bun.sleep(10);
+      expect(existsSync(path)).toBeTrue();
+    };
+    try {
+      await until(waiting);
+      const owner = (await readQueueSnapshot(stateRoot)).owners[0];
+      expect(owner).toMatchObject({ stage: "waiting-compute", capability: "reported-held" });
+      wrapper.kill("SIGTERM");
+      await until(releasing);
+      expect((await readQueueSnapshot(stateRoot)).owners[0]).toMatchObject({ stage: "settling", capability: "reported-held" });
+      expect((await requestQueueHandoff(stateRoot, { version: 1, operation: "request-handoff", runId: owner!.runId,
+        requestId: "cancel-release", requesterLabel: "waiter" })).result).toBe("not-holder");
+      writeFileSync(finish, "finish");
+      expect(await wrapper.exited).toBe(143);
+      expect(await output).not.toContain("handoff requested by");
+    } finally {
+      writeFileSync(finish, "finish");
+      if (wrapper.exitCode === null) wrapper.kill("SIGTERM");
+      await wrapper.exited;
+      await output;
+      rmSync(queueRegistryRoot(stateRoot), { force: true, recursive: true });
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 10_000);
+
   test("uses one machine-wide state root across isolated Codex profiles", () => {
     const first = resolveHostResourceStateRoot(
       { CODEX_HOME: "/profiles/one" },
@@ -103,6 +181,47 @@ describe("host-wide resource wrapper", () => {
       { CODEX_HOME: "/profiles/two" },
       "/opt/tester",
     )).toBe(resolveSlopcameraRuntimeRoot({}, "/opt/tester"));
+  });
+
+  test("TTY child signal ownership is an explicit closed non-inherited command option", () => {
+    expect(parseHostRunArguments(["--tty-signal-owner=child", "--", "bun", "fixture.ts"]).ttySignalOwner).toBe("child");
+    expect(parseHostRunArguments(["--tty-signal-owner=parent", "--", "bun"]).ttySignalOwner).toBe("parent");
+    expect(parseHostRunArguments(["--", "bun"]).ttySignalOwner).toBeUndefined();
+    for (const value of ["", "auto", "none", "CHILD", "child\0", "child,parent"]) {
+      expect(() => parseHostRunArguments([`--tty-signal-owner=${value}`, "--", "bun"])).toThrow("invalid TTY signal owner");
+    }
+    expect(() => parseHostRunArguments(["--tty-signal-owner=child", "--tty-signal-owner=parent", "--", "bun"])).toThrow("only once");
+    expect(parseHostRunArguments(["--", "bun", "--tty-signal-owner=child"]).command).toEqual(["bun", "--tty-signal-owner=child"]);
+  });
+
+  test("child ownership refuses before module, lease or subprocess when any standard descriptor is not a TTY", async () => {
+    // The ordinary compute test has no controlling terminal; actual three-TTY
+    // success and each missing descriptor are separate explicit native fixtures.
+    if (process.stdin.isTTY && process.stdout.isTTY && process.stderr.isTTY) return;
+    await expect(runHostCommand({ command: ["/synthetic/must-not-start"], cwd: import.meta.dir, label: "tty-refusal", lane: "compute", mode: "shared",
+      ttySignalOwner: "child", environment: { OOMPA_SLOPCAMERA_HOST_RESOURCES_MODULE: "/synthetic/must-not-load" } })).rejects.toThrow("requires POSIX terminal descriptors");
+    const foreign = { command: ["/synthetic/must-not-start"], cwd: import.meta.dir, label: "tty-refusal", lane: "compute" as const, mode: "shared" as const };
+    Reflect.set(foreign, "ttySignalOwner", "unknown");
+    await expect(runHostCommand(foreign)).rejects.toThrow("invalid TTY signal owner");
+  });
+
+  test("generated TTY options preserve opaque child argv and refuse every other prefix value", () => {
+    fc.assert(fc.property(fc.constantFrom("parent", "child"), fc.array(fc.string({ maxLength: 40 }), { maxLength: 8 }), (owner, arguments_) => {
+      const parsed = parseHostRunArguments([`--tty-signal-owner=${owner}`, "--", "bun", ...arguments_]);
+      expect(parsed.ttySignalOwner).toBe(owner);
+      expect(parsed.command).toEqual(["bun", ...arguments_]);
+    }), { numRuns: 128 });
+    fc.assert(fc.property(fc.string({ maxLength: 64 }).filter((value) => value !== "parent" && value !== "child"), (value) => {
+      expect(() => parseHostRunArguments([`--tty-signal-owner=${value}`, "--", "bun"])).toThrow("invalid TTY signal owner");
+    }), { numRuns: 128 });
+  });
+
+  test("child signal ownership cannot reuse the default command digest", () => {
+    const argv = ["bun", "owner.ts"]; const scope = "synthetic-scope";
+    expect(hostCommandDigest(argv, scope)).toBe(commandDigest(argv, scope));
+    expect(hostCommandDigest(argv, scope, "parent")).toBe(commandDigest(argv, scope));
+    expect(hostCommandDigest(argv, scope, "child")).not.toBe(commandDigest(argv, scope));
+    expect(hostCommandDigest(argv, scope, "child")).not.toBe(hostCommandDigest(["bun", "other.ts"], scope, "child"));
   });
 
   test("requires macOS for the mac-native lane", () => {

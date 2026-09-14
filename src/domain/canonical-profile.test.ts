@@ -140,7 +140,9 @@ describe("canonical historical profile identities", () => {
     expect(supportedPresetSchema.safeParse("astra").success).toBe(false);
     expect(decodeHistoricalPresetProfile({ provider: "codex", preset: "ultra", contract: 2 })?.model)
       .toBe("gpt-6-astra");
-    expect(activePresetBinding("ultra").requirement).toEqual({ model: "gpt-5.6-sol", effort: "ultra" });
+    expect(activePresetBinding("ultra").requirement).toEqual({ model: "gpt-6-astra", effort: "ultra" });
+    expect(decodeHistoricalPresetProfile({ provider: "codex", preset: "ultra", contract: 1 })?.model)
+      .toBe("gpt-5.6-sol");
     expect(JSON.stringify([activePresetBinding("high"), activePresetBinding("ultra")])).toBe(before);
     for (const profile of canonicalProfileCatalog) {
       expect(Object.keys(profile)).toEqual(["key", "provider", "model", "effort"]);

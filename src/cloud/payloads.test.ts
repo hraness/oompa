@@ -95,7 +95,7 @@ describe("closed encrypted payloads", () => {
     expect(parseRemoteCommandPayload({
       kind: "set_model",
       preset: "ultra",
-      presetContract: 2,
+      presetContract: 1,
     })).toBeNull();
   });
 
@@ -103,14 +103,14 @@ describe("closed encrypted payloads", () => {
     expect(parseRemoteCommandPayload({ kind: "set_provider", provider: "claude" }))
       .toEqual({ kind: "set_provider", provider: "claude" });
     const derivedCodex = activeRemoteDerivedCodexSelection();
-    expect(derivedCodex).toEqual({ presetContract: 1, provider: "codex" });
+    expect(derivedCodex).toEqual({ presetContract: 2, provider: "codex" });
     expect(parseRemoteCommandPayload({ kind: "set_provider", ...derivedCodex }))
       .toEqual({ kind: "set_provider", ...derivedCodex });
     expect(parseRemoteCommandPayload({ kind: "set_provider", provider: "codex" }))
       .toBeNull();
     expect(parseRemoteCommandPayload({
       kind: "set_provider",
-      presetContract: 2,
+      presetContract: 1,
       provider: "codex",
     })).toBeNull();
     expect(parseRemoteCommandPayload({
@@ -131,7 +131,7 @@ describe("closed encrypted payloads", () => {
       kind: "set_provider",
       ...activeRemotePresetSelection("high"),
       provider: "codex",
-    })).toEqual({ kind: "set_provider", preset: "high", presetContract: 1, provider: "codex" });
+    })).toEqual({ kind: "set_provider", preset: "high", presetContract: 2, provider: "codex" });
     expect(parseRemoteCommandPayload({ kind: "set_provider", preset: "astra", provider: "devin" }))
       .toBeNull();
     expect(parseRemoteCommandPayload({ kind: "set_provider", provider: "devin" })).toBeNull();
@@ -149,7 +149,7 @@ describe("closed encrypted payloads", () => {
     expect(parseRemoteCommandPayload({
       kind: "set_provider",
       preset: "high",
-      presetContract: 2,
+      presetContract: 1,
       provider: "codex",
     })).toBeNull();
     expect(parseRemoteCommandPayload({ kind: "set_provider", preset: "fable", provider: "claude" }))
@@ -418,14 +418,14 @@ describe("settings command payloads", () => {
     expect(parseRemoteCommandPayload({
       kind: "set_default_preset",
       preset: "ultra",
-      presetContract: 1,
-    })).toEqual({ kind: "set_default_preset", preset: "ultra", presetContract: 1 });
+      presetContract: 2,
+    })).toEqual({ kind: "set_default_preset", preset: "ultra", presetContract: 2 });
     expect(parseRemoteCommandPayload({ kind: "set_default_preset", preset: "ultra" }))
       .toBeNull();
     expect(parseRemoteCommandPayload({
       kind: "set_default_preset",
       preset: "ultra",
-      presetContract: 2,
+      presetContract: 1,
     })).toBeNull();
     expect(parseRemoteCommandPayload({ kind: "archive_session", archived: true }))
       .toEqual({ archived: true, kind: "archive_session" });
@@ -583,6 +583,23 @@ describe("device registry payloads", () => {
     const key = randomKeyBytes();
     const envelope = await encryptDeviceRegistry(withAdoption, key, authority);
     expect(await decryptDeviceRegistry(envelope, key, authority)).toEqual(withAdoption);
+  });
+
+  test("accepts an additive default project only when it names a listed project", async () => {
+    const withDefault = {
+      ...registry,
+      defaultProjectPublicId: "proj_00000000000000000000000000000001",
+    } as const;
+    expect(parseDeviceRegistryPayload(withDefault)).toEqual(withDefault);
+    const key = randomKeyBytes();
+    const envelope = await encryptDeviceRegistry(withDefault, key, authority);
+    expect(await decryptDeviceRegistry(envelope, key, authority)).toEqual(withDefault);
+    expect(parseDeviceRegistryPayload({
+      ...registry,
+      defaultProjectPublicId: "proj_00000000000000000000000000000009",
+    })).toBeNull();
+    expect(parseDeviceRegistryPayload({ ...registry, defaultProjectPublicId: null })).toBeNull();
+    expect(parseDeviceRegistryPayload({ ...registry, defaultProjectPublicId: "/Users/me" })).toBeNull();
   });
 
   test("parses and encrypts a registry carrying a Devin account and Astra default", async () => {
@@ -957,7 +974,7 @@ describe("device command payloads", () => {
     accountPublicId: "account_primary",
     kind: "session_start",
     preset: "ultra",
-    presetContract: 1,
+    presetContract: 2,
     projectPublicId: "project_alpha",
     prompt: "continue the migration",
     provider: "codex",
@@ -1033,7 +1050,7 @@ describe("device command payloads", () => {
       ...sessionStart,
       presetContract: undefined,
     })).toBeNull();
-    expect(parseDeviceCommandPayload({ ...sessionStart, presetContract: 2 })).toBeNull();
+    expect(parseDeviceCommandPayload({ ...sessionStart, presetContract: 1 })).toBeNull();
     expect(parseDeviceCommandPayload({
       ...sessionStart,
       preset: "fable-max",

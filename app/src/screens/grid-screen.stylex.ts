@@ -4,11 +4,12 @@ const gridBreakpoint = "@media (min-width: 40rem)";
 
 export const gridScreenStyles = stylex.create({
   cardGrid: {
+    alignItems: "start",
     display: "grid",
     gap: "0.75rem",
     gridTemplateColumns: {
       default: "minmax(0, 1fr)",
-      [gridBreakpoint]: "repeat(auto-fill, minmax(20rem, 1fr))",
+      [gridBreakpoint]: "repeat(auto-fill, minmax(22rem, 1fr))",
     },
   },
   controls: {
@@ -29,7 +30,7 @@ export const gridScreenStyles = stylex.create({
   },
   fileInput: { display: "none" },
   form: {
-    alignItems: "center",
+    alignItems: "flex-end",
     display: "flex",
     flex: 1,
     gap: "0.5rem",
@@ -51,7 +52,7 @@ export const gridScreenStyles = stylex.create({
     zIndex: 20,
   },
   headerRow: {
-    alignItems: "center",
+    alignItems: "flex-end",
     display: "flex",
     gap: "0.5rem",
   },
@@ -111,9 +112,9 @@ export const gridScreenStyles = stylex.create({
     borderStyle: "solid",
     borderWidth: "1px",
     color: "var(--color-ink)",
-    fontSize: "0.875rem",
-    lineHeight: "1.25rem",
-    minHeight: "2.75rem",
+    fontSize: "0.8125rem",
+    lineHeight: "1.125rem",
+    minHeight: "2rem",
     paddingBottom: 0,
     paddingLeft: "0.5rem",
     paddingRight: "0.5rem",

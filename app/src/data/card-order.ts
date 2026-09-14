@@ -4,9 +4,9 @@
  * The arrangement is a per-viewer preference, not account state: it is never
  * uploaded, never encrypted into a projection, and never sent as a command, so
  * two readers of the same account keep their own grids. That makes local
- * storage the right home for it and the only thing this app keeps there.
+ * storage the right home for it alongside the app's finite preferences.
  *
- * `app/src/auth/no-persistent-storage.test.ts` allows exactly this module to
+ * `app/src/auth/no-persistent-storage.test.ts` explicitly allows this module to
  * name `localStorage`. What it stores is a bounded list of opaque session
  * public ids: no projection text, no name, no token, no key.
  */

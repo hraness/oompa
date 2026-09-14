@@ -2319,26 +2319,6 @@ describe("CLI rendering", () => {
     });
   });
 
-  test("renders desktop switch recovery outcomes without exposing evidence internals", () => {
-    const target = capture();
-    renderSuccess(
-      { kind: "account.switch-recover" },
-      {
-        status: "recovery_required",
-        switchGeneration: 7,
-        diagnostic: "PROCESS_SET_CHANGED",
-        observationDigest: "a".repeat(64),
-      },
-      false,
-      target.output,
-    );
-    expect(target.stdout).toEqual([
-      "Desktop switch 7 still requires recovery: PROCESS_SET_CHANGED.\n",
-    ]);
-    expect(target.stdout.join("")).not.toContain("observationDigest");
-    expect(target.stderr).toEqual([]);
-  });
-
   test("renders plugin discovery as read-only and withholds path-bearing load diagnostics", () => {
     const sentinel = "/workspace/private/marketplace.json";
     const list = capture();

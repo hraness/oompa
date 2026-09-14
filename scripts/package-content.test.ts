@@ -30,18 +30,19 @@ describe("independently authored package content", () => {
   });
 
   test("retains candidate, predecessor, startup, privacy, and command-order contracts", () => {
-    expect(readme).toContain("The v0.8.0 candidate is not yet admitted.");
-    expect(readme).toContain("For the admitted v0.7.1 artifact, use its [immutable README](https://github.com/hraness/oompa/tree/v0.7.1#get-started).");
-    expect(readme).toContain("https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install");
+    expect(readme).toContain("The v0.8.2 candidate is not yet admitted.");
+    expect(readme).toContain("For the admitted v0.8.1 artifact, use its [verified installation notes](https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact).");
+    expect(readme).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.1");
+    expect(readme).toContain("The v0.8.1 npm mirror is not admitted.");
     expect(readme).toContain(packageCandidateNotice);
     expect(readme.indexOf(packageCandidateNotice)).toBeLessThan(readme.indexOf(packageInstallCommand));
-    expect(readme.indexOf("The v0.8.0 candidate is not yet admitted.")).toBeLessThan(readme.indexOf(packageInstallCommand));
+    expect(readme.indexOf("The v0.8.2 candidate is not yet admitted.")).toBeLessThan(readme.indexOf(packageInstallCommand));
     expect(readme.indexOf(packageInstallPrerequisite)).toBeLessThan(readme.indexOf(packageInstallCommand));
     expect(readme.indexOf(packageInstallCommand)).toBeLessThan(readme.indexOf("\noompa doctor --offline\n"));
     expect(readme).toContain(packageDaemonNotice);
     expect(readme.indexOf(packageDaemonNotice)).toBeLessThan(readme.indexOf("oompa session start personal --provider codex --json"));
-    expect(readme).toContain("[Availability](https://oompa.dev/docs/status/)");
-    expect(readme).toContain("[ordered update runbook](https://oompa.dev/docs/status/#install-and-update)");
+    expect(readme).toContain("[Availability](https://oompa.app/docs/status/)");
+    expect(readme).toContain("[ordered update runbook](https://oompa.app/docs/status/#install-and-update)");
     expect(readme).toContain("https://github.com/hraness/oompa/blob/main/PRIVACY.md");
     expect(readme).toContain("Oompa is maintained by [Hraness](https://hraness.com/) and published under the MIT license.");
     expect(readme.match(/Oompa is maintained by/gu)).toHaveLength(1);
@@ -50,7 +51,7 @@ describe("independently authored package content", () => {
     expect(readme).not.toContain("\u2014");
     expect(manifest.description).not.toContain("\u2014");
     for (const excluded of [
-      "v0.7.1 candidate", "v0.8.0 artifacts admitted", "## Command reference\n",
+      "v0.7.1 candidate", "v0.8.2 artifacts admitted", "## Command reference\n",
       "### Update runbook\n", "## First account\n", "## Privacy\n", "\nhra init --yes\n",
       "/reading/deepseek-harness/", "/reading/hax/", "/reading/headlong-microharness/", "/reading/oracle-and-firm/",
     ]) expect(readme).not.toContain(excluded);
@@ -64,14 +65,32 @@ describe("independently authored package content", () => {
         .toThrow("before its prerequisite");
     }
     for (const claim of [
-      "Install and verify the admitted v0.8.0 CLI artifact",
-      "v0.8.0 artifacts admitted", "v0.8.0 is the fully admitted public artifact",
+      "The v0.8.1 npm mirror is admitted.",
+      "Install and verify the admitted v0.8.1 CLI artifact",
+      "v0.8.1 artifacts admitted", "v0.8.1 is the fully admitted public artifact",
+      "Install and verify the admitted v0.8.2 CLI artifact",
+      "v0.8.2 artifacts admitted", "v0.8.2 is the fully admitted public artifact",
       "The v0.7.1 candidate is not yet admitted",
     ]) expect(() => assertPackageContent(manifest, readme + claim + "\n")).toThrow("conflicting release claim");
   });
 
+  test("requires exact canonical predecessor evidence without claiming npm admission", () => {
+    for (const required of [
+      "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact",
+      "https://github.com/hraness/oompa/releases/tag/v0.8.1",
+      "v0.8.1 remains the admitted canonical GitHub artifact.",
+      "The v0.8.1 npm mirror is not admitted.",
+    ]) {
+      expect(() => assertPackageContent(manifest, readme.replaceAll(required, "")))
+        .toThrow("missing its technical identity");
+    }
+    expect(() => assertPackageContent(manifest, readme.replace(
+      "The v0.8.1 npm mirror is not admitted.", "The v0.8.1 npm mirror is admitted.",
+    ))).toThrow("missing its technical identity");
+  });
+
   test("never transfers the exact package content contract to another version or identity", () => {
-    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.1", "v0.8.0", "0.8.0-beta.1", ""]) {
+    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.0", "0.8.1", "v0.8.2", "0.8.2-beta.1", ""]) {
       expect(() => assertPackageContent({ ...manifest, version }, readme)).toThrow();
     }
     for (const name of ["oompa", ["@", "other", "/oompa"].join(""), ""]) {

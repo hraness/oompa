@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { isAbsolute, resolve } from "node:path";
 
 import { z } from "zod";
+import { AppSourceArtifactError, appLocalArtifactProofSchema, appPublicArtifactProofSchema, hasAppArtifactSecurityHeaders, observePublicAppArtifacts,
+  readLocalAppArtifactProof, type AppSourceArtifact } from "./app-source-artifacts";
 
 import { createBoundedAuthorityFetch, type AuthorityFetcher } from "./bounded-authority-fetch";
 import { readProtectedVercelAccessToken } from "./current-project-alias-release";
@@ -24,13 +26,13 @@ const providerMaximumBytes = 128 * 1024;
 const deploymentListPageLimit = 20;
 const deploymentListMaximumPages = 10;
 const markerMaximumBytes = 16 * 1024;
-const outputMaximumBytes = 4 * 1024;
+const outputMaximumBytes = 64 * 1024;
 const sourceReadMaximumBytes = 64 * 1024;
 const observationMaximumMs = 5 * 60 * 1_000;
 const vercelApiOrigin = "https://api.vercel.com";
 const publicRepositoryUrl = "https://github.com/hraness/oompa.git";
 
-export const oompaAppAlias = "app.oompa.dev";
+export const oompaAppAlias = "app.oompa.app";
 export const oompaAppBranch = "main";
 export const oompaAppProjectId = "prj_3olYDT29BrwKO9PLByVq9HlgRkdA";
 export const oompaAppRepositoryId = 1_343_008_607;
@@ -70,6 +72,12 @@ const digestBuildSettings = (settings: BuildSettingsDigestInput): string =>
     ]))
     .digest("hex");
 export const oompaAppBuildSettingsDigest = digestBuildSettings(oompaAppBuildSettings);
+const observedDeploymentSettings = (settings: Omit<BuildSettingsDigestInput, "rootDirectory" | "sourceFilesOutsideRootDirectory">) => ({
+  buildCommand: settings.buildCommand, commandForIgnoringBuildStep: settings.commandForIgnoringBuildStep,
+  devCommand: settings.devCommand, framework: settings.framework, installCommand: settings.installCommand,
+  outputDirectory: settings.outputDirectory,
+});
+export const oompaAppDeploymentObservedSettingsDigest = canonicalDigest(observedDeploymentSettings(oompaAppBuildSettings));
 const oompaAppProjectBuildSettingsDigests = new Set([
   oompaAppBuildSettingsDigest,
   digestBuildSettings({
@@ -129,7 +137,7 @@ const projectReadbackSchema = deploymentSnapshotBuildSettingsSchema.extend({
 });
 
 const projectDomainReadbackSchema = z.object({
-  apexName: z.literal("oompa.dev"),
+  apexName: z.literal("oompa.app"),
   customEnvironmentId: z.null().optional(),
   gitBranch: z.null().optional(),
   name: z.literal(oompaAppAlias),
@@ -154,7 +162,7 @@ const deploymentReadbackSchema = z.object({
   id: deploymentIdSchema,
   prebuilt: z.literal(false).optional(),
   projectId: z.literal(oompaAppProjectId),
-  projectSettings: deploymentBuildSettingsSchema,
+  projectSettings: deploymentSnapshotBuildSettingsSchema.partial({ rootDirectory: true, sourceFilesOutsideRootDirectory: true }),
   readyState: z.literal("READY"),
   // Vercel documents this as a best-effort metrics field. It is retained only
   // as a conservative release refusal guard against manual CLI uploads; the
@@ -167,7 +175,9 @@ const deploymentReadbackSchema = z.object({
 const deploymentSnapshotReadbackSchema = z.object({
   prebuilt: z.literal(false).optional(),
   projectId: z.literal(oompaAppProjectId),
-  projectSettings: deploymentSnapshotBuildSettingsSchema,
+  // The documented list snapshot is sparse. Missing fields are not defaults;
+  // any reported value must still match the expected configuration.
+  projectSettings: deploymentSnapshotBuildSettingsSchema.partial().optional(),
   readyState: z.literal("READY"),
   source: z.literal("git"),
   target: z.literal("production"),
@@ -217,10 +227,17 @@ const bulkRedirectReadbackSchema = z.object({
   pagination: z.object({
     numPages: z.number().int().nonnegative(),
     page: z.literal(1),
-    per_page: z.literal(1),
+    per_page: z.literal(10),
   }),
-  redirects: z.array(z.unknown()).max(1),
+  redirects: z.array(z.unknown()).max(10),
   version: bulkRedirectVersionSchema.optional(),
+});
+const unconfiguredBulkRedirectsSchema = z.strictObject({
+  redirects: z.array(z.unknown()).length(0),
+  version: z.null(),
+});
+const noBulkRedirectVersionsSchema = z.strictObject({
+  versions: z.array(z.unknown()).length(0),
 });
 
 const firewallActionSchema = z.enum([
@@ -264,6 +281,11 @@ const firewallReadbackSchema = z.object({
   updatedAt: z.string().min(1).max(128),
   version: z.number().int().nonnegative(),
 });
+const firewallConfigurationsReadbackSchema = z.strictObject({
+  active: firewallReadbackSchema.nullable(),
+  draft: z.record(z.string(), z.unknown()).nullable(),
+  versions: z.array(z.record(z.string(), z.unknown())).max(1_000),
+});
 
 const aliasReadbackSchema = z.object({
   alias: z.literal(oompaAppAlias),
@@ -300,13 +322,15 @@ const appSourceProofUnsignedSchema = z.object({
   bulkRedirectVersionId: routeVersionIdSchema.nullable(),
   cacheControl: z.literal("no-store"),
   completedAt: z.string().datetime(),
-  deploymentBuildSettingsDigest: digestSchema,
+  deploymentObservedSettingsDigest: digestSchema,
+  deploymentRootSettingsAuthority: z.literal("not-attested"),
+  publicArtifacts: appPublicArtifactProofSchema,
   deploymentId: deploymentIdSchema,
   deploymentUrl: deploymentUrlSchema,
   domainConfiguredBy: z.enum(["A", "CNAME"]),
-  firewallConfigId: z.string().min(1).max(256),
-  firewallConfigVersion: z.number().int().nonnegative(),
-  firewallEnabled: z.boolean(),
+  firewallConfigId: z.string().min(1).max(256).nullable(),
+  firewallConfigVersion: z.number().int().nonnegative().nullable(),
+  firewallEnabled: z.boolean().nullable(),
   kind: z.literal("hra-app-source-proof"),
   marker: markerSchema,
   observationBoundary: z.literal("sequential-readback-without-provider-lock"),
@@ -317,7 +341,7 @@ const appSourceProofUnsignedSchema = z.object({
   releaseVersion: releaseVersionSchema,
   repositoryId: z.literal(oompaAppRepositoryId),
   rollingReleaseState: z.enum(["ABORTED", "COMPLETE"]).nullable(),
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(4),
   skewProtectionBoundaryAt: z.null(),
   skewProtectionMaxAge: z.union([z.null(), z.literal(0)]),
   sourceCommit: commitSchema,
@@ -337,12 +361,16 @@ export const appSourceProofEvidenceSchema = appSourceProofUnsignedSchema.extend(
   const completed = Date.parse(value.completedAt);
   if (
     selfDigest !== canonicalDigest(unsigned)
-    || value.deploymentBuildSettingsDigest !== oompaAppBuildSettingsDigest
+    || value.deploymentObservedSettingsDigest !== oompaAppDeploymentObservedSettingsDigest
+    || value.publicArtifacts.local.sourceCommit !== value.sourceCommit
+    || value.publicArtifacts.local.releaseVersion !== value.releaseVersion
     || !oompaAppProjectBuildSettingsDigests.has(value.projectBuildSettingsDigest)
     || value.marker.source.commit !== value.sourceCommit
     || value.marker.version !== value.releaseVersion
     || value.sourceRemoteMainCommit !== value.sourceCommit
     || value.verifierSourceCommit !== value.sourceCommit
+    || (value.firewallConfigId === null) !== (value.firewallConfigVersion === null)
+    || (value.firewallConfigId === null) !== (value.firewallEnabled === null)
     || !Number.isFinite(started)
     || !Number.isFinite(completed)
     || completed < started
@@ -358,6 +386,7 @@ export const appSourceProofErrorCodes = [
   "verifier_source_invalid",
   "provider_readback_invalid",
   "marker_readback_invalid",
+  "artifact_readback_invalid",
   "authority_changed_during_observation",
   "retained_proof_invalid",
   "proof_output_invalid",
@@ -404,13 +433,13 @@ type ProviderSample = Readonly<{
   aliasUid: string;
   aliasUpdatedAt: number;
   bulkRedirectVersionId: string | null;
-  deploymentBuildSettingsDigest: string;
+  deploymentObservedSettingsDigest: string;
   deploymentId: string;
   deploymentUrl: string;
   domainConfiguredBy: "A" | "CNAME";
-  firewallConfigId: string;
-  firewallConfigVersion: number;
-  firewallEnabled: boolean;
+  firewallConfigId: string | null;
+  firewallConfigVersion: number | null;
+  firewallEnabled: boolean | null;
   projectRouteVersionId: string | null;
   projectBuildSettingsDigest: string;
   projectId: string;
@@ -426,6 +455,7 @@ export type ExecuteAppSourceProofOptions = Readonly<{
   arguments: readonly string[];
   clock?: () => Date;
   fetcher?: AuthorityFetcher;
+  artifactReader?: typeof readLocalAppArtifactProof;
   evidenceWriter?: (path: string, evidence: AppSourceProofEvidence) => unknown;
   monotonicClock?: () => number;
   nonce?: () => string;
@@ -631,6 +661,7 @@ const readBoundedJson = async (
   expectedUrl: string,
   maximumBytes: number,
   errorCode: "provider_readback_invalid" | "marker_readback_invalid",
+  observeBytes?: (bytes: Uint8Array) => void,
 ): Promise<unknown> => {
   const contentType = response.headers.get("content-type")?.toLowerCase();
   if (
@@ -656,8 +687,9 @@ const readBoundedJson = async (
       chunks.push(result.value);
     }
     if (bytes === 0) fail(errorCode);
-    const document = new TextDecoder("utf-8", { fatal: true })
-      .decode(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))));
+    const raw = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+    observeBytes?.(raw);
+    const document = new TextDecoder("utf-8", { fatal: true }).decode(raw);
     return JSON.parse(document) as unknown;
   } catch (error: unknown) {
     await reader.cancel().catch(() => undefined);
@@ -676,7 +708,7 @@ const providerUrl = (path: string): string => {
 };
 
 const readProviderJson = async (
-  fetcher: typeof fetch,
+  fetcher: AuthorityFetcher,
   accessToken: string,
   path: string,
 ): Promise<unknown> => {
@@ -705,7 +737,7 @@ const readProviderJson = async (
 };
 
 const readExactDeploymentSnapshot = async (
-  fetcher: typeof fetch,
+  fetcher: AuthorityFetcher,
   accessToken: string,
   expected: AppSourceProofArguments,
 ): Promise<z.infer<typeof deploymentSnapshotReadbackSchema>> => {
@@ -742,7 +774,7 @@ const readExactDeploymentSnapshot = async (
 };
 
 const readProviderSample = async (
-  fetcher: typeof fetch,
+  fetcher: AuthorityFetcher,
   accessToken: string,
   expected: AppSourceProofArguments,
 ): Promise<ProviderSample> => {
@@ -794,35 +826,47 @@ const readProviderSample = async (
   const bulkRedirectDocument = await readProviderJson(
     fetcher,
     accessToken,
-    `/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=1`,
+    `/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=10`,
   );
   const bulkRedirects = bulkRedirectReadbackSchema.safeParse(bulkRedirectDocument);
-  if (
-    !bulkRedirects.success
-    || bulkRedirects.data.redirects.length !== 0
-    || bulkRedirects.data.pagination.numPages !== 0
-  ) fail("provider_readback_invalid");
+  let bulkRedirectVersionId: string | null;
+  if (bulkRedirects.success) {
+    if (bulkRedirects.data.redirects.length !== 0 || bulkRedirects.data.pagination.numPages !== 0) fail("provider_readback_invalid");
+    bulkRedirectVersionId = bulkRedirects.data.version?.id ?? null;
+  } else {
+    // Fresh unconfigured projects omit pagination. Require both exact absence
+    // documents under this authenticated sample; errors never imply emptiness.
+    if (!unconfiguredBulkRedirectsSchema.safeParse(bulkRedirectDocument).success) fail("provider_readback_invalid");
+    const versions = await readProviderJson(fetcher, accessToken,
+      `/v1/bulk-redirects/versions?projectId=${oompaAppProjectId}`);
+    if (!noBulkRedirectVersionsSchema.safeParse(versions).success) fail("provider_readback_invalid");
+    bulkRedirectVersionId = null;
+  }
 
   const firewallDocument = await readProviderJson(
     fetcher,
     accessToken,
-    `/v1/security/firewall/config/active?projectId=${oompaAppProjectId}`,
+    `/v1/security/firewall/config?projectId=${oompaAppProjectId}`,
   );
-  const firewall = firewallReadbackSchema.safeParse(firewallDocument);
-  if (!firewall.success) fail("provider_readback_invalid");
-  const customRedirect = firewall.data.firewallEnabled
-    && firewall.data.rules.some((rule) =>
+  const configurations = firewallConfigurationsReadbackSchema.safeParse(firewallDocument);
+  if (!configurations.success) fail("provider_readback_invalid");
+  const firewall = configurations.data.active;
+  if (firewall === null && (configurations.data.draft !== null || configurations.data.versions.length !== 0)) fail("provider_readback_invalid");
+  // The documented list includes the full active configuration, so the same
+  // owner/project/rule guards need no second, potentially different active read.
+  const customRedirect = firewall?.firewallEnabled === true
+    && firewall.rules.some((rule) =>
       rule.active
       && rule.valid
       && rule.action.mitigate?.action === "redirect"
     );
-  const rulesetRedirect = firewall.data.firewallEnabled
-    && firewall.data.rulesets !== undefined
-    && (Array.isArray(firewall.data.rulesets)
-      ? firewall.data.rulesets.some((ruleset) =>
+  const rulesetRedirect = firewall?.firewallEnabled === true
+    && firewall.rulesets !== undefined
+    && (Array.isArray(firewall.rulesets)
+      ? firewall.rulesets.some((ruleset) =>
         ruleset.active && ruleset.action?.mitigate?.action === "redirect"
       )
-      : Object.values(firewall.data.rulesets).some(
+      : Object.values(firewall.rulesets).some(
         (ruleset) => ruleset.action === "redirect",
       ));
   if (customRedirect || rulesetRedirect) fail("provider_readback_invalid");
@@ -858,10 +902,9 @@ const readProviderSample = async (
     ) fail("provider_readback_invalid");
   }
 
-  // GET deployment omits rootDirectory and sourceFilesOutsideRootDirectory
-  // from its projectSettings view. Bind the immutable list snapshot as well,
-  // using the exact project/SHA/branch/target/state filters and bounded cursor
-  // traversal, so a per-deployment root or outside-root override cannot hide.
+  // The list corroborates exact deployment selection. Its optional settings
+  // only refuse reported conflicts; complete served bytes supply the mandatory
+  // source/output proof instead of inventing omitted historical root settings.
   const deploymentSnapshot = await readExactDeploymentSnapshot(
     fetcher,
     accessToken,
@@ -896,16 +939,14 @@ const readProviderSample = async (
   return Object.freeze({
     aliasUid: alias.data.uid,
     aliasUpdatedAt: alias.data.updatedAt,
-    bulkRedirectVersionId: bulkRedirects.data.version?.id ?? null,
-    deploymentBuildSettingsDigest: digestBuildSettings(
-      deploymentSnapshot.projectSettings,
-    ),
+    bulkRedirectVersionId,
+    deploymentObservedSettingsDigest: canonicalDigest(observedDeploymentSettings(deployment.data.projectSettings)),
     deploymentId: deployment.data.id,
     deploymentUrl: deployment.data.url,
     domainConfiguredBy: domainConfig.data.configuredBy,
-    firewallConfigId: firewall.data.id,
-    firewallConfigVersion: firewall.data.version,
-    firewallEnabled: firewall.data.firewallEnabled,
+    firewallConfigId: firewall?.id ?? null,
+    firewallConfigVersion: firewall?.version ?? null,
+    firewallEnabled: firewall?.firewallEnabled ?? null,
     projectRouteVersionId: liveRouteVersion?.id ?? null,
     projectBuildSettingsDigest: digestBuildSettings({
       buildCommand: project.data.buildCommand,
@@ -934,10 +975,10 @@ const markerUrl = (nonce: string): string => {
 };
 
 const readMarker = async (
-  fetcher: typeof fetch,
+  fetcher: AuthorityFetcher,
   expected: AppSourceProofArguments,
   nonce: string,
-): Promise<z.infer<typeof markerSchema>> => {
+): Promise<Readonly<{ marker: z.infer<typeof markerSchema>; artifact: AppSourceArtifact }>> => {
   const url = markerUrl(nonce);
   try {
     const response = await fetcher(url, {
@@ -948,24 +989,29 @@ const readMarker = async (
     });
     const cacheControl = response.headers.get("cache-control");
     if (
-      cacheControl === null
+      !hasAppArtifactSecurityHeaders(response)
+      || cacheControl === null
       || !cacheControl.split(",").some((directive) => directive.trim().toLowerCase() === "no-store")
     ) {
       await response.body?.cancel().catch(() => undefined);
       fail("marker_readback_invalid");
     }
+    let artifact: AppSourceArtifact | undefined;
     const parsed = markerSchema.safeParse(await readBoundedJson(
       response,
       url,
       markerMaximumBytes,
       "marker_readback_invalid",
+      (bytes) => { artifact = { path: ".well-known/oompa-app.json", bytes: bytes.byteLength,
+        sha256: createHash("sha256").update(bytes).digest("hex") }; },
     ));
     if (
       !parsed.success
       || parsed.data.source.commit !== expected.sourceCommit
       || parsed.data.version !== expected.releaseVersion
     ) fail("marker_readback_invalid");
-    return parsed.data;
+    if (artifact === undefined) fail("marker_readback_invalid");
+    return { marker: parsed.data, artifact };
   } catch (error: unknown) {
     if (error instanceof AppSourceProofError) throw error;
     fail("marker_readback_invalid");
@@ -976,7 +1022,7 @@ const samplesEqual = (left: ProviderSample, right: ProviderSample): boolean =>
   left.aliasUid === right.aliasUid
   && left.aliasUpdatedAt === right.aliasUpdatedAt
   && left.bulkRedirectVersionId === right.bulkRedirectVersionId
-  && left.deploymentBuildSettingsDigest === right.deploymentBuildSettingsDigest
+  && left.deploymentObservedSettingsDigest === right.deploymentObservedSettingsDigest
   && left.deploymentId === right.deploymentId
   && left.deploymentUrl === right.deploymentUrl
   && left.domainConfiguredBy === right.domainConfiguredBy
@@ -1059,20 +1105,34 @@ export const executeRetainedAppSourceProofVerification = (
 export const executeAppSourceProof = async (
   options: ExecuteAppSourceProofOptions,
 ): Promise<number> => {
+  let observationTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     assertAppSourceProofBunVersion(options.runtimeVersion);
     const expected = parseAppSourceProofArguments(options.arguments);
     const sourceReader = options.sourceState ?? readLocalSourceState;
     const sourceBefore = sourceReader();
     assertExactSourceState(sourceBefore, expected.sourceCommit);
+    const artifactReader = options.artifactReader ?? readLocalAppArtifactProof;
+    const localArtifacts = appLocalArtifactProofSchema.parse(await artifactReader(expected));
+    if (localArtifacts.sourceCommit !== expected.sourceCommit || localArtifacts.releaseVersion !== expected.releaseVersion) {
+      fail("artifact_readback_invalid");
+    }
     if (!accessTokenSchema.safeParse(options.accessToken).success) {
       fail("provider_credentials_refused");
     }
-    const fetcher = createBoundedAuthorityFetch(
+    const requestFetcher = createBoundedAuthorityFetch(
       options.fetcher ?? fetch,
       providerRequestTimeoutMs,
       "app_source_proof_timeout",
     );
+    const deadline = new AbortController();
+    let requests = 0;
+    observationTimer = setTimeout(() => { deadline.abort(); }, observationMaximumMs);
+    const fetcher: AuthorityFetcher = async (input, init) => {
+      if (++requests > 128 || deadline.signal.aborted) fail("authority_changed_during_observation");
+      return await requestFetcher(input, { ...init,
+        signal: init?.signal == null ? deadline.signal : AbortSignal.any([init.signal, deadline.signal]) });
+    };
     const clock = options.clock ?? (() => new Date());
     const monotonicClock = options.monotonicClock ?? (() => performance.now());
     const started = clock();
@@ -1081,9 +1141,14 @@ export const executeAppSourceProof = async (
     const nonce = (options.nonce ?? randomUUID)();
     if (!nonceSchema.safeParse(nonce).success) fail("proof_output_invalid");
     const before = await readProviderSample(fetcher, options.accessToken, expected);
-    const marker = await readMarker(fetcher, expected, nonce);
+    const observedMarker = await readMarker(fetcher, expected, nonce);
+    const publicArtifacts = await observePublicAppArtifacts({ local: localArtifacts,
+      marker: observedMarker.artifact, nonce, fetcher });
+    const marker = observedMarker.marker;
     const after = await readProviderSample(fetcher, options.accessToken, expected);
     if (!samplesEqual(before, after)) fail("authority_changed_during_observation");
+    const localArtifactsAfter = appLocalArtifactProofSchema.parse(await artifactReader(expected));
+    if (canonicalDigest(localArtifactsAfter) !== canonicalDigest(localArtifacts)) fail("authority_changed_during_observation");
     const sourceAfter = sourceReader();
     assertExactSourceState(sourceAfter, expected.sourceCommit);
 
@@ -1106,7 +1171,9 @@ export const executeAppSourceProof = async (
       bulkRedirectVersionId: after.bulkRedirectVersionId,
       cacheControl: "no-store",
       completedAt,
-      deploymentBuildSettingsDigest: after.deploymentBuildSettingsDigest,
+      deploymentObservedSettingsDigest: after.deploymentObservedSettingsDigest,
+      deploymentRootSettingsAuthority: "not-attested",
+      publicArtifacts,
       deploymentId: after.deploymentId,
       deploymentUrl: after.deploymentUrl,
       domainConfiguredBy: after.domainConfiguredBy,
@@ -1123,7 +1190,7 @@ export const executeAppSourceProof = async (
       releaseVersion: expected.releaseVersion,
       repositoryId: oompaAppRepositoryId,
       rollingReleaseState: after.rollingReleaseState,
-      schemaVersion: 2,
+      schemaVersion: 4,
       skewProtectionBoundaryAt: after.skewProtectionBoundaryAt,
       skewProtectionMaxAge: after.skewProtectionMaxAge,
       sourceCommit: expected.sourceCommit,
@@ -1145,8 +1212,9 @@ export const executeAppSourceProof = async (
     options.stdout.write(document);
     return 0;
   } catch (error: unknown) {
-    return renderFailure(error, options.stderr);
-  }
+    return renderFailure(error instanceof AppSourceArtifactError
+      ? new AppSourceProofError("artifact_readback_invalid") : error, options.stderr);
+  } finally { if (observationTimer !== undefined) clearTimeout(observationTimer); }
 };
 
 if (import.meta.main) {

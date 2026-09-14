@@ -48,6 +48,7 @@ function machine(overrides: Partial<Readonly<{
     publicId: string;
     status: "login_pending" | "recovery_required" | "signed_in" | "signed_out";
   }>[];
+  defaultProjectPublicId: string;
   deviceCommandsAllowed: boolean;
   deviceStatus: "active" | "pending" | "revoked" | null;
   devicePublicId: string;
@@ -62,6 +63,9 @@ function machine(overrides: Partial<Readonly<{
     daemonVersion: "0.4.1",
     defaultApprovalMode: "auto:all",
     defaultPreset: "ultra",
+    ...(overrides.defaultProjectPublicId === undefined
+      ? {}
+      : { defaultProjectPublicId: overrides.defaultProjectPublicId }),
     deviceCommandsAllowed: overrides.deviceCommandsAllowed ?? true,
     heartbeatAt: now - 1_000,
     machineLabel: overrides.machineLabel ?? "Studio",
@@ -104,7 +108,7 @@ describe("device command builders", () => {
       accountPublicId: "acct_primary0001",
       kind: "session_start",
       preset: "ultra",
-      presetContract: 1,
+      presetContract: 2,
       projectPublicId: "proj_alpha000001",
       prompt: "continue the migration",
       provider: "codex",
@@ -305,19 +309,51 @@ describe("account login action gate", () => {
 });
 
 describe("session start targets", () => {
-  test("offers one entry per signed-in account, carrying its machine's projects", () => {
+  test("offers one entry per machine with its best account, preset and project chosen", () => {
     expect(sessionStartTargets([machine()])).toEqual([
       {
         accountLabel: "Work",
         accountPublicId: "acct_primary0001",
-        deviceCommandsAllowed: true,
         machineLabel: "Studio",
         machineOnline: true,
-        projects: [{ label: "Control plane", publicId: "proj_alpha000001" }],
+        preset: "ultra",
+        projectPublicId: "proj_alpha000001",
         provider: "codex",
         targetDevicePublicId: "device_studio01",
       },
     ]);
+  });
+
+  test("prefers a signed-in Codex account, then Claude, in registry order", () => {
+    const both = sessionStartTargets([machine({
+      accounts: [
+        { label: "Research", provider: "claude", publicId: "acct_claude00001", status: "signed_in" },
+        { label: "Home", provider: "codex", publicId: "acct_codex000002", status: "signed_out" },
+        { label: "Work", provider: "codex", publicId: "acct_primary0001", status: "signed_in" },
+      ],
+    })])[0];
+    expect(both?.accountPublicId).toBe("acct_primary0001");
+    expect(both?.preset).toBe("ultra");
+    const claude = sessionStartTargets([machine({
+      accounts: [
+        { label: "Home", provider: "codex", publicId: "acct_codex000002", status: "signed_out" },
+        { label: "Research", provider: "claude", publicId: "acct_claude00001", status: "signed_in" },
+      ],
+    })])[0];
+    expect(claude?.accountPublicId).toBe("acct_claude00001");
+    expect(claude?.provider).toBe("claude");
+    expect(claude?.preset).toBe("fable-max");
+  });
+
+  test("uses the machine's default project when it names one, else the first", () => {
+    const projects = [
+      { label: "Scratch", publicId: "proj_scratch0001" },
+      { label: "Documents", publicId: "proj_alpha000001" },
+    ];
+    expect(sessionStartTargets([machine({ projects })])[0]?.projectPublicId)
+      .toBe("proj_scratch0001");
+    expect(sessionStartTargets([machine({ defaultProjectPublicId: "proj_alpha000001", projects })])[0]?.projectPublicId)
+      .toBe("proj_alpha000001");
   });
 
   test("never offers a target the daemon would refuse", () => {
@@ -330,61 +366,40 @@ describe("session start targets", () => {
         { label: "Work", provider: "codex", publicId: "acct_primary0001", status: "signed_out" },
       ],
     })])).toEqual([]);
-  });
-
-  test("a registry written before device commands existed still offers its accounts", () => {
-    const payload = parseDeviceRegistryPayload({
+    expect(sessionStartTargets([machine({
       accounts: [
-        { label: "Work", provider: "codex", publicId: "acct_primary0001", status: "signed_in" },
+        { label: "Build", provider: "devin", publicId: "acct_devin000001", status: "signed_in" },
       ],
-      daemonVersion: "0.4.0",
-      defaultApprovalMode: "auto:all",
-      defaultPreset: "ultra",
-      heartbeatAt: now - 1_000,
-      machineLabel: "Older",
-      projects: [{ label: "Control plane", publicId: "proj_alpha000001" }],
-      proseAutorespondConfigured: false,
-      scheduledTasks: [],
-      showThinkingDefault: false,
-      version: 1,
-    });
-    if (payload === null) throw new Error("registry fixture is not valid");
-    const view = toMachineView({
-      device: { online: false, status: "active" },
-      devicePublicId: "device_older001",
-      now,
-      payload,
-      revision: 1,
-      updatedAt: now,
-    });
-    expect(view.deviceCommandsAllowed).toBe(true);
-    expect(view.accountLinkingAllowed).toBe(false);
-    expect(sessionStartTargets([view])).toHaveLength(1);
+    })])).toEqual([]);
   });
 
-  test("puts Claude's Linux boundary beside every browser start choice", () => {
+  test("offers an offline machine last", () => {
+    const targets = sessionStartTargets([
+      machine({ devicePublicId: "device_studio01", machineLabel: "Away" }),
+      machine({ devicePublicId: "device_studio02", machineLabel: "Zed" }),
+    ].map((view, index) => ({ ...view, online: index === 1 })));
+    expect(targets.map((target) => target.machineLabel)).toEqual(["Zed", "Away"]);
+  });
+
+  test("labels name the machine and provider; hints repeat Claude's Linux boundary", () => {
     const target = sessionStartTargets([machine({
       accounts: [
         { label: "Research", provider: "claude", publicId: "acct_claude00001", status: "signed_in" },
       ],
     })])[0];
     if (target === undefined) throw new Error("expected Claude target");
-    expect(sessionStartTargetLabel(target))
-      .toBe("Research — Studio — Claude Code (Linux machine only)");
+    expect(sessionStartTargetLabel(target)).toBe("Studio — Claude Code");
+    expect(sessionStartTargetHint(target)).toContain("as Research on Fable Max");
     expect(sessionStartTargetHint(target)).toContain("Linux custodian");
     expect(sessionStartTargetHint(target)).toContain("macOS refuses before launch");
 
     const codex = sessionStartTargets([machine()])[0];
     if (codex === undefined) throw new Error("expected Codex target");
-    expect(sessionStartTargetLabel(codex)).toBe("Work — Studio — Codex");
+    expect(sessionStartTargetLabel(codex)).toBe("Studio — Codex");
+    expect(sessionStartTargetHint(codex)).toContain("as Work on Codex Ultra");
+    expect(sessionStartTargetHint({ ...codex, preset: "high" })).toContain("as Work on Codex High");
     expect(sessionStartTargetHint(codex)).not.toContain("Linux custodian");
-
-    const retiredTargets = sessionStartTargets([machine({
-      accounts: [
-        { label: "Build", provider: "devin", publicId: "acct_devin000001", status: "signed_in" },
-      ],
-    })]);
-    expect(retiredTargets).toEqual([]);
+    expect(sessionStartTargetLabel({ ...codex, machineOnline: false })).toBe("Studio — Codex (offline)");
   });
 });
 

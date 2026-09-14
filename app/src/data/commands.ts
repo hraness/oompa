@@ -40,7 +40,7 @@ export function useSubmitCommand(): SubmitCommand {
   const report = custody.reportAuthorityFailure;
 
   return useCallback(async (input: SubmitCommandInput) => {
-    if (unlocked === null) throw new Error("The account key is locked.");
+    if (unlocked === null) throw new Error("The account key is not open in this tab.");
     const now = Date.now();
     const commandPublicId = createCloudUuidV7(now);
     const idempotencyKey = createCloudUuidV7(now);

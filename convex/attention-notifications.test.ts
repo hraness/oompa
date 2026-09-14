@@ -4,7 +4,8 @@ import type { Value } from "convex/values";
 import { convexTest } from "convex-test";
 
 import type { CanonicalAuthEmail } from "../src/cloud/authCredentials";
-import { buildOompaAttentionEmailBody } from "./attentionEmail";
+import { sha256Hex } from "../src/cloud/crypto";
+import { buildOompaAttentionEmailBody, type OompaAttentionEmailBody } from "./attentionEmail";
 import {
   attentionNotificationQuotaReservations,
   attentionNotificationRetryRecoveryMs,
@@ -302,7 +303,7 @@ async function makeDue(world: World): Promise<void> {
 }
 
 type Claim = Readonly<{
-  body: Readonly<{ text: string; version: 1 }>;
+  body: OompaAttentionEmailBody;
   deliveryId: string;
   generation: number;
   globalNotificationGeneration: number;
@@ -1091,6 +1092,49 @@ describe("inactive hosted attention notification runtime", () => {
     expect(await world.runtime.mutation(claimNext, {})).toBeNull();
     expect(await world.runtime.run(async (ctx) =>
       await ctx.db.query("attentionNotificationOutbox").unique())).toEqual(retained);
+  });
+
+  test.each([1, 2] as const)("preserves retained v%i bytes through retry and safety-fault review", async (version) => {
+    const world = await notificationWorld();
+    await complete(world);
+    await makeDue(world);
+    const first = await claim(world);
+    // Seed an already-started historical delivery, retaining the digest/key
+    // grammar used by that version and accounting for its exact stored size.
+    const historical = await world.runtime.run(async (ctx) => {
+      const row = await ctx.db.query("attentionNotificationOutbox").unique();
+      const delivery = row?.delivery;
+      if (row === null || delivery === undefined) throw new Error("missing started historical delivery");
+      const body = buildOompaAttentionEmailBody([{ interactionKind: row.interactionKind,
+        sessionPublicId: row.sessionPublicId }], version);
+      const bodyDigest = await sha256Hex(`hra-attention-body:v1\u0000${body.text}`);
+      const idempotencyKey = await sha256Hex(["hra-attention-resend:v1", delivery.id,
+        delivery.recipientDigest, bodyDigest].join("\u0000"));
+      const patch = { delivery: { ...delivery, body, bodyDigest, idempotencyKey } };
+      await adjustCommandQuotaForPatch(ctx, world.ids.userId, row, patch);
+      await ctx.db.patch(row._id, patch);
+      return { body, bodyDigest, idempotencyKey };
+    });
+    await world.runtime.mutation(settleAttempt, { deliveryId: first.deliveryId,
+      generation: first.generation, globalNotificationGeneration: first.globalNotificationGeneration,
+      result: { kind: "retryable", reason: "network" } });
+    await makeRetryDue(world, first.deliveryId);
+    const retry = await claim(world);
+    expect(retry.body).toEqual(historical.body);
+    expect(retry.idempotencyKey).toBe(historical.idempotencyKey);
+    expect(await world.runtime.mutation(settleAttempt, { deliveryId: retry.deliveryId,
+      generation: retry.generation, globalNotificationGeneration: retry.globalNotificationGeneration,
+      result: { kind: "ambiguous", providerErrorType: "invalid_idempotent_request", safetyFault: true, status: 409 } }))
+      .toEqual({ kind: "ambiguous", reason: "idempotency_mismatch" });
+    const status = await world.runtime.query(readControlStatus, {});
+    if (status.safetyFault === null) throw new Error("missing historical delivery fault");
+    const retained = await world.runtime.run(async (ctx) => await ctx.db.query("attentionNotificationOutbox").unique());
+    expect(retained).toMatchObject({ state: "ambiguous", nonterminal: false, delivery: historical });
+    await world.runtime.mutation(acknowledgeSafetyFault, { expectedDeliveryId: retry.deliveryId,
+      expectedFaultId: status.safetyFault.faultId, expectedGeneration: status.generation,
+      expectedResultDigest: status.safetyFault.resultDigest, mutationId: "01912345-6789-7abc-8def-0123456789d1" });
+    expect(await world.runtime.query(readControlStatus, {})).toMatchObject({ enabled: false, safetyFault: null });
+    expect(await world.runtime.run(async (ctx) => await ctx.db.query("attentionNotificationOutbox").unique())).toEqual(retained);
   });
 
   test("re-latches late same-delivery corruption after the first 409 was reviewed", async () => {

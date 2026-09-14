@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { productIoModules, productIoPlugin } from "./config";
 
 const root = resolve(import.meta.dirname, "../../..");
-const importer = resolve(root, "app/src/screens/session-screen.tsx");
+const importer = resolve(root, "app/src/components/session-card.tsx");
 
 async function resolveImport(source: string) {
   const hook = productIoPlugin(root).resolveId;
@@ -33,8 +33,8 @@ describe("product example IO-only graph boundary", () => {
 
   test("leaves real screens, components, reducers, styles and browser-safe contracts untouched", async () => {
     for (const source of [
-      "./grid-screen", "../components/interaction-panel", "../components/ui/button",
-      "../model/session-model", "../model/settings-view", "./session-screen.stylex", "../oompa/cloud", "react",
+      "../screens/grid-screen", "./interaction-panel", "./ui/button",
+      "../model/session-model", "../model/settings-view", "./session-card.stylex", "../oompa/cloud", "react",
       "../components/appearance", "../components/appearance-menu", "../components/appearance.stylex",
     ]) expect(await resolveImport(source)).toBeNull();
     expect(productIoModules.some((path) => /\/(?:screens|components|model)\//u.test(path))).toBe(false);

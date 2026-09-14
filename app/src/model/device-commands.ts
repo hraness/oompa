@@ -29,34 +29,41 @@ export const defaultSessionStartPresetForProvider = (
   provider: SessionStartProvider,
 ): PresetChoice => provider === "claude" ? "fable-max" : "ultra";
 
+/**
+ * One machine a browser can start a session on, with the account, preset and
+ * project already chosen. The reader picks a machine and nothing else: the
+ * best account the machine holds is the machine's first signed-in Codex
+ * account, else its first signed-in Claude Code account, and the preset is
+ * that provider's best. The project is the machine's default, else its first.
+ */
 export type SessionStartTarget = Readonly<{
   accountLabel: string;
   accountPublicId: string;
-  deviceCommandsAllowed: boolean;
   machineLabel: string;
   machineOnline: boolean;
-  projects: readonly Readonly<{ label: string; publicId: string }>[];
+  preset: PresetChoice;
+  projectPublicId: string;
   provider: SessionStartProvider;
   targetDevicePublicId: string;
 }>;
 
-/** Public picker copy cannot infer OS, so it states Claude's admission boundary beside the choice. */
+/** The picker names the machine; the provider says what the start will run. */
 export function sessionStartTargetLabel(target: SessionStartTarget): string {
-  const provider = target.provider === "claude"
-    ? "Claude Code (Linux machine only)"
-    : "Codex";
-  return `${target.accountLabel} — ${target.machineLabel} — ${provider}`;
+  const provider = target.provider === "claude" ? "Claude Code" : "Codex";
+  const availability = target.machineOnline ? "" : " (offline)";
+  return `${target.machineLabel} — ${provider}${availability}`;
 }
 
-/** The composer repeats the boundary after selection, before any remote provider effect. */
+/** The composer repeats the choice after selection, before any remote provider effect. */
 export function sessionStartTargetHint(target: SessionStartTarget): string {
   const availability = target.machineOnline
     ? ""
     : " (offline; it will run when the machine wakes)";
+  const model = target.provider === "claude" ? "Fable Max" : target.preset === "high" ? "Codex High" : "Codex Ultra";
   const platform = target.provider === "claude"
     ? " Claude sessions require a Linux custodian; macOS refuses before launch."
     : "";
-  return `Starts on ${target.machineLabel}${availability}.${platform}`;
+  return `Starts on ${target.machineLabel}${availability} as ${target.accountLabel} on ${model}.${platform}`;
 }
 
 function build(payload: DeviceCommandPayload): DeviceCommandPayload {
@@ -214,10 +221,11 @@ export function notificationHoursCommand(input: NotificationHoursUpdate & Readon
 }
 
 /**
- * Every account a browser could start a session on, paired with the machine
- * that owns it and that machine's projects. An account that is not signed in,
- * a machine with no projects, and a machine whose kill switch is set all stay
- * out: the picker never offers a target the daemon would refuse.
+ * Every machine a browser could start a session on. A machine with no signed
+ * in Codex or Claude account, no project, or its kill switch set stays out:
+ * the picker never offers a target the daemon would refuse. Codex is preferred
+ * over Claude when a machine holds both, and accounts keep the registry's own
+ * order within a provider.
  */
 export function sessionStartTargets(
   machines: readonly MachineView[],
@@ -226,28 +234,31 @@ export function sessionStartTargets(
   for (const machine of machines) {
     if (machine.deviceStatus !== "active") continue;
     if (!machine.deviceCommandsAllowed) continue;
-    if (machine.projects.length === 0) continue;
-    for (const account of machine.accounts) {
-      if (account.provider === "devin") continue;
-      if (account.status !== "signed_in") continue;
-      targets.push({
-        accountLabel: account.label,
-        accountPublicId: account.publicId,
-        deviceCommandsAllowed: true,
-        machineLabel: machine.label,
-        machineOnline: machine.online,
-        projects: machine.projects,
-        provider: account.provider,
-        targetDevicePublicId: machine.devicePublicId,
-      });
+    const project = machine.projects.find((entry) =>
+      entry.publicId === machine.defaultProjectPublicId) ?? machine.projects[0];
+    if (project === undefined) continue;
+    const signedIn = machine.accounts.filter((account) => account.status === "signed_in");
+    const account = signedIn.find((entry) => entry.provider === "codex")
+      ?? signedIn.find((entry) => entry.provider === "claude");
+    if (account === undefined || (account.provider !== "codex" && account.provider !== "claude")) {
+      continue;
     }
+    targets.push({
+      accountLabel: account.label,
+      accountPublicId: account.publicId,
+      machineLabel: machine.label,
+      machineOnline: machine.online,
+      preset: defaultSessionStartPresetForProvider(account.provider),
+      projectPublicId: project.publicId,
+      provider: account.provider,
+      targetDevicePublicId: machine.devicePublicId,
+    });
   }
   // A machine that has not heartbeated recently is still offered, but last:
   // its commands queue until it wakes rather than failing.
   return targets.sort((left, right) => {
     if (left.machineOnline !== right.machineOnline) return left.machineOnline ? -1 : 1;
-    return left.machineLabel.localeCompare(right.machineLabel)
-      || left.accountLabel.localeCompare(right.accountLabel);
+    return left.machineLabel.localeCompare(right.machineLabel);
   });
 }
 

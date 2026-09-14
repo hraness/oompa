@@ -76,12 +76,47 @@ describe("private acceptance receipt custody", () => {
   test("round-trips exact state through atomic update, reopen, and removal", async () => {
     await fixture(async ({ initial, policy }) => {
       const receipt = await AtomicPrivateJsonReceipt.create(initial, policy);
+      expect(receipt.assertVerifiedIdentity()).toBeUndefined();
       await receipt.update((current) => ({ ...current, state: { step: 1 } }));
+      expect(receipt.assertVerifiedIdentity()).toBeUndefined();
       const reopened = await AtomicPrivateJsonReceipt.open(initial, policy);
+      expect(reopened.assertVerifiedIdentity()).toBeUndefined();
       expect(reopened.value.state.step).toBe(1);
       await reopened.remove();
+      expect(() => reopened.assertVerifiedIdentity()).toThrow("synthetic_receipt_refused");
       await expect(readFile(initial.path)).rejects.toThrow();
     });
+  });
+
+  test.each(["same_bytes_new_inode", "same_inode_changed_bytes", "same_value_changed_encoding"] as const)(
+    "synchronous verification never adopts changed receipt identity or bytes: %s", async (substitution) => {
+      await fixture(async ({ directory, initial, policy }) => {
+        const receipt = await AtomicPrivateJsonReceipt.create(initial, policy);
+        const original = await readFile(initial.path);
+        if (substitution === "same_bytes_new_inode") await rename(initial.path, join(directory, "retained-original.json"));
+        const replacement = substitution === "same_bytes_new_inode" ? original
+          : substitution === "same_value_changed_encoding" ? Buffer.concat([original, Buffer.from("\n")])
+          : Buffer.from(JSON.stringify({ ...initial, state: { step: 8 } }));
+        await writeFile(initial.path, replacement, { mode: 0o600 });
+        expect(() => receipt.assertVerifiedIdentity()).toThrow("synthetic_receipt_refused");
+        expect(receipt.value).toEqual(initial);
+        expect(await readFile(initial.path)).toEqual(replacement);
+      });
+    },
+  );
+
+  test("synchronous verification refuses private-file substitutions and excessive contents", async () => {
+    for (const substitution of ["symlink", "hardlink", "mode", "oversize"] as const) {
+      await fixture(async ({ directory, initial, policy }) => {
+        const receipt = await AtomicPrivateJsonReceipt.create(initial, policy);
+        if (substitution === "symlink") {
+          const original = join(directory, "retained-original.json"); await rename(initial.path, original); await symlink(original, initial.path);
+        } else if (substitution === "hardlink") await link(initial.path, join(directory, "other-link.json"));
+        else if (substitution === "mode") await chmod(initial.path, 0o644);
+        else await writeFile(initial.path, " ".repeat(policy.maximumBytes + 1), { mode: 0o600 });
+        expect(() => receipt.assertVerifiedIdentity()).toThrow("synthetic_receipt_refused");
+      });
+    }
   });
 
   test("inspection cannot mutate the in-memory authority or next update", async () => {
@@ -134,6 +169,7 @@ describe("private acceptance receipt custody", () => {
       await rename(parent, moved);
       await mkdir(parent, { mode: 0o700 });
       await rename(join(moved, "receipt.json"), nested.path);
+      expect(() => receipt.assertVerifiedIdentity()).toThrow("synthetic_receipt_refused");
       await expect(receipt.update((current) => ({
         ...current, state: { step: 1 },
       }))).rejects.toThrow("synthetic_receipt_refused");
@@ -160,11 +196,13 @@ describe("private acceptance receipt custody", () => {
       void first.catch(() => undefined);
       await entry;
       try {
+        expect(() => receipt.assertVerifiedIdentity()).toThrow("synthetic_receipt_refused");
         await expect(receipt.remove()).rejects.toThrow("synthetic_receipt_refused");
       } finally {
         release();
       }
       await first;
+      expect(receipt.assertVerifiedIdentity()).toBeUndefined();
       expect(JSON.parse(await readFile(initial.path, "utf8"))).toEqual({
         ...initial, state: { step: 1 },
       });

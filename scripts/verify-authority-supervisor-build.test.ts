@@ -79,7 +79,7 @@ describe("authority supervisor build verifier", () => {
     const probe = workflow.indexOf(
       "/usr/bin/unshare --user --map-root-user --fork /usr/bin/true",
     );
-    const sourceGates = [1, 2, 3].map((shard) => workflow.indexOf(`bun run test:source --shard=${shard}/3`));
+    const sourceGates = [1, 2, 3, 4, 5, 6].map((shard) => workflow.indexOf(`bun run test:source --shard=${shard}/6`));
     const remainderGate = workflow.indexOf("bun run check:ci-remainder");
     const restore = workflow.indexOf(
       "sudo /usr/sbin/sysctl --write kernel.apparmor_restrict_unprivileged_userns=1",

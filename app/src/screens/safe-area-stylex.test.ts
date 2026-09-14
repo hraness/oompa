@@ -18,10 +18,6 @@ test("physical safe-area padding pairs the left and right viewport exclusions", 
       counts: { "0.5rem": 0, "1rem": 2 },
       path: new URL("./settings-screen.stylex.ts", import.meta.url),
     },
-    {
-      counts: { "0.5rem": 1, "1rem": 2 },
-      path: new URL("./session-screen.stylex.ts", import.meta.url),
-    },
   ] as const;
 
   for (const { counts, path } of cases) {
@@ -57,7 +53,7 @@ test("sticky screen headers retain the top viewport exclusion while scrolling", 
 });
 
 test("session choices align labels to the logical inline start", async () => {
-  const source = await Bun.file(new URL("./session-screen.stylex.ts", import.meta.url)).text();
+  const source = await Bun.file(new URL("../components/session-card.stylex.ts", import.meta.url)).text();
   expect(source).toContain('textAlign: "start"');
   expect(source).not.toContain('textAlign: "left"');
 });

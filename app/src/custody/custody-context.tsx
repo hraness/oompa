@@ -31,12 +31,7 @@ import {
   parseKeyEnvelopes,
   type AccountContext,
 } from "../data/wire";
-import {
-  accountKeyVersion,
-  enrollmentPollMs,
-  idleLockMs,
-  presenceHeartbeatMs,
-} from "../env";
+import { accountKeyVersion, enrollmentPollMs, presenceHeartbeatMs } from "../env";
 import {
   createCloudUuidV7,
   randomKeyBytes,
@@ -46,7 +41,6 @@ import {
 import { createCancellation } from "../lib/cancellation";
 import { isAuthorityError, wipeBytes } from "./authority";
 import { deviceKeyFingerprint } from "./fingerprint";
-import { createIdleTimer, idleActivityEvents, isLockShortcut } from "./idle";
 import { readDeviceKeys, readOrCreateDeviceKeys, type BrowserDeviceKeys } from "./keystore";
 import { newConnectionId, presenceArgs, type PresenceIdentity } from "./presence";
 import {
@@ -90,19 +84,25 @@ type CustodyCommon = Readonly<{
   enrollment: EnrollmentStage;
   error: string | null;
   fingerprint: string | null;
-  lock: () => void;
   refresh: () => Promise<void>;
   reportAuthorityFailure: (error: unknown) => void;
+  /** Retries opening the account key after a failed automatic attempt. */
   unlock: () => Promise<void>;
 }>;
 
+/**
+ * `unlocking` is an approved, bindable device whose account key is not in
+ * memory yet: the tab opens it on its own as soon as the registration reads as
+ * active, and shows the enrollment screen with the error if that fails. There
+ * is no locked state a reader can enter or leave by hand.
+ */
 export type Custody =
   | (CustodyCommon & Readonly<{
       identity: UnlockedIdentity;
       key: Uint8Array;
       state: "unlocked";
     }>)
-  | (CustodyCommon & Readonly<{ state: "locked" | "unenrolled" }>);
+  | (CustodyCommon & Readonly<{ state: "unlocking" | "unenrolled" }>);
 
 const CustodyContext = createContext<Custody | null>(null);
 
@@ -110,8 +110,8 @@ const CustodyContext = createContext<Custody | null>(null);
  * The unwrapped account key never leaves this module's state. It is held as raw
  * bytes because `encryptRemoteCommand`, `decryptCompactEvents`, and
  * `decryptDetailEvents` take the key material rather than a `CryptoKey`; the
- * bytes are overwritten in place on lock, on any authority failure, and on
- * unload, and they are never written to storage of any kind.
+ * bytes are overwritten in place on any authority failure and on unload, and
+ * they are never written to storage of any kind.
  */
 type Unlocked = Readonly<{ identity: UnlockedIdentity; key: Uint8Array }>;
 
@@ -169,7 +169,7 @@ export function CustodyProvider({ children }: Readonly<{ children: ReactNode }>)
     [convex],
   );
 
-  const lock = useCallback(() => {
+  const dropKey = useCallback(() => {
     const current = unlockedRef.current;
     if (current !== null) disconnectPresence(current.identity);
     wipeBytes(current?.key);
@@ -177,20 +177,20 @@ export function CustodyProvider({ children }: Readonly<{ children: ReactNode }>)
     setUnlocked(null);
     // Decrypted projection text lives in tab-local caches so a card does not
     // re-decrypt on every render. Dropping the key without dropping them would
-    // leave plaintext readable behind the lock screen.
+    // leave plaintext readable without the key that produced it.
     clearCompactHistoryCache();
     clearSessionMetadataCache();
     // The same argument covers the attachment bytes this tab sent: they are
     // reader-supplied file contents held in memory for the transcript
-    // thumbnails, and they must not survive the lock either.
+    // thumbnails, and they must not outlive the key either.
     releaseHeldAttachments();
   }, [disconnectPresence]);
 
   const reportAuthorityFailure = useCallback((failure: unknown) => {
     if (!isAuthorityError(failure)) return;
-    lock();
+    dropKey();
     setError("This device lost its authority on the account. Sign in again.");
-  }, [lock]);
+  }, [dropKey]);
 
   const guard = useCallback(<T,>(run: () => Promise<T>) => async (): Promise<T | null> => {
     setBusy(true);
@@ -390,36 +390,28 @@ export function CustodyProvider({ children }: Readonly<{ children: ReactNode }>)
     return () => { clearInterval(timer); };
   }, [convex, reportAuthorityFailure, unlocked]);
 
-  // Idle lock and the explicit Ctrl+L lock.
+  // The account key is opened as soon as the device reads as approved and
+  // bindable, once per registration reading. A failed attempt leaves the
+  // error on the enrollment screen with a retry, rather than looping.
+  const guardedUnlock = useMemo(() => guard(unlock), [guard, unlock]);
+  const unlockAttemptedFor = useRef<string | null>(null);
+  const bindable = stage === "active" || stage === "needs_bind";
+  const attemptKey = bindable
+    ? `${stage}:${account?.device?.publicId ?? ""}:${String(account?.device?.revision ?? 0)}`
+    : null;
   useEffect(() => {
-    if (unlocked === null) return;
-    const timer = createIdleTimer({ idleMs: idleLockMs, now: Date.now(), onIdle: lock });
-    const onActivity = () => { timer.activity(Date.now()); };
-    const onKeyDown = (event: KeyboardEvent) => {
-      timer.activity(Date.now());
-      if (isLockShortcut(event)) {
-        event.preventDefault();
-        lock();
-      }
-    };
-    for (const name of idleActivityEvents) {
-      window.addEventListener(name, onActivity, { passive: true });
-    }
-    window.addEventListener("keydown", onKeyDown);
-    const interval = setInterval(() => { timer.tick(Date.now()); }, 15_000);
-    return () => {
-      for (const name of idleActivityEvents) window.removeEventListener(name, onActivity);
-      window.removeEventListener("keydown", onKeyDown);
-      clearInterval(interval);
-    };
-  }, [lock, unlocked]);
+    if (attemptKey === null || unlocked !== null || busy) return;
+    if (unlockAttemptedFor.current === attemptKey) return;
+    unlockAttemptedFor.current = attemptKey;
+    void guardedUnlock();
+  }, [attemptKey, busy, guardedUnlock, unlocked]);
 
   // The key never survives the page.
   useEffect(() => {
-    const onUnload = () => { lock(); };
+    const onUnload = () => { dropKey(); };
     window.addEventListener("pagehide", onUnload);
     return () => { window.removeEventListener("pagehide", onUnload); };
-  }, [lock]);
+  }, [dropKey]);
 
   const value = useMemo<Custody>(() => {
     const common: CustodyCommon = {
@@ -429,30 +421,30 @@ export function CustodyProvider({ children }: Readonly<{ children: ReactNode }>)
       enrollment: stage,
       error,
       fingerprint,
-      lock,
       refresh: async () => { await guardedRefresh(); },
       reportAuthorityFailure,
-      unlock: async () => { await guard(unlock)(); },
+      unlock: async () => {
+        unlockAttemptedFor.current = attemptKey;
+        await guardedUnlock();
+      },
     };
     if (unlocked !== null) {
       return { ...common, identity: unlocked.identity, key: unlocked.key, state: "unlocked" };
     }
-    return {
-      ...common,
-      state: stage === "active" || stage === "needs_bind" ? "locked" : "unenrolled",
-    };
+    return { ...common, state: bindable ? "unlocking" : "unenrolled" };
   }, [
+    attemptKey,
+    bindable,
     busy,
     enroll,
     error,
     fingerprint,
     guard,
     guardedRefresh,
+    guardedUnlock,
     keys,
-    lock,
     reportAuthorityFailure,
     stage,
-    unlock,
     unlocked,
   ]);
 
@@ -469,6 +461,6 @@ export type UnlockedCustody = Extract<Custody, { state: "unlocked" }>;
 
 export function useUnlockedCustody(): UnlockedCustody {
   const custody = useCustody();
-  if (custody.state !== "unlocked") throw new Error("The account key is locked.");
+  if (custody.state !== "unlocked") throw new Error("The account key is not open in this tab.");
   return custody;
 }

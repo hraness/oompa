@@ -132,6 +132,14 @@ export const commandCapacityReadinessState = v.object({
 // Eight maximal command/reservation pairs stay comfortably below Convex's
 // transaction read/write byte ceilings, including quota and index overhead.
 export const maximumCommandLifecycleBatch = 8;
+// The memory quota upgrade adds authority metadata only; one transaction
+// inspects at most eight complete per-user category/resource ledgers.
+export const maximumUserQuotaUpgradeBatch = 8;
+export const currentUserQuotaSchemaVersion = 2;
+export const userQuotaUpgradePaginationOpts = v.object({
+  cursor: v.union(v.string(), v.null()),
+  numItems: v.number(),
+});
 // Account deletion and device revocation accept authority-changing work before
 // their durable jobs advance through several differently sized states. Keep a
 // physical byte obligation on each new job so every later state change (and,

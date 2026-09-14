@@ -99,6 +99,25 @@ test("the app header renders one last native control without a React palette pro
   expect(document.querySelectorAll("[style],style,script").length).toBe(0);
 });
 
+test("a new app visit stores Paper System and follows the OS without fixing the resolved appearance", () => {
+  values.clear();
+  bootstrap = initializeOompaAppearance(document);
+  const host = mount("root");
+  assertMenu(host, "paper", "system");
+  expect(document.documentElement.dataset.palette).toBe("paper");
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(writes).toBe(1);
+  expect(JSON.parse(values.get(oompaAppearanceStorageKey)!)).toEqual({ palette: "paper", mode: "system" });
+  systemDark = true;
+  for (const listener of systemListeners) listener();
+  assertMenu(host, "paper", "system");
+  expect(document.documentElement.dataset.theme).toBe("dark");
+  expect(writes).toBe(1);
+  expect(JSON.parse(values.get(oompaAppearanceStorageKey)!)).toEqual({ palette: "paper", mode: "system" });
+  choose(host, "[data-oompa-mode]", "light");
+  expect(JSON.parse(values.get(oompaAppearanceStorageKey)!)).toEqual({ palette: "paper", mode: "light" });
+});
+
 test("mounted native menus adopt first-paint preferences and release only their own references", () => {
   bootstrap = initializeOompaAppearance(document);
   const staticHost = document.getElementById("static")!;

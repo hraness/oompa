@@ -18,8 +18,8 @@ describe("domain laws", () => {
   test("owns one exact reduced preset mapping", () => {
     expect(presetRequirements).toEqual({
       low: { model: "gpt-5.6-luna", effort: "max" },
-      high: { model: "gpt-5.6-sol", effort: "max" },
-      ultra: { model: "gpt-5.6-sol", effort: "ultra" },
+      high: { model: "gpt-6-astra", effort: "max" },
+      ultra: { model: "gpt-6-astra", effort: "ultra" },
       "fable-max": { model: "claude-fable-5-1", effort: "max" },
       astra: { model: "gpt-6-astra", effort: "provider-default" },
     });
@@ -200,11 +200,11 @@ describe("domain laws", () => {
       },
     });
     const affected = [
-      parseCommand({ kind: "session.start", account: accountId, preset: "high", fast: false, presetContract: 1 }),
-      parseCommand({ kind: "session.start", account: accountId, preset: "ultra", fast: false, presetContract: 1 }),
+      parseCommand({ kind: "session.start", account: accountId, preset: "high", fast: false, presetContract: 2 }),
+      parseCommand({ kind: "session.start", account: accountId, preset: "ultra", fast: false, presetContract: 2 }),
       parseCommand({ kind: "session.preset", session: sessionId, preset: "high" }),
-      parseCommand({ kind: "session.switch", session: sessionId, provider: "codex", preset: "ultra", presetContract: 1 }),
-      parseCommand({ kind: "session.switch", session: sessionId, provider: "codex", presetContract: 1 }),
+      parseCommand({ kind: "session.switch", session: sessionId, provider: "codex", preset: "ultra", presetContract: 2 }),
+      parseCommand({ kind: "session.switch", session: sessionId, provider: "codex", presetContract: 2 }),
       declaredHighWorkCreate,
       existingHighRouteTaskAdd,
     ];
@@ -228,49 +228,49 @@ describe("domain laws", () => {
     });
 
     for (const command of affected) {
-      expect(localCommandPresetContract(command)).toBe(1);
-      expect(localCommandSchema.safeParse({ ...command, presetContract: 1 }).success)
+      expect(localCommandPresetContract(command)).toBe(2);
+      expect(localCommandSchema.safeParse({ ...command, presetContract: 2 }).success)
         .toBe(command.kind === "session.start" || command.kind === "session.switch");
       expect(commandEnvelopeSchema.safeParse(envelope(command)).success).toBe(false);
-      expect(commandEnvelopeSchema.safeParse(envelope(command, 2)).success).toBe(false);
-      expect(commandEnvelopeSchema.safeParse(envelope(command, 1)).success).toBe(true);
+      expect(commandEnvelopeSchema.safeParse(envelope(command, 1)).success).toBe(false);
+      expect(commandEnvelopeSchema.safeParse(envelope(command, 2)).success).toBe(true);
     }
     for (const command of stable) {
       expect(localCommandPresetContract(command)).toBeUndefined();
       expect(commandEnvelopeSchema.safeParse(envelope(command)).success).toBe(true);
-      expect(commandEnvelopeSchema.safeParse(envelope(command, 1)).success).toBe(false);
+      expect(commandEnvelopeSchema.safeParse(envelope(command, 2)).success).toBe(false);
     }
     const staleAuthoredStart = parseCommand({
       kind: "session.start",
       account: accountId,
       preset: "high",
       fast: false,
-      presetContract: 2,
+      presetContract: 1,
     });
-    expect(commandEnvelopeSchema.safeParse(envelope(staleAuthoredStart, 1)).success).toBe(true);
-    expect(commandEnvelopeSchema.safeParse(envelope(staleAuthoredStart, 2)).success).toBe(false);
+    expect(commandEnvelopeSchema.safeParse(envelope(staleAuthoredStart, 2)).success).toBe(true);
+    expect(commandEnvelopeSchema.safeParse(envelope(staleAuthoredStart, 1)).success).toBe(false);
     const staleAuthoredSwitch = parseCommand({
       kind: "session.switch",
       session: sessionId,
       provider: "codex",
       preset: "high",
-      presetContract: 2,
+      presetContract: 1,
     });
-    expect(commandEnvelopeSchema.safeParse(envelope(staleAuthoredSwitch, 1)).success).toBe(true);
-    expect(commandEnvelopeSchema.safeParse(envelope(staleAuthoredSwitch, 2)).success).toBe(false);
+    expect(commandEnvelopeSchema.safeParse(envelope(staleAuthoredSwitch, 2)).success).toBe(true);
+    expect(commandEnvelopeSchema.safeParse(envelope(staleAuthoredSwitch, 1)).success).toBe(false);
     const currentV2Work = parseCommand({
       ...declaredHighWorkCreate,
       requestVersion: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 1,
+      presetContract: 2,
     });
     const staleV2Work = parseCommand({
       ...declaredHighWorkCreate,
       requestVersion: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 2,
+      presetContract: 1,
     });
-    expect(commandEnvelopeSchema.safeParse(envelope(currentV2Work, 1)).success).toBe(true);
-    expect(commandEnvelopeSchema.safeParse(envelope(staleV2Work, 1)).success).toBe(true);
-    expect(commandEnvelopeSchema.safeParse(envelope(staleV2Work, 2)).success).toBe(false);
+    expect(commandEnvelopeSchema.safeParse(envelope(currentV2Work, 2)).success).toBe(true);
+    expect(commandEnvelopeSchema.safeParse(envelope(staleV2Work, 2)).success).toBe(true);
+    expect(commandEnvelopeSchema.safeParse(envelope(staleV2Work, 1)).success).toBe(false);
     expect(localCommandSchema.safeParse({
       ...declaredHighWorkCreate,
       requestVersion: WORK_APPLY_REQUEST_VERSION,
@@ -278,18 +278,18 @@ describe("domain laws", () => {
     expect(localCommandSchema.safeParse({
       ...lowOnlyWorkCreate,
       requestVersion: WORK_APPLY_REQUEST_VERSION,
-      presetContract: 1,
+      presetContract: 2,
     }).success).toBe(false);
     expect(localCommandSchema.safeParse({
       ...declaredHighWorkCreate,
-      presetContract: 1,
+      presetContract: 2,
     }).success).toBe(false);
     expect(localCommandSchema.safeParse({
       kind: "session.start",
       account: accountId,
       preset: "low",
       fast: false,
-      presetContract: 1,
+      presetContract: 2,
     }).success).toBe(false);
   });
 

@@ -26,11 +26,11 @@ import { finished } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 
 export const OOMPA_INSTALL_BUN_VERSION = "1.3.14";
-export const OOMPA_INSTALL_CLI_SHA256 = "5b609e5d8a17484f9c16cd4164a80befef05c5ceeb6fe07fdbb85d0a76dbb580";
+export const OOMPA_INSTALL_CLI_SHA256 = "6f62b55d89cd60df91e2d4f6e0ec321ba44ffd6e0011d350d91326a73835f432";
 
 const expectedPackageName = "@hraness/oompa";
-const expectedPackageVersion = "0.8.0";
-const expectedArchiveUrl = "https://github.com/hraness/oompa/releases/download/v0.8.0/hraness-oompa-0.8.0.tgz";
+const expectedPackageVersion = "0.8.2";
+const expectedArchiveUrl = "https://github.com/hraness/oompa/releases/download/v0.8.2/hraness-oompa-0.8.2.tgz";
 const cliRelativePath = join("src", "cli.ts");
 const cliMaximumBytes = 512 * 1024;
 const manifestMaximumBytes = 64 * 1024;
@@ -1136,7 +1136,7 @@ type ArchiveIdentityBase = Readonly<{
 type OfficialArchiveIdentity = ArchiveIdentityBase & Readonly<{
   archiveAssetId: number;
   archiveReleaseId: number;
-  archiveReleaseTag: "v0.8.0";
+  archiveReleaseTag: "v0.8.2";
   archiveRepositoryId: 1_343_008_607;
   archiveSource: "official";
 }>;
@@ -1169,7 +1169,7 @@ type InstallCompleteReceipt = InstallArchiveIdentity & Readonly<{
   id: string;
   normalizerSha256: string;
   packageName: "@hraness/oompa";
-  packageVersion: "0.8.0";
+  packageVersion: "0.8.2";
   totalBytes: number;
   treeSha256: string;
   version: 2;
@@ -1222,14 +1222,14 @@ const parseArchiveIdentity = (value: Record<string, unknown>): InstallArchiveIde
       || typeof value.archiveReleaseId !== "number"
       || !Number.isSafeInteger(value.archiveReleaseId)
       || value.archiveReleaseId < 1
-      || value.archiveReleaseTag !== "v0.8.0"
+      || value.archiveReleaseTag !== "v0.8.2"
       || value.archiveRepositoryId !== 1_343_008_607
     ) throw new InstallNormalizationError("The durable Oompa official archive identity is invalid.");
     return {
       archiveAssetId: value.archiveAssetId,
       archiveBytes: value.archiveBytes,
       archiveReleaseId: value.archiveReleaseId,
-      archiveReleaseTag: "v0.8.0",
+      archiveReleaseTag: "v0.8.2",
       archiveRepositoryId: 1_343_008_607,
       archiveSha256: value.archiveSha256,
       archiveSource: "official",
@@ -1963,7 +1963,7 @@ export async function completeOompaStagedInstall(input: InstallArchiveIdentity &
     throw new InstallNormalizationError("The staged Oompa normalizer identity is invalid.");
   }
   const expectedVersionName = [
-    "v0.8.0",
+    "v0.8.2",
     archiveIdentity.archiveSource,
     archiveIdentity.archiveSha256,
     input.normalizerSha256,
@@ -2026,7 +2026,7 @@ export async function completeOompaStagedInstall(input: InstallArchiveIdentity &
       id: input.intentId,
       normalizerSha256: input.normalizerSha256,
       packageName: "@hraness/oompa",
-      packageVersion: "0.8.0",
+      packageVersion: "0.8.2",
       totalBytes: normalizedTree.totalBytes,
       treeSha256: normalizedTree.treeSha256,
       version: 2,

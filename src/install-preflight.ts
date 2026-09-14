@@ -9,9 +9,9 @@ import {
 export { OOMPA_INSTALL_ARCHIVE_URL, OOMPA_INSTALL_BUN_VERSION };
 
 export const OOMPA_INSTALL_PREFLIGHT_SOURCE_URL =
-  "https://raw.githubusercontent.com/hraness/oompa/v0.8.0/src/install-preflight-runtime.ts";
+  "https://raw.githubusercontent.com/hraness/oompa/v0.8.2/src/install-preflight-runtime.ts";
 export const OOMPA_INSTALL_PREFLIGHT_SOURCE_SHA256 =
-  "77ec0042b78e5014d11fe044867c41e3818553e85be78d61bbc9671e0b980f7a";
+  "aea03d881a0a6354963d8c66f8db780891fabebd29174a8cd5386142ee58e915";
 export const OOMPA_INSTALL_PREFLIGHT_SOURCE_MAXIMUM_BYTES = 512 * 1024;
 export const OOMPA_INSTALL_PREFLIGHT_SUCCESS = OOMPA_INSTALL_SUCCESS;
 export const OOMPA_INSTALL_PREFLIGHT_LOADER = [

@@ -25,7 +25,6 @@ import { PRODUCT_PREVIEW_CSP } from "../scripts/build-product-preview.ts";
 import { renderSocialCardPng, renderSocialCardSvg } from "./social-card.ts";
 import { readPngDimensions } from "./social-card-raster.ts";
 import {
-  OOMPA_MAILING_TURNSTILE_SITEKEY_ENV,
   renderAskAiAboutThis,
   renderOompaAnalyticsScript,
   renderOompaSiteFooter,
@@ -55,6 +54,10 @@ const expectedFontPaths = [
   "geist-mono/PROVENANCE.md",
 ].sort();
 const expectedAttributionPaths = expectedFontPaths.filter((path) => !path.endsWith(".woff2"));
+const presetRoot = join(sourceRoot, "site/vendor/marketing-preset");
+const presetFontPath = "instrument-serif/instrument-serif-latin-400.woff2";
+const presetAttributionPaths = ["instrument-serif/OFL.txt", "instrument-serif/UPSTREAM.md"];
+const allAttributionPaths = [...expectedAttributionPaths, ...presetAttributionPaths].sort();
 
 function assertMobileHeaderRule(css: string, className: string): void {
   expect(className).toMatch(/^x[a-z0-9]+$/u);
@@ -308,7 +311,7 @@ describe("static-site build", () => {
   });
 
   test("renders one crawlable Ask AI row on each public page with exact provider prompts", () => {
-    const subjectUrl = "https://oompa.dev/privacy/";
+    const subjectUrl = "https://oompa.app/privacy/";
     const prompt = `Tell me about ${subjectUrl}`;
     const row = renderAskAiAboutThis(subjectUrl);
     const providers = [
@@ -331,7 +334,7 @@ describe("static-site build", () => {
     }
 
     const publicPages = [
-      [renderSiteHtml(), "https://oompa.dev/"],
+      [renderSiteHtml(), "https://oompa.app/"],
       [renderPrivacyHtml(), subjectUrl],
     ] as const;
     for (const [html, canonicalUrl] of publicPages) {
@@ -371,7 +374,9 @@ describe("static-site build", () => {
       "dist/site/social-card.png",
       "dist/site/stylex.css",
       ...docsPaths.flatMap((path) => [`dist/site${path}index.html`, `dist/site${path}index.md`]),
-      ...expectedAttributionPaths.map((path) => `dist/site/fonts/${path}`),
+      ...allAttributionPaths.map((path) => `dist/site/fonts/${path}`),
+      "dist/site/marketing-preset/LICENSE",
+      "dist/site/marketing-preset/marketing-assets/UPSTREAM.md",
     ];
 
     for (const path of expectedPaths) {
@@ -423,10 +428,16 @@ describe("static-site build", () => {
     }
     const inventory = await inventoryFiles(join(root, "dist/site"));
     const fontPaths = inventory.filter((path) => path.endsWith(".woff2"));
-    expect(fontPaths).toHaveLength(13);
+    expect(fontPaths).toHaveLength(14);
     for (const path of fontPaths) expect(path).toMatch(/^graphs\/foundation\/assets\/[A-Za-z0-9_.[\]-]+\.woff2$/u);
     const expectedFontBytes = await Promise.all(expectedFontPaths.filter((path) => path.endsWith(".woff2"))
       .map((path) => readFile(join(installedFontRoot, "fonts", path))));
+    expectedFontBytes.push(await readFile(join(presetRoot, "fonts", presetFontPath)));
+    const fieldPaths = inventory.filter((path) => path.startsWith("graphs/foundation/assets/") && path.endsWith(".svg"));
+    expect(fieldPaths).toHaveLength(2);
+    const fieldBytes = await Promise.all(fieldPaths.map((path) => readFile(join(root, "dist/site", path))));
+    const expectedFieldBytes = await Promise.all(["grain.svg", "cells.svg"].map((path) => readFile(join(presetRoot, "marketing-assets", path))));
+    expect(fieldBytes.map(hash).sort()).toEqual(expectedFieldBytes.map(hash).sort());
     const emittedFontBytes = await Promise.all(fontPaths.map((path) => readFile(join(root, "dist/site", path))));
     expect(emittedFontBytes.map(hash).sort()).toEqual(expectedFontBytes.map(hash).sort());
     const bold = await readFile(join(installedFontRoot, "fonts/nebula-sans/NebulaSans-Bold.woff2"));
@@ -434,16 +445,19 @@ describe("static-site build", () => {
     expect(emittedFontBytes.some((bytes) => bytes.equals(bold))).toBe(true);
     const fontUrls: string[] = [];
     transform({ filename: foundationPath, code: Buffer.from(foundation), visitor: { Url(value) { fontUrls.push(value.url); } } });
-    expect(fontUrls).toHaveLength(13);
+    expect(fontUrls).toHaveLength(18);
     const resolvedFonts = fontUrls.map((url) => {
       expect(url).not.toMatch(/^(?:data:|https?:|\/)/iu);
-      const resolved = new URL(url, `https://oompa.dev/${foundationPath}`);
-      expect(resolved.origin).toBe("https://oompa.dev");
+      const resolved = new URL(url, `https://oompa.app/${foundationPath}`);
+      expect(resolved.origin).toBe("https://oompa.app");
       expect(resolved.search).toBe("");
       expect(resolved.hash).toBe("");
       return decodeURIComponent(resolved.pathname.slice(1));
     });
-    expect(resolvedFonts.sort()).toEqual(fontPaths);
+    expect(new Set(resolvedFonts).size).toBe(16);
+    for (const path of fontPaths) expect(resolvedFonts.filter((url) => url === path)).toHaveLength(1);
+    for (const path of fieldPaths) expect(resolvedFonts.filter((url) => url === path)).toHaveLength(2);
+    expect(resolvedFonts.sort()).toEqual([...fontPaths, ...fieldPaths, ...fieldPaths].sort());
     const previewPaths = inventory.filter((path) => path.startsWith("examples/app/"));
     expect(previewPaths).toContain("examples/app/index.html");
     expect(previewPaths).toContain("examples/app/stylex.css");
@@ -466,13 +480,22 @@ describe("static-site build", () => {
     }
     expect(inventory).toEqual([
       ...expectedPaths.filter((path) => path.startsWith("dist/site/")).map((path) => path.slice("dist/site/".length)),
-      foundationPath, ...fontPaths, ...previewPaths,
+      foundationPath, ...fontPaths, ...fieldPaths, ...previewPaths,
     ].sort());
     expect(inventory.filter((path) => path.endsWith(".js") && !path.startsWith("examples/app/"))).toEqual(["analytics.js", "appearance.js", "site.js"]);
     for (const path of ["analytics.js", "appearance.js", "site.js"]) assertSiteBrowserBundle(await readFile(join(root, "dist/site", path), "utf8"));
     expect(inventory.some((path) => path.endsWith("stylex-complete.json") || path.includes("/complete/") || path.endsWith(".map"))).toBe(false);
     expect(inventory.some((path) => /\.(?:map|ts|tsx|otf)$/u.test(path) || path.startsWith("graphs/renderer/"))).toBe(false);
-    expect(await inventoryFiles(join(root, "dist/site/fonts"))).toEqual(expectedAttributionPaths);
+    expect(await inventoryFiles(join(root, "dist/site/fonts"))).toEqual(allAttributionPaths);
+    for (const path of presetAttributionPaths) {
+      expect(await readFile(join(root, "dist/site/fonts", path))).toEqual(await readFile(join(presetRoot, "fonts", path)));
+    }
+    expect(document.documentElement.getAttribute("data-hraness-marketing-preset")).toBe("editorial");
+    expect(document.documentElement.getAttribute("data-hraness-material")).toBe("lantern");
+    expect(document.querySelector("main.hraness-marketing-field")).toBeNull();
+    expect(document.querySelectorAll(".hraness-material-wall")).toHaveLength(1);
+    expect(document.querySelector(".hraness-marketing-hero.hraness-material-wall")).not.toBeNull();
+    expect(document.querySelector(".hraness-marketing-header.hraness-material-chrome")).not.toBeNull();
     for (const path of expectedAttributionPaths) {
       expect(await readFile(join(root, "dist/site/fonts", path)))
         .toEqual(await readFile(join(installedFontRoot, "fonts", path)));
@@ -527,7 +550,7 @@ describe("static-site build", () => {
     })).rejects.toThrow("Release commit");
   });
 
-  compilerCase("fails Production closed without valid public analytics and mailing configuration", async ({ buildSite, createFixtureRoot }) => {
+  compilerCase("fails Production closed without valid public analytics configuration", async ({ buildSite, createFixtureRoot }) => {
     const validToken = "phc_public_production_token";
     expect(resolveOompaAnalyticsProjectToken({ VERCEL_ENV: "preview" })).toBe("");
     expect(resolveOompaAnalyticsProjectToken({
@@ -552,16 +575,6 @@ describe("static-site build", () => {
       })).rejects.toThrow(OOMPA_POSTHOG_PROJECT_TOKEN_ENV);
     }
 
-    const missingTurnstileRoot = await createFixtureRoot();
-    await expect(buildSite({
-      check: false,
-      environment: {
-        [OOMPA_POSTHOG_PROJECT_TOKEN_ENV]: validToken,
-        VERCEL_ENV: "production",
-      },
-      repositoryRoot: missingTurnstileRoot,
-      sourceRoot,
-    })).rejects.toThrow(OOMPA_MAILING_TURNSTILE_SITEKEY_ENV);
   });
 
   compilerCase("embeds only the public token in the self-hosted Production bundle", async ({ buildSite, createFixtureRoot }) => {
@@ -570,7 +583,6 @@ describe("static-site build", () => {
     await buildSite({
       check: false,
       environment: {
-        [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: "1x00000000000000000000AA",
         [OOMPA_POSTHOG_PROJECT_TOKEN_ENV]: publicToken,
         VERCEL_ENV: "production",
       },
@@ -584,9 +596,7 @@ describe("static-site build", () => {
     expect(analytics).not.toMatch(/\bphx_[A-Za-z0-9_-]+\b/u);
     expect(analytics).not.toContain("POSTHOG_API_KEY");
     expect(html).toContain('data-mailing-list="signup"');
-    expect(html).toContain(
-      'src="https://challenges.cloudflare.com/turnstile/v0/api.js"',
-    );
+    expect(html).not.toContain("challenges.cloudflare.com");
   });
 
   compilerCase("keeps the hosted identity marker at the fixed release-evidence version", async ({ buildSite, createFixtureRoot }) => {
@@ -658,7 +668,7 @@ describe("static-site build", () => {
 
     expect(compiledStylesheetJoin(preview).authoredHtml).toBe(renderPreviewHtml());
     expect(preview).toContain('<meta name="robots" content="noindex, nofollow">');
-    expect(preview).toContain('<link rel="canonical" href="https://oompa.dev/">');
+    expect(preview).toContain('<link rel="canonical" href="https://oompa.app/">');
     expect(preview).not.toContain("/analytics.js");
     expect(sitemap).not.toContain("/preview");
   });
@@ -683,7 +693,7 @@ describe("static-site build", () => {
     expect(await readFile(join(root, "dist/site/stylex.css"), "utf8")).toBe("stale\n");
   });
 
-  test("admits only owned browser entries, configured Turnstile, and restrictive response headers", async () => {
+  test("admits only owned browser entries and restrictive response headers", async () => {
     const repositoryRoot = join(import.meta.dir, "..");
     const html = renderSiteHtml();
     const css = await readFile(join(repositoryRoot, "site/styles.css"), "utf8");
@@ -698,11 +708,8 @@ describe("static-site build", () => {
     expect(renderPreviewHtml()).not.toContain(renderOompaAnalyticsScript());
     expect(renderPreviewHtml()).not.toContain('src="/site.js"');
     expect(renderPreviewHtml()).not.toContain('src="/appearance.js"');
-    expect(renderOompaSiteFooter({
-      [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: "1x00000000000000000000AA",
-    })).toContain(
-      'src="https://challenges.cloudflare.com/turnstile/v0/api.js"',
-    );
+    expect(renderOompaSiteFooter()).toContain('data-mailing-list="signup"');
+    expect(renderOompaSiteFooter()).not.toContain("challenges.cloudflare.com");
     expect(html).not.toMatch(/<link[^>]+rel="(?:icon|stylesheet)"[^>]+href="https?:\/\//);
     expect(css).not.toMatch(/url\(["']?https?:\/\//);
     expect(css).toContain('--font-sans: "Nebula Sans", ui-sans-serif, system-ui');
@@ -751,7 +758,7 @@ describe("static-site build", () => {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "default-src 'none'; base-uri 'none'; connect-src https://us.i.posthog.com; font-src 'self'; form-action https://account.hraness.com; frame-ancestors 'none'; frame-src 'self' https://challenges.cloudflare.com; img-src 'self' data:; manifest-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'",
+            value: "default-src 'none'; base-uri 'none'; connect-src https://us.i.posthog.com; font-src 'self'; form-action https://account.hraness.com; frame-ancestors 'none'; frame-src 'self'; img-src 'self' data:; manifest-src 'self'; script-src 'self'; style-src 'self'",
           },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           {

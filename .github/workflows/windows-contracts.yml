@@ -1,0 +1,59 @@
+name: Windows portable contracts
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: windows-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  portable-contracts:
+    name: Windows portable contracts
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+
+      - name: Install pinned Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Verify native Windows runtime
+        run: bun --no-env-file -e "if (process.platform !== 'win32' || process.arch !== 'x64' || Bun.version !== '1.3.14') process.exit(1); console.log('Windows x64 / Bun ' + Bun.version);"
+
+      - name: Install frozen dependencies without lifecycle scripts
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # These suites use synthetic values only. No native controller, provider,
+      # credential, daemon, installation or platform authority is exercised.
+      - name: Check portable framing and help grammars
+        run: bun test ./scripts/owned-controller/protocol.test.ts ./scripts/claude-auth-help.test.ts --isolate --max-concurrency=1
+
+      - name: Build fixed Win32 directory security fixture
+        # These invalid ambient options must be removed by the fixed builder.
+        env:
+          CL: '/DOOMPA_AMBIENT_CL_MUST_NOT_REACH_COMPILER=1'
+          _CL_: '/DOOMPA_AMBIENT_CL_TAIL_MUST_NOT_REACH_COMPILER=1'
+        run: ./scripts/windows-directory-security/build-fixture.ps1
+
+      - name: Check actual Win32 directory handle security
+        env:
+          OOMPA_WINDOWS_DIRECTORY_NATIVE: '1'
+        run: bun --no-env-file --config=./scripts/windows-directory-security/bunfig.toml test ./scripts/windows-directory-security/native.test.ts --isolate --max-concurrency=1

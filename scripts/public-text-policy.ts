@@ -1,4 +1,6 @@
+import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
@@ -6,6 +8,8 @@ import {
   assertAuthoritySupervisorArtifactPublicFile,
   isAuthoritySupervisorArtifactRelativePath,
 } from "./authority-supervisor-artifact";
+import { snapshotMarketingPreset } from "./marketing-preset";
+import { checkLanternMaterialSnapshot } from "../site/vendor/lantern-material/check.mjs";
 
 const allowedPublicScopes = new Set([
   "agentclientprotocol",
@@ -136,12 +140,48 @@ const excludedDirectories = new Set([".git", "dist", "node_modules"]);
  * generated-site source, published docs, and the GitHub issue templates.
  */
 const publicCopyFile = /^(?:[A-Z_]+\.md|package\.json|site\/.+|docs\/.+\.md|\.github\/ISSUE_TEMPLATE\/.+)$/u;
-const textFile = /(?:^|\/)(?:CODEOWNERS|LICENSE|\.bun-version|\.editorconfig|\.gitattributes|\.gitignore)$|\.(?:css|html|json|lock|md|mjs|svg|toml|ts|tsx|txt|xml|yaml|yml|zig)$/u;
+const textFile = /(?:^|\/)(?:CODEOWNERS|LICENSE|\.bun-version|\.editorconfig|\.gitattributes|\.gitignore)$|\.(?:c|css|h|html|json|lock|md|mjs|ps1|svg|toml|ts|tsx|txt|xml|yaml|yml|zig)$/u;
 // This synthetic logical dump is a reviewed migration input, not a general
 // database-file exception. It still passes every public sensitive-text check.
 const releasedStateSql = "scripts/fixtures/released-state/v0.5.0/control-plane.sql";
 const editorialWebp = /^site\/images\/editorial\/[a-z0-9]+(?:-[a-z0-9]+)*(?:-384|-768)?\.webp$/u;
 const webpChunkTypes = new Set(["VP8 ", "VP8L", "VP8X"]);
+const marketingDirectory = "site/vendor/marketing-preset";
+const marketingDeclaration = `${marketingDirectory}/check.d.mts`;
+const materialDirectory = "site/vendor/lantern-material";
+const materialDeclaration = `${materialDirectory}/check.d.mts`;
+const marketingFont = "fonts/instrument-serif/instrument-serif-latin-400.woff2";
+
+/** One additional declaration path; all snapshot text still receives the public scan. */
+async function assertMaterialPublicSource(root: string, label: string): Promise<void> {
+  try {
+    const directory = join(await realpath(root), materialDirectory);
+    assert.equal(await realpath(directory), directory);
+    const manifest = await checkLanternMaterialSnapshot(directory);
+    assert.equal(manifest.source.commit, "0e089bc18f9a0409f0e74b1fb7192f468956e386");
+  } catch {
+    throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
+  }
+}
+
+/** One reviewed licensed binary, inside the complete canonical source inventory.
+ * Neither its suffix nor caller-controlled provenance authorizes other bytes. */
+async function assertMarketingPublicSource(root: string, label: string): Promise<void> {
+  try {
+    const directory = join(await realpath(root), marketingDirectory);
+    assert.equal(await realpath(directory), directory);
+    const snapshot = await snapshotMarketingPreset(directory);
+    assert.equal(snapshot.sourceCommit, "0e089bc18f9a0409f0e74b1fb7192f468956e386");
+    const bytes = snapshot.files.get(marketingFont);
+    assert.ok(bytes !== undefined && bytes.byteLength >= 48 && bytes.byteLength <= 50_000);
+    assert.equal(bytes.toString("ascii", 0, 4), "wOF2");
+    assert.equal(bytes.readUInt32BE(8), bytes.byteLength);
+    assert.equal(createHash("sha256").update(bytes).digest("hex"),
+      "60c06664b5a95c7de6cc3e00d1f9034d78bd1e40b564016b241674449a067d4d");
+  } catch {
+    throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
+  }
+}
 
 const assertEditorialWebp = async (path: string, label: string): Promise<void> => {
   const bytes = await readFile(path);
@@ -174,7 +214,11 @@ async function scanPublicTree(root: string, skipCheckoutTmp: boolean): Promise<v
         await assertAuthoritySupervisorArtifactPublicFile(root, label);
       } else if (entry.isFile() && editorialWebp.test(label)) {
         await assertEditorialWebp(child, label);
-      } else if (entry.isFile() && (textFile.test(child) || label === releasedStateSql)) {
+      } else if (entry.isFile() && label === `${marketingDirectory}/${marketingFont}`) {
+        await assertMarketingPublicSource(root, label);
+      } else if (entry.isFile() && (textFile.test(child) || label === releasedStateSql || label === marketingDeclaration || label === materialDeclaration)) {
+        if (label === marketingDeclaration) await assertMarketingPublicSource(root, label);
+        if (label === materialDeclaration) await assertMaterialPublicSource(root, label);
         const value = await readFile(child, "utf8");
         if (entry.name === "bun.lock") assertPublicSensitiveText(value, label);
         else assertPublicText(value, label);

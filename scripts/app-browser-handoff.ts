@@ -191,11 +191,12 @@ const sourceFiles = [
   "site/product-scenes.ts",
   "scripts/build-app.ts", "scripts/build-appearance.ts", "scripts/app-source-marker.ts", "src/install-normalizer.ts",
   "scripts/app-browser.ts", "scripts/app-browser-server.ts", "scripts/app-browser-handoff.ts", "scripts/app-browser-settlement.ts",
+  "scripts/site-css-resources.ts", "scripts/marketing-preset.ts",
   "scripts/app-browser-runner.ts", "scripts/app-browser-runner.mjs", "scripts/prepare-app-browser.ts",
 ] as const;
 export async function browserSources(root: string): Promise<readonly BrowserFile[]> {
   const result = await Promise.all(sourceFiles.map((path) => browserFile(root, path)));
-  for (const prefix of ["app/src", "app/fixtures/browser", "app/fixtures/product"]) {
+  for (const prefix of ["app/src", "app/fixtures/browser", "app/fixtures/product", "site/vendor/marketing-preset", "site/vendor/lantern-material"]) {
     for (const row of await browserInventory(join(root, prefix))) result.push({ ...row, path: `${prefix}/${row.path}` });
   }
   return files(result.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0));

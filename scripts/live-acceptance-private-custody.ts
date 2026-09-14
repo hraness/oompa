@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants, type Stats } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, type Stats } from "node:fs";
 import {
   chmod,
   lstat,
@@ -164,6 +164,51 @@ const sameReceiptParent = (
 ): boolean => left.device === right.device && left.inode === right.inode
   && left.mode === right.mode && left.owner === right.owner;
 
+/** Read-only synchronous join to an already verified receipt; no raw bytes or identity escape. */
+function assertVerifiedPrivateFile(
+  pathInput: string,
+  maximumBytes: number,
+  identity: PrivateFileIdentity,
+  invalid: () => Error,
+): void {
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || maximumBytes > 1024 * 1024) throw invalid();
+  const path = normalizedAbsolute(pathInput, invalid);
+  const parent = (): PrivateFileIdentity["parent"] => {
+    const directory = dirname(path);
+    const metadata = lstatSync(directory);
+    if (!metadata.isDirectory() || metadata.isSymbolicLink() || realpathSync(directory) !== directory) throw invalid();
+    return { device: metadata.dev, inode: metadata.ino, mode: metadata.mode, owner: metadata.uid };
+  };
+  if (!sameReceiptParent(parent(), identity.parent)) throw invalid();
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let bytes: Buffer | undefined;
+  try {
+    const before = fstatSync(fd);
+    assertSafeFileMetadata(before, maximumBytes, invalid);
+    if (before.dev !== identity.device || before.ino !== identity.inode) throw invalid();
+    bytes = Buffer.alloc(maximumBytes + 1);
+    let length = 0;
+    while (length < bytes.byteLength) {
+      const count = readSync(fd, bytes, length, bytes.byteLength - length, length);
+      if (count === 0) break;
+      length += count;
+    }
+    if (length !== before.size || length > maximumBytes) throw invalid();
+    const sha256 = createHash("sha256").update(bytes.subarray(0, length)).digest("hex");
+    const after = fstatSync(fd);
+    const named = lstatSync(path);
+    for (const metadata of [after, named]) {
+      assertSafeFileMetadata(metadata, maximumBytes, invalid);
+      if (metadata.dev !== before.dev || metadata.ino !== before.ino || metadata.size !== before.size
+        || metadata.mtimeMs !== before.mtimeMs || metadata.ctimeMs !== before.ctimeMs) throw invalid();
+    }
+    if (sha256 !== identity.sha256 || !sameReceiptParent(parent(), identity.parent)) throw invalid();
+  } finally {
+    bytes?.fill(0);
+    closeSync(fd);
+  }
+}
+
 async function readPrivateJson<T>(
   pathInput: string,
   maximumBytes: number,
@@ -306,6 +351,24 @@ export class AtomicPrivateJsonReceipt<T> {
 
   get value(): T {
     return structuredClone(this.#value);
+  }
+
+  /**
+   * Assert the retained verified inode, content digest and parent synchronously.
+   * This does not refresh the baseline, invoke policy effects, or grant ownership.
+   */
+  assertVerifiedIdentity(): void {
+    this.#assertInspectable();
+    const identity = this.#identity;
+    try {
+      assertVerifiedPrivateFile(this.#policy.path(this.#value), this.#policy.maximumBytes, identity, this.#policy.invalid);
+      this.#assertInspectable();
+      if (this.#identity !== identity) throw this.#policy.invalid();
+    } catch { throw this.#policy.invalid(); }
+  }
+
+  #assertInspectable(): void {
+    if (this.#mutating || this.#removed) throw this.#policy.invalid();
   }
 
   async update(transform: (current: T) => T): Promise<T> {

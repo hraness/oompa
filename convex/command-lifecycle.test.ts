@@ -104,6 +104,9 @@ const auditAuthorityReductionHeadroomPage = makeFunctionReference<"action", Args
   schemaVersion: 1;
   topologyBlocked: number;
 }>>("commandLifecycle:auditAuthorityReductionHeadroomPage");
+const auditAuthorityReductionQuotaCeilingsPage = makeFunctionReference<"query", Args, unknown>(
+  "commandLifecycle:auditAuthorityReductionQuotaCeilingsPage",
+);
 const reserveAuthorityReductionCapacity = makeFunctionReference<"mutation", Args, Readonly<{
   disposition?: "ready" | "capacity_missing" | "orphan_cleanup_pending"
     | "orphan_cleanup_eligible" | "topology_blocked";
@@ -3138,3 +3141,126 @@ describe("command lifecycle physical quota reservations", () => {
     });
   }
 });
+
+const diagnosticSnapshot = async (world: Awaited<ReturnType<typeof lifecycleWorld>>) =>
+  await world.testRuntime.run(async (ctx) => await Promise.all(([
+    "accountDeletionIdentityReservations", "accountDeletionJobReservations",
+    "deviceRevocationDeviceReservations", "deviceRevocationJobReservations",
+    "deviceRevocationReceiptReservations", "deviceRevocationSecurityReservations",
+    "storageUsageByUser", "storageUsageService", "serviceControl",
+  ] as const).map(async (table) => await ctx.db.query(table).collect())));
+
+const diagnosticArgs = {
+  expectedRuntimeAttestation: trackedRuntimeAttestation,
+  paginationOpts: { cursor: null, numItems: 8 },
+};
+
+describe("read-only authority reduction quota page", () => {
+  test("distinguishes missing sets and simultaneous ceilings without changing stored state", async () => {
+    const world = await lifecycleWorld();
+    await saturateUserAndServiceCeilings(world);
+    const before = await diagnosticSnapshot(world);
+    const result = await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, diagnosticArgs);
+    expect(result).toMatchObject({
+      activationAuthorized: false, capacityMissing: 1, consistency: "page_snapshot", evaluated: 1,
+      demand: { accountPairs: 1, deviceQuartets: 1, paddingBytesLowerBound: 12_288, totalRecords: 6 },
+      quotaAuthorityUnknown: 0, repairAuthorized: false, scanned: 1,
+      ceilings: {
+        security: { recordsBlocked: 1 },
+        serviceTotal: { bytesBlockedByLowerBound: 1, recordsBlocked: 1 },
+        userTotal: { bytesBlockedByLowerBound: 1 },
+      },
+    });
+    if (typeof result !== "object" || result === null || !("continueCursor" in result)) {
+      throw new Error("invalid diagnostic result");
+    }
+    const { continueCursor, ...closed } = result;
+    expect(typeof continueCursor).toBe("string");
+    const encoded = JSON.stringify(closed);
+    for (const forbidden of [world.userId, world.deviceId, "userId", "email", "createdAt", "updatedAt", "_id"]) {
+      expect(encoded).not.toContain(forbidden);
+    }
+    expect(await diagnosticSnapshot(world)).toEqual(before);
+  });
+
+  test("only missing sets are demanded and the padding is below genuine stored cost", async () => {
+    const world = await lifecycleWorld();
+    await world.testRuntime.run(async (ctx) => { await createAccountDeletionCapacityForNewUser(ctx, world.userId); });
+    expect(await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, diagnosticArgs))
+      .toMatchObject({ demand: { accountPairs: 0, deviceQuartets: 1, totalRecords: 4 }, ceilings: { identity: { applicable: 0 } } });
+    await world.testRuntime.run(async (ctx) => { await createDeviceRevocationCapacityForNewDevice(ctx, world.userId, world.deviceId); });
+    expect(await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, diagnosticArgs))
+      .toMatchObject({ capacityMissing: 0, evaluated: 0, ready: 1, demand: { totalRecords: 0 } });
+    await world.testRuntime.run(async (ctx) => {
+      const rows = [
+        ...await ctx.db.query("accountDeletionIdentityReservations").collect(),
+        ...await ctx.db.query("accountDeletionJobReservations").collect(),
+        ...await ctx.db.query("deviceRevocationDeviceReservations").collect(),
+        ...await ctx.db.query("deviceRevocationJobReservations").collect(),
+        ...await ctx.db.query("deviceRevocationSecurityReservations").collect(),
+        ...await ctx.db.query("deviceRevocationReceiptReservations").collect(),
+      ];
+      expect(rows).toHaveLength(6);
+      for (const row of rows) expect(logicalDocumentBytes(row)).toBeGreaterThan(2_048);
+    });
+  });
+
+  test("partial reservation topology and corrupt quota authority remain distinct", async () => {
+    const world = await lifecycleWorld();
+    await world.testRuntime.run(async (ctx) => {
+      const memory = await ctx.db.query("storageUsageByUser")
+        .withIndex("by_user_and_category", (q) => q.eq("userId", world.userId).eq("category", "memory")).unique();
+      if (memory === null) throw new Error("missing memory fixture");
+      await ctx.db.delete(memory._id);
+    });
+    expect(await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, diagnosticArgs))
+      .toMatchObject({ capacityMissing: 1, evaluated: 0, quotaAuthorityUnknown: 1, demand: { totalRecords: 6 } });
+    await world.testRuntime.run(async (ctx) => {
+      await ctx.db.insert("accountDeletionIdentityReservations", {
+        capacityReservation: "0".repeat(2_048), capacityVersion: 1,
+        category: "identity", createdAt: world.now, userId: world.userId,
+      });
+    });
+    expect(await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, diagnosticArgs))
+      .toMatchObject({ capacityMissing: 0, evaluated: 0, quotaAuthorityUnknown: 0, topologyBlocked: 1 });
+  });
+
+  test("server-owned pagination reads no more than eight identities", async () => {
+    const world = await lifecycleWorld();
+    await world.testRuntime.run(async (ctx) => {
+      for (let index = 0; index < 8; index += 1) {
+        await ctx.db.insert("users", { email: `unverified-${String(index)}@example.com` });
+      }
+    });
+    const first = await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, diagnosticArgs);
+    expect(first).toMatchObject({ isDone: false, scanned: 8 });
+    if (typeof first !== "object" || first === null || !("continueCursor" in first)
+      || typeof first.continueCursor !== "string") throw new Error("invalid fixture cursor");
+    expect(await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, {
+      ...diagnosticArgs, paginationOpts: { cursor: first.continueCursor, numItems: 8 },
+    })).toMatchObject({ isDone: true, scanned: 1 });
+  });
+
+  test("rejects cursor overrides and stale runtime before classification", async () => {
+    const world = await lifecycleWorld();
+    const foreign = makeFunctionReference<"query", Args, unknown>("commandLifecycle:auditAuthorityReductionQuotaCeilingsPage");
+    for (const paginationOpts of [
+      { cursor: null, numItems: 9 }, { cursor: null, numItems: 0 },
+      { cursor: "x".repeat(4_097), numItems: 1 },
+      { cursor: null, endCursor: "override", numItems: 1 },
+      { cursor: null, maximumRowsRead: 100, numItems: 1 },
+      { cursor: null, maximumBytesRead: 1_000_000, numItems: 1 },
+    ]) await expect(world.testRuntime.query(foreign, {
+      ...diagnosticArgs, paginationOpts,
+    })).rejects.toThrow();
+    await expect(world.testRuntime.query(foreign, {
+      ...diagnosticArgs,
+      expectedRuntimeAttestation: { ...candidateRuntimeForDiagnostic },
+    })).rejects.toThrow("COMMAND_LIFECYCLE_RUNTIME_CHANGED");
+  });
+});
+
+const candidateRuntimeForDiagnostic = {
+  bound: true, deployedAtMs: 1, previousDeployDigest: null, runtimeRevision: "fixture",
+  runtimeSourceCommit: "a".repeat(40), schemaIdentity: "hra-release-attestation-v1", schemaVersion: 1,
+};

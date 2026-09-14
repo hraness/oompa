@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import { copyFile, cp, lstat, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -25,6 +26,8 @@ import { buildSiteStylex } from "./build-site-stylex.ts";
 import { buildProductPreview } from "./build-product-preview.ts";
 import { OOMPA_RELEASE_VERSION } from "./release-evidence";
 import { buildOompaAppearance } from "./build-appearance";
+import { snapshotMarketingPreset } from "./marketing-preset";
+import { checkLanternMaterialSnapshot } from "../site/vendor/lantern-material/check.mjs";
 
 interface BuildOptions {
   readonly check: boolean;
@@ -377,10 +380,24 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
   const analyticsProjectToken = resolveOompaAnalyticsProjectToken(environment);
   const fonts = await snapshotSiteFonts(dirname(designKitFontsStylesPath));
   const sourceRoot = await realpath(options.sourceRoot ?? options.repositoryRoot);
+  const marketingPreset = await snapshotMarketingPreset(join(sourceRoot, "site/vendor/marketing-preset"));
+  const materialRoot = join(sourceRoot, "site/vendor/lantern-material");
+  const material = await checkLanternMaterialSnapshot(materialRoot);
+  // Both portable layers retain the same MIT attribution. Keep the existing
+  // exact public inventory rather than emitting an identical second license.
+  const sharedLicense = marketingPreset.files.get("LICENSE");
+  assert.ok(sharedLicense !== undefined);
+  assert.equal(createHash("sha256").update(sharedLicense).digest("hex"), material.files.LICENSE.sha256);
+  const presetFonts = [...marketingPreset.files].filter(([path]) => path.startsWith("fonts/"))
+    .map(([path, bytes]) => ({ path: path.slice("fonts/".length), bytes }));
+  const allFonts = [...fonts.inputs, ...presetFonts];
+  const presetImages = [...marketingPreset.files].filter(([path]) => path.endsWith(".svg"))
+    .map(([path, bytes]) => ({ path, bytes }));
   const compiled = await buildSiteStylex({
     sourceRoot,
-    environment, fonts: fonts.inputs,
+    fonts: allFonts, images: presetImages,
   });
+  assert.deepEqual(await checkLanternMaterialSnapshot(materialRoot), material, "Lantern source changed during static compilation");
   // Retain failed/completed private receipts under the same ignored build root
   // as the static compiler. Only the builder's verified public projection moves.
   const previewRun = await mkdtemp(join(sourceRoot, "tmp/site-product-preview-"));
@@ -405,9 +422,16 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
   }
   // Browser fonts are already hashed graph assets. Publish their attribution
   // beside the family names without a redundant second copy of every WOFF2.
-  for (const { path, bytes } of fonts.inputs.filter(({ path }) => !path.endsWith(".woff2"))) {
+  for (const { path, bytes } of allFonts.filter(({ path }) => !path.endsWith(".woff2"))) {
     const destination = join(options.repositoryRoot, "dist/site/fonts", path);
     await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, bytes, { flag: "wx", mode: 0o644 });
+  }
+  for (const name of ["LICENSE", "marketing-assets/UPSTREAM.md"]) {
+    const destination = join(options.repositoryRoot, "dist/site/marketing-preset", name);
+    await mkdir(dirname(destination), { recursive: true });
+    const bytes = marketingPreset.files.get(name);
+    assert.ok(bytes !== undefined, "Canonical marketing attribution is missing");
     await writeFile(destination, bytes, { flag: "wx", mode: 0o644 });
   }
   const socialCardPng = renderSocialCardPng();

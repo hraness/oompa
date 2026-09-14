@@ -24,6 +24,14 @@ const reviewedResourceFunctionSha256s = new Set([
   "7f077d5fb8c52e4dfa18bdf188c9b2ba9e03f28a626080e7d69a5e20b0b9fda6",
   "87ae7be84d98dfd2138dfd2b7709c82e09ce1d595300c3773dfa988ae5ffc2a8",
   "c8930b3dbd9f7a698c3f9089d32ba982b9684cf87625a70a44f8a75cf75f7a40",
+  // Inline-conversation cards (2026-09-10): same function, new identifiers.
+  "78bf0a7eede24af540a4a0068a29919376f5cc95c573f1ed9d539fe38ab1dbf3",
+  // Astra bindings with inline conversations: same function, new identifiers.
+  "903dddf7c88da8242677c566f0cd3bc889a4504e8ca0397743fb1403d392bd9e",
+  // Browser automatic effort (2026-09-10): same function, new identifiers.
+  "38c65e36bdaa72af11d634e191f31be3f940b40a55f8f1061fa0205cef460ad2",
+  // Converged Astra, automatic effort and usage history: reviewed identifier allocation.
+  "5c853b84598085dbe0243144241bbe3067519cf9cffbe89501d2bd04636cdef7",
 ]);
 const stylexInjector = /stylex-inject|stylexInject|data-stylex|stylesheet-group/u;
 const unreviewedLiteralCall = /createElement\s*\(\s*["']style["']\s*\)|\.insertRule\s*\(/u;

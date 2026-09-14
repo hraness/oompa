@@ -598,13 +598,15 @@ describe("fresh hosted configuration", () => {
     expect(() => parseHostedInput(`${protectedDocument}\n{}`)).toThrow("input_invalid");
     expect(() => parseHostedInput(JSON.stringify({ ...validInput, unexpected: true })))
       .toThrow("input_invalid");
-    expect(() => parseHostedInput(JSON.stringify({ ...validInput, siteUrl: "http://oompa.dev" })))
+    expect(() => parseHostedInput(JSON.stringify({ ...validInput, siteUrl: "http://oompa.app" })))
+      .toThrow("input_invalid");
+    expect(() => parseHostedInput(JSON.stringify({ ...validInput, siteUrl: "https://oompa.dev" })))
       .toThrow("input_invalid");
     expect(() => parseHostedInput(JSON.stringify({
       ...validInput,
       siteUrl: "https://hra.vercel.app",
     }))).toThrow("input_invalid");
-    expect(() => parseHostedInput(JSON.stringify({ ...validInput, siteUrl: "https://oompa.dev/" })))
+    expect(() => parseHostedInput(JSON.stringify({ ...validInput, siteUrl: "https://oompa.app/" })))
       .toThrow("input_invalid");
     expect(() => parseHostedInput(JSON.stringify({ ...validInput, resendApiKey: "not-a-key" })))
       .toThrow("input_invalid");

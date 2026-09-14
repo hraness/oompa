@@ -150,3 +150,35 @@ export function deriveTranscript(
 
   return entries;
 }
+
+/**
+ * The key of the newest assistant entry, streaming or closed. Every other
+ * assistant entry starts collapsed in a card, so a long history scrolls as a
+ * list of one-line summaries rather than a wall of results.
+ */
+export function latestAssistantKey(entries: readonly TranscriptEntry[]): string | null {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry !== undefined && entry.kind === "assistant") return entry.key;
+  }
+  return null;
+}
+
+export const summaryLineCharacters = 120;
+
+/**
+ * The one line a collapsed response shows: the first non-empty line with
+ * Markdown heading, emphasis, quote and code markers stripped, bounded.
+ */
+export function summaryLine(text: string): string {
+  const line = text
+    .split("\n")
+    .map((candidate) => candidate
+      .replace(/^[\s>#*+-]+/u, "")
+      .replace(/^\d+\.\s+/u, "")
+      .replace(/[`*_~]/gu, "")
+      .trim())
+    .find((candidate) => candidate.length > 0) ?? "";
+  if (line.length <= summaryLineCharacters) return line;
+  return `${line.slice(0, summaryLineCharacters - 1).trimEnd()}\u2026`;
+}

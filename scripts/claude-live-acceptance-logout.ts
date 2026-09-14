@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { lstat, mkdir, opendir, realpath } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
@@ -16,6 +15,7 @@ import { profileIdSchema, type ProfileId } from "../src/domain/values";
 import { profilePaths } from "../src/storage/paths";
 import { OOMPA_VERSION } from "../src/version";
 import { isBoundedProcessCleanupUnprovenError } from "./bounded-process";
+import { parseClaudeAuthLogoutHelp } from "./claude-auth-help";
 import type { CommandRunner } from "./configure-hosted-sync";
 import {
   parseClaudeLiveAcceptancePrivateReceipt,
@@ -184,10 +184,6 @@ type RuntimeResolver = (
   options: ResolvePinnedClaudeRuntimeOptions,
 ) => Promise<PinnedClaudeRuntime>;
 
-const sha256 = (value: string): string => createHash("sha256")
-  .update(value, "utf8")
-  .digest("hex");
-
 const preflightBindingDigest = (
   input: z.infer<typeof preflightReceiptBaseSchema>,
 ): string => canonicalDigest({
@@ -325,33 +321,8 @@ const parseLogoutHelp = (input: Readonly<{
   stderr: string;
   stdout: string;
 }>): string => {
-  if (
-    input.exitCode !== 0
-    || input.stderr !== ""
-    || input.stdout.length > 16 * 1024
-    || /\p{Cc}/u.test(input.stdout.replaceAll("\n", ""))
-  ) throw new ClaudeLiveAcceptanceLogoutError("capability_refused");
-  const normalized = input.stdout.endsWith("\n")
-    ? input.stdout.slice(0, -1)
-    : input.stdout;
-  const lines = normalized.split("\n");
-  const nonempty = lines
-    .map((line, index) => ({ index, value: line.trim() }))
-    .filter((line) => line.value.length > 0);
-  const usage = nonempty[0];
-  const options = nonempty.filter((line) => line.value === "Options:");
-  const optionsLine = options[0];
-  const optionLines = optionsLine === undefined
-    ? []
-    : nonempty.filter((line) => line.index > optionsLine.index);
-  if (
-    usage?.value !== "Usage: claude auth logout [options]"
-    || options.length !== 1
-    || optionsLine === undefined
-    || optionLines.length !== 1
-    || !/^-h, +--help(?: {2,}[^\r\n]+)?$/u.test(optionLines[0]?.value ?? "")
-  ) throw new ClaudeLiveAcceptanceLogoutError("capability_refused");
-  return sha256(input.stdout);
+  try { return parseClaudeAuthLogoutHelp({ exitCode: input.exitCode, stderr: input.stderr, stdout: input.stdout }); }
+  catch { throw new ClaudeLiveAcceptanceLogoutError("capability_refused"); }
 };
 
 const parseStatus = (input: Readonly<{

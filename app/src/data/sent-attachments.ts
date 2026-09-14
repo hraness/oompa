@@ -40,7 +40,7 @@ export function heldAttachmentUrl(digest: string): string | null {
   return held.get(digest) ?? null;
 }
 
-/** Drops everything, revoking each handle. Used when the account key is locked. */
+/** Drops everything, revoking each handle. Used when the account key is dropped. */
 export function releaseHeldAttachments(): void {
   for (const url of held.values()) URL.revokeObjectURL(url);
   held.clear();

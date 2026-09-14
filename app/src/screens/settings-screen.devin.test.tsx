@@ -12,6 +12,7 @@ await mock.module("../custody/custody-context", () => ({
   useCustody: () => ({ lock: () => undefined }),
 }));
 
+await mock.module("../components/usage-breakdown", () => ({ UsageBreakdown: () => null }));
 await mock.module("../data/archived-sessions", () => ({
   useArchivedSessions: () => [
     {
@@ -73,6 +74,7 @@ await mock.module("../data/registry", () => ({
       daemonVersion: "0.4.1",
       defaultApprovalMode: "auto:all",
       defaultPreset: "astra",
+      defaultProjectPublicId: null,
       deviceCommandsAllowed: true,
       devicePublicId: "device_studio01",
       deviceStatus: "active",

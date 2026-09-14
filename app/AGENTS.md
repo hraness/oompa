@@ -3,18 +3,18 @@
 - `index.html` is the only shell. It carries the mobile viewport with `viewport-fit=cover` and one authored module entry. The sealed build adds a same-origin appearance bootstrap before paint.
 - `src/appearance-entry.ts` and `src/appearance.ts` apply shared themes and restrict preference storage to a bounded palette/mode record. The bootstrap binds static controls; each mounted app menu owns and releases its controller reference.
 - `vite.config.ts` and the repository's app build script compile the shell with no runtime asset or style inlining. The sole authored exception is one canonical data-URI favicon pinned to the reviewed Oompa SVG bytes; it adds no image origin or public asset type. Every compiler foundation precedes one finalized same-origin StyleX recipe stylesheet.
-- `vercel.json` configures the second Vercel project (`app.oompa.dev`) with the F1 Content Security Policy and the no-store shell headers.
+- `vercel.json` configures the second Vercel project (`app.oompa.app`) with the F1 Content Security Policy and the no-store shell headers.
 - `src/oompa/` re-exports the browser-safe repository modules the app is allowed to reach.
 - `src/auth/` holds the Convex client, the in-memory token storage adapter, and the one-time-code sign-in screen.
-- `src/custody/` holds device key generation, IndexedDB key storage, the enrollment flow, the account-key unlock context, idle lock, and presence.
+- `src/custody/` holds device key generation, IndexedDB key storage, the enrollment flow, the account-key context that opens an enrolled browser automatically, and presence.
 - `src/data/` holds the wire parsers, the session heads and one head, the compact history walk, the subscribed compact and detail stream tails, the session metadata cache, the session and device command hooks, the device, device registry, and archived session hooks, the composer attachment state, the in-memory hold of bytes this tab sent, and the manual grid arrangement bound to this browser.
 - `src/model/` holds the framework-free session model reducer, the transcript derivation, the grid and interaction view models, the manual card-order reducer, the session scheduled-task selection, the settings and device command view models and builders, the composer attachment rules and the one send-payload builder, the image downscaling arithmetic, the provider switch payload builder, and time formatting.
 - `src/markdown/` holds the sanitiser and the markdown renderer.
 - `src/lib/` holds the class-name helper, the cancellation helper, and the canvas image wrapper the downscaler injects.
 - `src/routing/` holds the hash route model and the router hook.
 - `src/components/ui/` holds the interface primitives as owned source.
-- `src/components/` holds the icons, the state indicator, the streaming tail, the session card, the subagent chips, the scheduled-tasks badge, the transcript, the attachment chips, the account-login relay, and the interaction panel.
-- `src/screens/` holds the grid, session, and settings screens.
+- `src/components/` holds the icons, the state indicator, the inline conversation panel and composer, the session card, the subagent chips, the scheduled-tasks badge, the transcript, the attachment chips, the account-login relay, and the interaction panel.
+- `src/screens/` holds the grid and settings screens.
 - `fixtures/product/` renders the actual screens with fictional Direct scenarios and IO-only substitutions for the isolated public website examples. It is not an app entry point or a live provider test.
 
 # Guidelines
@@ -32,11 +32,12 @@
 - Offer a remote decision only where the daemon will accept one. `src/model/session-view.ts` consumes only the parser-validated projected policy; `src/domain/remote-interaction-policy.ts` is the sole action-membership table shared by projection and live daemon verification. Remote answers are closed-choice user answers only; free text, Other, and MCP forms stay local.
 - Never register a service worker, load an analytics script, or reference an origin outside the pinned Convex deployment.
 - Never persist plaintext projection text, an authentication token, or an unwrapped account key. Tokens live in the in-memory storage adapter and the account key lives in the custody context only.
-- Keep local storage to `app/src/data/card-order.ts` for a bounded list of opaque session public ids and `app/src/appearance.ts` for the single `hraness-design-palette-v1` key. Appearance accepts at most 256 characters, parses the shared finite palette/mode contract, and serializes only those two fields; it contains no account, session, projection, or key material. Disable legacy preference reads. `app/src/auth/no-persistent-storage.test.ts` allowlists these modules by name; nothing else in the app may name `localStorage`, `sessionStorage`, or `document.cookie`.
+- Keep local storage to `app/src/data/card-order.ts` for a bounded list of opaque session public ids, `app/src/appearance.ts` for the single `hraness-design-palette-v1` key, and `app/src/data/automatic-effort.ts` for the single `oompa-automatic-effort-v1` key containing exactly `on` or `off`. The automatic-effort preference never stores prompts, decisions or identifiers; unknown or unavailable storage disables it, and a failed write keeps it off for the tab. Appearance accepts at most 256 characters, parses the shared finite palette/mode contract, and serializes only those two fields; it contains no account, session, projection, or key material. Disable legacy preference reads. `app/src/auth/no-persistent-storage.test.ts` allowlists these modules by name; nothing else in the app may name `localStorage`, `sessionStorage`, or `document.cookie`.
+- Apply automatic effort only to a new grid-composer start, before building its one ordinary device command. Downshift only a conservatively bounded prompt under the exact Astra High/Ultra contract; explicit commands and established conversations keep their selections. Snapshot the decision with the submitted prompt, and never resubmit or change accounts on a failed or uncertain result.
 - Show a schedule; never offer to change one. The scheduled-task badge and the settings list read the projected device registries and expose no create, edit, or delete anywhere.
 - Show personal-session adoption only as per-machine provider aggregates with exact local CLI hints. Never add an adopted-session badge or let the browser grant access to a personal provider home.
 - Persist only non-extractable `CryptoKey` objects, and only in IndexedDB. A private key must never be exportable.
-- Drop the account key on idle, on `Ctrl+L`, and on the first authority error from Convex.
+- Drop the account key on `pagehide` and on the first authority error from Convex. An active enrolled browser unwraps its account key automatically on load; there is no manual or idle lock.
 - A browser device is never the first device on an account and never approves another device.
 - Keep the reducer, the custody helpers, and the wire parsers free of React. App presentation tests use `scripts/register-app-stylex-test-transform.ts`; the reducer and custody tests still run without a document.
 - Parse every value that arrives from Convex from `unknown` before it reaches a component.

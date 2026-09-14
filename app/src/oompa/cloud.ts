@@ -7,7 +7,8 @@
  * enter this bundle. Keeping the deep relative paths in one file makes the
  * boundary reviewable and keeps the eslint layering rule enforceable.
  */
-export { type SupportedPreset, type SupportedProvider } from "../../../src/domain/presets";
+export { activePresetBinding, type PresetContract, type SupportedPreset, type SupportedProvider } from "../../../src/domain/presets";
+export { classifyModelTaskShape, type ModelTaskShapeRule } from "../../../src/domain/model-task-shape";
 export {
   decodeHistoricalProfileKey,
   type CanonicalProfile,
@@ -98,6 +99,7 @@ export {
   decryptNotificationHours,
   decryptProfileBinding,
   decryptSessionMetadata,
+  decryptUsageProjection,
   deviceCommandLoginResultLifetimeMs,
   deviceCommandLimits,
   deviceRegistryLimits,
@@ -159,3 +161,12 @@ export {
   remoteInteractionAnswerLimits,
   remoteInteractionJsonFitsProviderLimit,
 } from "../../../src/domain/remote-interaction-contract";
+
+export {
+  parseUsageEncryptedEnvelope,
+  USAGE_CLOUD_PROJECTION_MAX_LIMITS,
+  type UsageLimit,
+  type UsageProjection,
+  type UsageReady,
+  type UsageWindow,
+} from "../../../src/cloud/payloads";

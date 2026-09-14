@@ -1372,7 +1372,7 @@ test.each([false, true])("portable stdin-gated child naturally closes both outpu
     child.stdout.resume();
     child.stderr.resume();
     child.stdin.end("GO\n");
-    await expect(requireChildClose(closed, 15_000)).resolves.toEqual({ code: 0, signal: null });
+    expect(await requireChildClose(closed, 15_000)).toEqual({ code: 0, signal: null });
     expect(lifecycle.snapshot()).toMatchObject({ exitObserved: true, closeObserved: true,
       stdoutEnd: true, stdoutClose: true, stderrEnd: true, stderrClose: true });
   } catch (error: unknown) {
@@ -1515,10 +1515,11 @@ test("authority supervisor holds a target behind GO", async () => {
     // The close observer starts before READY; this 15-second deadline starts
     // after CLEAN. Require joined process and pipe closure even after CLEAN.
     try {
-      await expect(requireChildClose(closed, 15_000).then((result) => {
-        scope.assertActive();
-        return result;
-      })).resolves.toEqual({ code: 0, signal: null });
+      // Bun 1.3.14 promise matchers can re-enter the event loop and lose
+      // one-shot pipe events. Await natural closure before asserting it.
+      const result = await requireChildClose(closed, 15_000);
+      scope.assertActive();
+      expect(result).toEqual({ code: 0, signal: null });
       expect(lifecycle.snapshot()).toMatchObject({ exitObserved: true, exitCode: 0, exitSignalPresent: false,
         closeObserved: true, closeCode: 0, closeSignalPresent: false,
         stdoutEnd: true, stdoutClose: true, stderrEnd: true, stderrClose: true });
@@ -1565,7 +1566,7 @@ test("native deadline kills custody while the Oompa parent is stopped after GO",
     await Bun.sleep(3_500);
     expect(await Bun.file(markers.delayed).exists()).toBeFalse();
     driver.kill("SIGCONT");
-    await expect(closed).resolves.toEqual({ code: 0, signal: null });
+    expect(await closed).toEqual({ code: 0, signal: null });
     expect(JSON.parse(await readFile(markers.result, "utf8"))).toEqual({
       clean: `HRA_AUTHORITY_SUPERVISOR/1 CLEAN nonce=${"2".repeat(32)} exit=124`,
       closed: { code: 124, signal: null },
@@ -1606,7 +1607,7 @@ test("namespace PID 1 enforces the deadline while the outer supervisor is stoppe
     await waitForFile(markers.started);
     await Bun.sleep(3_500);
     expect(await Bun.file(markers.delayed).exists()).toBeFalse();
-    await expect(closed).resolves.toEqual({ code: 0, signal: null });
+    expect(await closed).toEqual({ code: 0, signal: null });
     expect(JSON.parse(await readFile(markers.result, "utf8"))).toEqual({
       clean: `HRA_AUTHORITY_SUPERVISOR/1 CLEAN nonce=${"2".repeat(32)} exit=124`,
       closed: { code: 124, signal: null },
@@ -1630,7 +1631,7 @@ test("authority supervisor rejects an inherited bind alias of its recovery direc
   const stderr = readChildStream(driver.stderr);
   driver.stdout.resume();
   try {
-    await expect(closed).resolves.toEqual({ code: 0, signal: null });
+    expect(await closed).toEqual({ code: 0, signal: null });
     expect(JSON.parse(await readFile(result, "utf8"))).toEqual({
       firstLine: `HRA_AUTHORITY_SUPERVISOR/1 FAIL nonce=${"3".repeat(32)} code=init_not_ready`,
       closed: { code: 1, signal: null },
@@ -1872,7 +1873,7 @@ test("authority target cannot replace the journal lock or erase custody", async 
   }, { recoveryDirectory })).rejects.toThrow(
     "bounded_process_recovery_journal_blocked:concurrent_invocation",
   );
-  await expect(first).resolves.toMatchObject({ cleanup: "proven", exitCode: 124 });
+  expect(await first).toMatchObject({ cleanup: "proven", exitCode: 124 });
 }, 10_000);
 
 test("authority runner refuses GO when the durable GO commit consumes the deadline", async () => {

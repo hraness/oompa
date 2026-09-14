@@ -111,11 +111,13 @@ type ActivePresetBinding = Readonly<{
 /**
  * One atomic, exhaustive binding for a new or explicitly selected preset.
  *
- * Codex High and Ultra select their immutable Sol meanings from contract 1.
- * Low and Fable are byte-identical across both contracts, so they remain on
- * contract 2 to minimize durable churn. The Astra entry exists only so exact
- * historical records can be decoded; effect admission must first pass the
- * supported provider and preset schemas.
+ * Codex High and Ultra select their immutable Astra meanings from contract 2
+ * (the owner's preferred Codex model since 2026-09-10; contract 1 Sol was the
+ * active binding between 2026-09-06 and then). Low and Fable are
+ * byte-identical across both contracts. Established sessions keep whichever
+ * contract they were bound to until a preset is explicitly reselected. The
+ * Devin Astra entry exists only so exact historical records can be decoded;
+ * effect admission must first pass the supported provider and preset schemas.
  */
 const activePresetBindings = Object.freeze({
   low: Object.freeze({
@@ -123,12 +125,12 @@ const activePresetBindings = Object.freeze({
     requirement: presetContract2RequirementsV1.low,
   }),
   high: Object.freeze({
-    contract: solCodexPresetContract,
-    requirement: presetContract1RequirementsV1.high,
+    contract: astraPresetContract,
+    requirement: presetContract2RequirementsV1.high,
   }),
   ultra: Object.freeze({
-    contract: solCodexPresetContract,
-    requirement: presetContract1RequirementsV1.ultra,
+    contract: astraPresetContract,
+    requirement: presetContract2RequirementsV1.ultra,
   }),
   "fable-max": Object.freeze({
     contract: astraPresetContract,

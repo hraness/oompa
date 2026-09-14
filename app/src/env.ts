@@ -13,9 +13,6 @@ export const accountKeyVersion = 1;
 /** Convex Auth provider id for the hosted one-time-code flow. */
 export const otpProviderId = "hra-control-plane-otp-v1";
 
-/** Idle lock: the account key is dropped after this long without input. */
-export const idleLockMs = 15 * 60 * 1_000;
-
 /** Presence heartbeat cadence while the document is visible. */
 export const presenceHeartbeatMs = 30_000;
 
@@ -30,9 +27,6 @@ export const liveTailChunkLimit = 24;
 
 /** How many compact chunks a grid card subscribes to for its prompt and interactions. */
 export const compactTailChunkLimit = 6;
-
-/** How many rendered lines of streaming text a session card keeps. */
-export const streamingTailLines = 40;
 
 /** How often the enrollment screen re-reads its own registration. */
 export const enrollmentPollMs = 3_000;

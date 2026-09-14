@@ -1,6 +1,14 @@
 # Contents
 
+- `browser-queue-handoff.md` tracks advisory browser-queue visibility, cooperative notices and unchanged admission/custody acceptance.
+- `windows-portable-contracts.md` tracks the separate native Windows run of pure protocol and help-parser contracts and its limits.
+- `darwin-personal-daemon-restart.md` tracks the fresh owner-only personal continuation restart and ambiguous-input no-replay source, validation and separate live acceptance.
+- `cross-platform-daily-driver.md` tracks the owner's macOS-first daily-driver target and native macOS, Linux and Windows implementation and acceptance.
+- `authority-reduction-headroom.md` tracks the read-only quota-ceiling diagnostic, exact record demand, explicit byte uncertainty and unchanged repair/activation authority.
+- `memory-quota-upgrade.md` tracks the explicit additive migration from predecessor quota ledgers to the memory category and resource, preserving all prior accounting and independent capacity guards.
+- `wonka-marketing.md` tracks the homepage's restrained top-hat artwork, engraved story seals, rendering budget, and acceptance evidence.
 - `oompa-rename.md` governs the Oompa identity transition, package-only content, orange-circle branding, compatibility and organization-wide consumer delivery.
+- `oompa-app-domain.md` records the owner's replacement domain choice, source and account authority changes, and removal of the earlier domain without redirects.
 - `ui-marketing-docs.md` tracks UI-first product marketing, task-oriented public guides, isolated Direct examples, and their delivery evidence.
 - `auth-hardening.md` tracks authentication UX, process lifetime, and exact restart recovery review.
 - `effect-provider-session.md` tracks the Codex-only Effect runtime migration and its acceptance evidence.

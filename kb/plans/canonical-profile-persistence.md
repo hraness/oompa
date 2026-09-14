@@ -798,6 +798,9 @@ The CI repair uses pinned Bun's native `--shard=1/3`, `--shard=2/3` and
 `--shard=3/3` for the existing source command, plus the unchanged remainder,
 on both operating systems. All eight jobs remain required; each retains the
 same pinned setup, native proof, complete governed history and 20-minute limit.
+(The source gate later moved to six shards with a 75-minute limit; see the
+2026-09-10 entry in `oompa-rename.md`. The record below describes the
+three-shard layout as measured at the time.)
 The package manifest, lockfile and default full `check` and `test` commands
 remain byte-identical to baf0abc. Source tests keep serial execution and
 isolated globals; no test file is excluded or manually maintained in a list.

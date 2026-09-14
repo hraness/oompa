@@ -8,6 +8,7 @@ type: index
 ## Plans
 
 - [Oompa v1](plans/oompa-v1.md)
+- [Cross-platform daily driver](plans/cross-platform-daily-driver.md)
 - [Personal-home session adoption](plans/session-adoption.md)
 - [Oompa v2](plans/oompa-v2.md)
 - [Model routing and bounded autonomy](plans/model-routing-autonomy.md)

@@ -18,6 +18,8 @@ relations:
 
 # Oompa v2: provider-neutral control plane for humans and agent swarms
 
+Domain update, 2026-09-10: [the current domain plan](./oompa-app-domain.md) supersedes earlier host choices in this record. Current website and app destinations are `oompa.app` and `app.oompa.app`; prior hosts grant no current routing or authentication authority. Dated delivery evidence remains historical.
+
 Status: proposed plan, revision 3 (2026-09-02). Not yet adopted. `oompa-v1.md` remains the plan of record until the owner adopts this file. Revision 1 was reviewed adversarially from three angles (engineering feasibility, product fit, security and invariants) and revision 2 by a consolidated verification pass; every finding and its disposition is in the review log at the end.
 
 Authority update (2026-09-04): Phase 8A of [Model routing and bounded autonomy](model-routing-autonomy.md) supersedes this proposal's blind remote-approval design. Current remote interaction policy may decline an offered command, permission, or file-change request, and may answer only a provider-proven, non-secret closed-choice user question contract. All grants and accepts, free-text and Other responses, and MCP answers remain on the execution device. The older approval work items below remain historical proposal context only.

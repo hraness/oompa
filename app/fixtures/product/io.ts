@@ -11,8 +11,11 @@ import type * as Archived from "../../src/data/archived-sessions";
 import type * as Registries from "../../src/data/registry";
 import type * as Attachments from "../../src/data/composer-attachments";
 import type * as CardOrder from "../../src/data/card-order";
+import type * as AutomaticEffort from "../../src/data/automatic-effort";
 import type * as Auth from "@convex-dev/auth/react";
 import type * as Appearance from "../../src/appearance";
+import type * as Usage from "../../src/data/usage";
+import { usageOverview } from "./usage";
 import type { ProductPreviewHarness } from "./definition";
 
 let active: ProductPreviewHarness | null = null;
@@ -43,6 +46,10 @@ export const mountOompaAppearanceMenu: typeof Appearance.mountOompaAppearanceMen
 export const useSessionHeads: typeof Heads.useSessionHeads = () => ({
   heads: readProductPreviewHarness().observations.heads, isLoading: false, loadMore: noop, status: "Exhausted",
 });
+export const useAutomaticEffort: typeof AutomaticEffort.useAutomaticEffort = () => {
+  readProductPreviewHarness();
+  return { enabled: false, notice: null, setEnabled: refuse };
+};
 export const useSessionHead: typeof Heads.useSessionHead = (publicId) => {
   const head = readProductPreviewHarness().observations.heads.find((entry) => entry.publicId === publicId);
   if (head === undefined) throw new Error("Unknown product-example session.");
@@ -75,8 +82,8 @@ export const useAuthActions: typeof Auth.useAuthActions = () => ({ signIn: refus
 export function useCustody(): Custody {
   return {
     busy: false, devicePublicId: null, enroll: refuseAsync, enrollment: "needs_registration",
-    error: null, fingerprint: null, lock: refuse, refresh: refuseAsync, reportAuthorityFailure: refuse,
-    state: "locked", unlock: refuseAsync,
+    error: null, fingerprint: null, refresh: refuseAsync, reportAuthorityFailure: refuse,
+    state: "unenrolled", unlock: refuseAsync,
   };
 }
 
@@ -102,3 +109,6 @@ export const heldAttachmentUrl = (): null => null;
 export const releaseHeldAttachments = noop;
 export const navigate = refuse;
 export const navigateBack = refuse;
+
+/** Fictional daily reports: one recent and one stale Codex account. */
+export const useUsageOverview: typeof Usage.useUsageOverview = () => usageOverview(readProductPreviewHarness().now());

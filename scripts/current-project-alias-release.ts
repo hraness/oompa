@@ -58,7 +58,7 @@ import {
   writeProtectedJsonNoReplace,
 } from "./release-evidence";
 
-const canonicalAlias = "oompa.dev";
+const canonicalAlias = "oompa.app";
 const supportedBunVersion = "1.3.14";
 const supportedVercelVersion = "58.4.0";
 export const currentAliasReleaseReviewedLegacyOperatorProvenance = Object.freeze({
@@ -523,7 +523,7 @@ export const currentAliasReleaseReceiptSchema = z.object({
 });
 
 // The short-lived receipt-less reconciliation record from the hra.sh era is no
-// longer readable here: this operator binds the oompa.dev alias, so any such
+// longer readable here: this operator binds the oompa.app alias, so any such
 // record fails closed as durable_state_invalid and stays untouched on disk.
 const readableCurrentAliasReleaseReceiptSchema = currentAliasReleaseReceiptSchema;
 

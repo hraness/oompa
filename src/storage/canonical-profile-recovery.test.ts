@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { z } from "zod";
 
-import { legacyPresetContract } from "../domain/presets";
+import { currentPresetContract } from "../domain/presets";
 import { initializeStatePaths, resolveStatePaths } from "./paths";
 import { sessionStartMutationRequest, StateStore } from "./state-store";
 import { canonicalWorkJson } from "./work-store";
@@ -16,8 +16,8 @@ import { canonicalWorkJson } from "./work-store";
 // process, or real authentication is represented by these storage-only tests.
 const roots: string[] = [];
 const stores = new Set<StateStore>();
-const canonicalKey = "codex:gpt-5.6-sol:max";
-const corruptKeys = [null, "foreign:profile", "CODEX:gpt-5.6-sol:max"] as const;
+const canonicalKey = "codex:gpt-6-astra:max";
+const corruptKeys = [null, "foreign:profile", "CODEX:gpt-6-astra:max"] as const;
 
 afterEach(async () => {
   for (const store of stores) store.close();
@@ -92,7 +92,7 @@ async function fixture() {
   const project = await store.createProject("Synthetic recovery project", projectPath, true);
   const runtimeProfile = {
     profileId: profile.id, processGeneration: profile.processGeneration, observedAt: 2_000,
-    preset: "high" as const, model: "gpt-5.6-sol", reasoningEffort: "max" as const,
+    preset: "high" as const, model: "gpt-6-astra", reasoningEffort: "max" as const,
     serviceTier: null, fast: false, approvalPolicy: "on-request" as const,
     reviewMode: "auto_review" as const, permissionProfile: ":workspace" as const,
     computerUse: true as const, pluginCapability: true as const, enabledApps: [],
@@ -134,14 +134,14 @@ async function startFixture() {
     authorityGeneration: profile.processGeneration, authorityId: profile.id,
     idempotencyKey: "00000000-0000-4000-8000-0000000006c0", kind: "session.start",
     request: sessionStartMutationRequest({ projectId: project.id, provider: "codex",
-      preset: "high", presetContract: legacyPresetContract, fast: false }),
+      preset: "high", presetContract: currentPresetContract, fast: false }),
     providerAuthorities: [{ role: "primary", authority: providerAuthority, provenance: "session_start" }],
   });
   const session = store.beginSessionStartEffect({
     attemptId: attempt.id, profileId: profile.id, profileGeneration: profile.processGeneration,
     projectId: project.id, provider: "codex", providerAccountKey, providerAuthority, preset: "high", fastEnabled: false,
     evidence: { clientMessageId: null, kind: "session.start", messageDigest: null,
-      presetContract: legacyPresetContract, projectId: project.id, runtimeProfile },
+      presetContract: currentPresetContract, projectId: project.id, runtimeProfile },
   });
   // A real, already-retained source record takes #insertSessionRuntimeProfile's
   // historical replay branch. Do not fabricate its row, JSON, or digest.

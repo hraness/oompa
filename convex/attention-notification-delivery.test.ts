@@ -41,9 +41,9 @@ const body = {
     "Oompa needs your attention",
     "",
     "Open Oompa to review:",
-    "- Command approval: https://app.oompa.dev/#/session/session_action_test",
+    "- Command approval: https://app.oompa.app/#/session/session_action_test",
   ].join("\n"),
-  version: 2 as const,
+  version: 3 as const,
 };
 
 const untouchedInactive = {
@@ -224,6 +224,42 @@ describe("attention notification delivery action", () => {
     } finally {
       provider.mockRestore();
     }
+  });
+
+  test.each([1, 2] as const)("retries a stored v%i claim with its original payload and key", async (version) => {
+    const label = version === 1 ? "HRA" : "Oompa";
+    const origin = version === 1 ? "https://app.hra.sh" : "https://app.oompa.dev";
+    const storedBody = { version, text: [`${label} needs your attention`, "", `Open ${label} to review:`,
+      `- Command approval: ${origin}/#/session/session_action_test`].join("\n") };
+    const idempotencyKey = "b".repeat(64);
+    const settlements: unknown[] = [];
+    let claims = 0;
+    const context = {
+      runMutation: async (_reference: unknown, args: Readonly<Record<string, unknown>>) => {
+        if (Object.hasOwn(args, "result")) { settlements.push(args.result); return { kind: "settled" }; }
+        return { body: storedBody, deliveryId: "01912345-6789-7abc-8def-0123456789f3",
+          generation: ++claims, globalNotificationGeneration: 3, idempotencyKey, kind: "effect" as const,
+          recipient: "attention@example.com" as CanonicalAuthEmail };
+      },
+    } as unknown as Pick<ActionCtx, "runMutation">;
+    const requests: { body: RequestInit["body"]; key: string | null }[] = [];
+    const provider = spyOn(globalThis, "fetch").mockImplementation(Object.assign(async (...[, init]: Parameters<typeof fetch>) => {
+      requests.push({ body: init?.body, key: new Headers(init?.headers).get("Idempotency-Key") });
+      return requests.length === 1
+        ? new Response(JSON.stringify({ message: "Concurrent request", name: "concurrent_idempotent_requests", statusCode: 409 }),
+          { status: 409, headers: { "Content-Type": "application/json" } })
+        : new Response(JSON.stringify({ id: "message_action_retry" }),
+          { status: 200, headers: { "Content-Type": "application/json" } });
+    }, { preconnect: () => undefined }));
+    try {
+      expect(await runAttentionNotificationDrain(context, 1)).toEqual({ claimed: 1, closed: 0, processed: 1 });
+      expect(await runAttentionNotificationDrain(context, 1)).toEqual({ claimed: 1, closed: 0, processed: 1 });
+      const expected = { body: JSON.stringify({ from: `${label} attention <notifications@news.hraness.com>`,
+        subject: `${label} needs your attention`, text: storedBody.text, to: ["attention@example.com"] }), key: idempotencyKey };
+      expect(requests).toEqual([expected, expected]);
+      expect(settlements).toEqual([{ kind: "retryable", reason: "concurrent_idempotency" },
+        { kind: "accepted", providerMessageId: "message_action_retry" }]);
+    } finally { provider.mockRestore(); }
   });
 
   test("processes at most ten claimed groups and settles every attempted effect", async () => {

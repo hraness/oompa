@@ -99,7 +99,7 @@ type HostedDeployPrimaryFailureCode =
   | "authority_containment_unavailable"
   | "process_recovery_journal_blocked";
 
-class HostedDeployFilesystemCleanupError extends Error {
+export class HostedDeployFilesystemCleanupError extends Error {
   readonly code: HostedDeployFilesystemCleanupCode;
   readonly primaryCode: HostedDeployPrimaryFailureCode | null;
   readonly primaryReason?: string;

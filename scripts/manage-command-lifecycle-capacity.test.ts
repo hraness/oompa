@@ -4,9 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
+import fc from "fast-check";
 
 import type { CommandRequest, CommandRunner } from "./configure-hosted-sync";
 import {
+  BoundedProcessCleanupUnprovenError,
+  BoundedProcessRecoveryJournalError,
+} from "./bounded-process";
+import {
+  authorityReductionQuotaDiagnosticPageSchema,
   commandCapacityActivationReceiptSchema,
   commandCapacityReadinessEvidenceSchema,
   commandCapacityRetirementIntentSchema,
@@ -1213,5 +1219,182 @@ describe("hosted command lifecycle capacity operator", () => {
     // The total remains observational and collision-free even though the
     // bounded identity sample is already full before the device page.
     expect(result.state).toBe("debt");
+  });
+});
+
+const quotaDiagnosticPage = (a = 1, d = 1) => {
+  const ceiling = (applicable: boolean) => ({
+    applicable: applicable ? 1 : 0, bytesBlockedByLowerBound: 0,
+    bytesUnknown: applicable ? 1 : 0, recordsBlocked: 0,
+  });
+  const missing = a + d > 0;
+  return {
+    activationAuthorized: false as const, byteCost: "padding_lower_bound_only" as const,
+    capacityMissing: missing ? 1 : 0,
+    ceilings: {
+      device: ceiling(d > 0), identity: ceiling(a > 0), job: ceiling(missing),
+      receipt: ceiling(d > 0), security: ceiling(d > 0),
+      serviceTotal: ceiling(missing), userTotal: ceiling(missing),
+    },
+    consistency: "page_snapshot" as const, continueCursor: "done",
+    demand: { accountPairs: a, deviceQuartets: d, paddingBytesLowerBound: 2_048 * (2 * a + 4 * d), totalRecords: 2 * a + 4 * d },
+    evaluated: missing ? 1 : 0, isDone: true,
+    kind: "authority_reduction_quota_diagnostic" as const,
+    orphanEligible: 0, orphanPending: 0, quotaAuthorityUnknown: 0,
+    ready: missing ? 0 : 1, repairAuthorized: false as const, scanned: 1,
+    schemaVersion: 1 as const, topologyBlocked: 0,
+  };
+};
+
+describe("closed quota headroom operator", () => {
+  test("diagnostic arguments cannot admit writes or readiness artifacts", () => {
+    const args = ["diagnose-headroom", ...sourceArguments, ...targetArguments];
+    expect(parseCommandCapacityArguments(args).action).toBe("diagnose-headroom");
+    for (const flags of [
+      ["--execute"], ["--acknowledge-forward-only"],
+      ["--acknowledge-resultless-ambiguous-retirement"],
+      ["--evidence-path", "/protected/ready.json"],
+      ["--retirement-evidence-path", "/protected/retire.json"],
+      ["--retire-effect-started", `session:${debtId}`],
+      ["--function", "quota:readUser"], ["--user-id", "private-user"],
+    ]) expect(() => parseCommandCapacityArguments([...args, ...flags])).toThrow("usage_invalid");
+  });
+
+  test("strict page arithmetic preserves unknown byte fit and rejects foreign authority", () => {
+    fc.assert(fc.property(fc.integer({ min: 0, max: 1 }), fc.integer({ min: 0, max: 16 }), (a, d) => {
+      const page = quotaDiagnosticPage(a, d);
+      expect(authorityReductionQuotaDiagnosticPageSchema.parse(page)).toEqual(page);
+      expect(authorityReductionQuotaDiagnosticPageSchema.safeParse({
+        ...page, demand: { ...page.demand, totalRecords: page.demand.totalRecords + 1 },
+      }).success).toBe(false);
+    }), { numRuns: 100 });
+    const page = quotaDiagnosticPage();
+    for (const changed of [
+      { ...page, userId: "private" }, { ...page, activationAuthorized: true },
+      { ...page, repairAuthorized: true }, { ...page, byteCost: "exact" },
+      { ...page, evaluated: 0 }, { ...page, scanned: 9 },
+      { ...page, demand: { ...page.demand, paddingBytesLowerBound: 12_289 } },
+      { ...page, ceilings: { ...page.ceilings, identity: { ...page.ceilings.identity, recordsBlocked: 2 } } },
+      { ...page, ceilings: { ...page.ceilings, identity: { ...page.ceilings.identity, bytesUnknown: 0 } } },
+      { ...page, ceilings: { ...page.ceilings, account: page.ceilings.identity } },
+      { ...page, continueCursor: "x".repeat(4_097) },
+    ]) expect(authorityReductionQuotaDiagnosticPageSchema.safeParse(changed).success).toBe(false);
+  });
+
+  test("unknown missing identities cannot reuse sets already attributed to an evaluated identity", () => {
+    const page = quotaDiagnosticPage();
+    expect(authorityReductionQuotaDiagnosticPageSchema.safeParse({
+      ...page, capacityMissing: 2, quotaAuthorityUnknown: 1, scanned: 2,
+    }).success).toBe(false);
+  });
+
+  test.each(["child", "journal"])("%s uncertainty preserves original recovery and source archive", async (kind) => {
+    const failure = kind === "child"
+      ? new BoundedProcessCleanupUnprovenError(12_345, "diagnostic-fixture")
+      : new BoundedProcessRecoveryJournalError(["/synthetic/recovery"], "fixture");
+    const harness = await makeHarness({ provider: async () => { throw failure; } });
+    let cleaned = false;
+    const stdout: string[] = []; const stderr: string[] = [];
+    const code = await executeCommandLifecycleCapacity({
+      ...harness.common,
+      prepareProviderSource: async () => ({
+        cleanup: async () => { cleaned = true; },
+        path: harness.common.repositoryRoot,
+        recoveryPath: harness.common.repositoryRoot,
+        revalidate: async () => {},
+      }),
+      arguments: ["diagnose-headroom", "--source-commit", sourceCommit, "--deploy-evidence", harness.deployEvidencePath, ...targetArguments],
+      stderr: outputWriter(stderr), stdout: outputWriter(stdout),
+    });
+    expect(code).toBe(75);
+    expect(cleaned).toBe(false);
+    expect(stdout).toEqual([]);
+    expect(stderr.join("")).toContain('"status":"recovery_required"');
+    expect(stderr.join("")).toContain(harness.common.repositoryRoot);
+    expect(stderr.join("")).not.toContain("source_changed");
+    expect(harness.providerCalls).toBe(1);
+    expect(harness.attestationReads).toBe(1);
+  });
+
+  test("uses only the fixed read query and emits no cursor or readiness claim", async () => {
+    const calls: string[] = [];
+    const harness = await makeHarness({ provider: async (request) => {
+      const call = requestCall(request); calls.push(call.name);
+      expect(call.name).toBe("commandLifecycle:auditAuthorityReductionQuotaCeilingsPage");
+      expect(call.args.paginationOpts).toEqual({ cursor: calls.length === 1 ? null : "opaque-page", numItems: 8 });
+      expect(request.timeoutMs).toBe(60_000);
+      expect(request.outputMaximumBytes).toBe(65_536);
+      expect(request.stdin).toBe("");
+      return providerResult({ ...quotaDiagnosticPage(), continueCursor: "opaque-page", isDone: calls.length === 2 });
+    } });
+    const stdout: string[] = []; const stderr: string[] = [];
+    expect(await executeCommandLifecycleCapacity({
+      ...harness.common,
+      arguments: ["diagnose-headroom", "--source-commit", sourceCommit, "--deploy-evidence", harness.deployEvidencePath, ...targetArguments],
+      stderr: outputWriter(stderr), stdout: outputWriter(stdout),
+    })).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(stdout).toHaveLength(1);
+    const emitted: unknown = JSON.parse(stdout[0] ?? "null");
+    expect(emitted).toMatchObject({
+      activationAuthorized: false, capacityMissing: 2, consistency: "per_page_only", evaluated: 2,
+      demand: { accountPairs: 2, deviceQuartets: 2, paddingBytesLowerBound: 24_576, totalRecords: 12 },
+      pages: 2, repairAuthorized: false, state: "diagnostic_complete", version: 1,
+      ceilings: { userTotal: { bytesUnknown: 2 } },
+    });
+    expect(stdout[0]).not.toContain("opaque-page");
+    expect(stdout[0]).not.toContain("continueCursor");
+    expect(stdout[0]).not.toContain('"state":"ready"');
+    expect(harness.activationWrites).toBe(0);
+    expect(calls).toHaveLength(2);
+    expect(harness.attestationReads).toBe(2);
+  });
+
+  test.each(["empty_cursor", "cycle", "malformed"])("%s refuses without a repair fallback", async (kind) => {
+    const harness = await makeHarness({ provider: async () => providerResult({
+      ...quotaDiagnosticPage(),
+      continueCursor: kind === "empty_cursor" ? "" : "repeated",
+      isDone: false,
+      ...(kind === "malformed" ? { userId: "private" } : {}),
+    }) });
+    await expect(manageCommandLifecycleCapacity({ ...harness.common, action: "diagnose-headroom" }))
+      .rejects.toThrow("provider_result_invalid");
+    expect(harness.providerCalls).toBe(kind === "cycle" ? 2 : 1);
+    expect(harness.activationWrites).toBe(0);
+  });
+
+  test("finite empty-page scan refuses at the users-only page cap", async () => {
+    let pages = 0;
+    const harness = await makeHarness({ provider: async () => {
+      pages += 1;
+      return providerResult({ ...quotaDiagnosticPage(0, 0), ready: 0, scanned: 0,
+        continueCursor: `page-${String(pages)}`, isDone: false });
+    } });
+    await expect(manageCommandLifecycleCapacity({ ...harness.common, action: "diagnose-headroom" }))
+      .rejects.toThrow("headroom_diagnostic_incomplete");
+    expect(pages).toBe(626);
+    expect(harness.activationWrites).toBe(0);
+  });
+
+  test("final runtime and candidate revalidation cannot publish a completed diagnostic", async () => {
+    const harness = await makeHarness({ provider: async () => providerResult(quotaDiagnosticPage()) });
+    harness.setProviderHook(() => { harness.setAttestation(previousAttestation); });
+    await expect(manageCommandLifecycleCapacity({ ...harness.common, action: "diagnose-headroom" }))
+      .rejects.toThrow("release_attestation_invalid");
+    expect(harness.providerCalls).toBe(1);
+    expect(harness.activationWrites).toBe(0);
+  });
+
+  test("unknown ledger authority is retained in a completed observation", async () => {
+    const page = quotaDiagnosticPage();
+    const zero = { applicable: 0, bytesBlockedByLowerBound: 0, bytesUnknown: 0, recordsBlocked: 0 };
+    const harness = await makeHarness({ provider: async () => providerResult({
+      ...page, evaluated: 0, quotaAuthorityUnknown: 1,
+      ceilings: { device: zero, identity: zero, job: zero, receipt: zero, security: zero, serviceTotal: zero, userTotal: zero },
+    }) });
+    const result = await manageCommandLifecycleCapacity({ ...harness.common, action: "diagnose-headroom" });
+    expect(result.quotaAuthorityUnknown).toBe(1);
+    expect(result.state).toBe("diagnostic_complete");
+    expect(result.activationAuthorized).toBe(false);
   });
 });

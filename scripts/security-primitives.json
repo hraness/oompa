@@ -103,13 +103,6 @@
   "src/daemon/usage-history-cursor.ts": {
     "timingSafeEqual": 2
   },
-  "src/desktop/local-switch.ts": {
-    "O_NOFOLLOW": 2,
-    "mode0600": 2
-  },
-  "src/desktop/switch.ts": {
-    "assertCurrent": 4
-  },
   "src/install-normalizer.ts": {
     "O_NOFOLLOW": 13,
     "fsync": 9,

@@ -3268,18 +3268,6 @@ export function renderSuccess(command: LocalCommand, data: unknown, json: boolea
     } else {
       output.writeStdout(`Canceled the pending login (${line(value.providerStatus)}). You can start a fresh login now.\n`);
     }
-  } else if (command.kind === "account.switch-recover") {
-    if (value.status === "none") {
-      output.writeStdout("No desktop switch requires recovery.\n");
-    } else if (value.status === "in_progress") {
-      output.writeStdout(`Desktop switch ${line(value.switchGeneration)} is still in progress.\n`);
-    } else if (value.status === "resolved_applied") {
-      output.writeStdout(`Desktop switch ${line(value.switchGeneration)} is resolved as applied.\n`);
-    } else if (value.status === "resolved_not_applied") {
-      output.writeStdout(`Desktop switch ${line(value.switchGeneration)} is resolved as not applied.\n`);
-    } else {
-      output.writeStdout(`Desktop switch ${line(value.switchGeneration)} still requires recovery: ${line(value.diagnostic)}.\n`);
-    }
   } else if (command.kind === "account.usage-history") {
     output.writeStdout(`${renderAccountUsageHistory(command, data)}\n`);
   } else if (command.kind === "account.usage") {

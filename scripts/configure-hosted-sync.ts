@@ -45,7 +45,7 @@ export const HOSTED_ENVIRONMENT_NAMES = [
   oompaAttentionResendApiKeyEnvironmentName,
 ] as const;
 
-export const OOMPA_SITE_URL = "https://oompa.dev" as const;
+export const OOMPA_SITE_URL = "https://oompa.app" as const;
 
 const protectedInputMaximumBytes = 8 * 1024;
 const convexOutputMaximumBytes = 64 * 1024;

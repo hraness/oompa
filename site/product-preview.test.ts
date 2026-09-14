@@ -231,6 +231,7 @@ describe("public real-UI examples", () => {
       expect([...frame!.attributes].find((attribute) => attribute.name.toLowerCase() === "referrerpolicy")?.value).toBe("no-referrer");
       expect(document.querySelectorAll("iframe").length).toBe(1);
       expect(document.querySelectorAll("[data-preview-view]").length).toBe(4);
+      expect(document.querySelectorAll("button.hraness-material-control.hraness-material-choice[data-preview-view]").length).toBe(4);
       expect(document.querySelectorAll('[aria-pressed="true"]').length).toBe(1);
       expect(document.querySelector('[aria-pressed="true"]')?.getAttribute("data-preview-view")).toBe(view);
       expect(document.querySelector("figcaption")?.textContent).toContain(productPreviewDisclosure);
@@ -245,6 +246,9 @@ describe("public real-UI examples", () => {
   test("makes guides readable without script and keeps the full reference subordinate", () => {
     for (const page of docsPages) {
       const { document } = parseHTML(renderDocsHtml(page));
+      expect(document.documentElement.getAttribute("data-hraness-material")).toBe("lantern");
+      expect(document.documentElement.hasAttribute("data-hraness-marketing-preset")).toBe(false);
+      expect(document.querySelector(".hraness-material-wall")).toBeNull();
       expect(document.querySelectorAll("h1").length).toBe(1);
       expect(document.querySelector("h1")?.textContent).toBe(page.title);
       expect(document.querySelector('nav[aria-label="Guides"] [aria-current="page"]')?.getAttribute("href")).toBe(page.path);

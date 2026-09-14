@@ -1,12 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import * as fs from "node:fs";
 import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -18,6 +20,8 @@ import {
   appSourceProofLauncherErrorCodes,
   appSourceProofRuntimeInjectionEnvironmentNames,
   assertHardenedAppSourceProofStageZero,
+  assertHostedOperatorSource,
+  captureHostedOperatorSource,
   commandCapacityChildEnvironment,
   createAppSourceProofScratchDirectory,
   executeAppSourceProofLauncher,
@@ -60,6 +64,15 @@ const commandCapacityArguments = [
   "/protected/deploy.json",
   "--prod",
 ] as const;
+const quotaUpgradeArguments = [
+  "quota-upgrade",
+  "status",
+  "--source-commit",
+  sourceCommit,
+  "--deploy-evidence",
+  "/protected/deploy.json",
+  "--prod",
+] as const;
 
 type CommandResult = Readonly<{
   exitCode: number;
@@ -82,13 +95,19 @@ const output = (): { readonly lines: string[]; readonly writer: { write(value: s
 
 const launcherFixture = (overrides: Readonly<{
   childExitCode?: number;
+  childSignal?: NodeJS.Signals;
   cleanupLeavesRegistered?: boolean;
   hiddenIndex?: boolean;
   installFails?: boolean;
+  buildFails?: boolean;
+  buildSignal?: NodeJS.Signals;
+  buildThrows?: boolean;
+  sourceChangesDuringBuild?: boolean;
   mainAdvancesAfterFirstRead?: boolean;
   maskedOrigin?: boolean;
   remoteMain?: string;
   sshOrigin?: boolean;
+  sourceChangesDuringInstall?: boolean;
   worktreeAddFails?: boolean;
   wrongOrigin?: boolean;
 }> = {}): Readonly<{
@@ -165,19 +184,32 @@ const launcherFixture = (overrides: Readonly<{
       return result();
     }
     if (key.includes("\0install\0--frozen-lockfile\0--ignore-scripts\0--backend=copyfile")) {
+      if (overrides.sourceChangesDuringInstall === true) {
+        writeFileSync(join(root, "package.json"), `${trackedDocument} `);
+      }
       return result("", overrides.installFails === true ? 1 : 0);
+    }
+    if (key.endsWith("/scripts/build-app.ts")) {
+      events.push(`build-environment:${JSON.stringify(options.environment ?? {})}`);
+      if (overrides.sourceChangesDuringBuild === true) writeFileSync(join(root, "package.json"), `${trackedDocument} `);
+      if (overrides.buildThrows === true) throw new Error("fixture_build_exception");
+      return { ...result("", overrides.buildFails === true ? 1 : 0), signal: overrides.buildSignal ?? null };
     }
     if (key.includes("/scripts/verify-app-source.ts\0")) {
       return result(
         overrides.childExitCode === 1
           ? ""
-          : '{"kind":"hra-app-source-proof","schemaVersion":2}\n',
+          : '{"kind":"hra-app-source-proof","schemaVersion":4}\n',
         overrides.childExitCode ?? 0,
       );
     }
     if (key.includes("/scripts/manage-command-lifecycle-capacity.ts\0")) {
       events.push(`capacity-environment:${JSON.stringify(options.environment ?? {})}`);
       return result('{"state":"ready"}\n');
+    }
+    if (key.includes("/scripts/manage-quota-upgrade.ts\0")) {
+      events.push(`quota-environment:${JSON.stringify(options.environment ?? {})}`);
+      return { ...result('{"state":"ready"}\n', overrides.childExitCode ?? 0), signal: overrides.childSignal ?? null };
     }
     throw new Error(`Unexpected command: ${key}`);
   };
@@ -275,9 +307,9 @@ const realRepositoryLauncherFixture = (
       return result(`${commit}\trefs/heads/main\n`);
     }
     if (command[0] === "/trusted/bun") {
-      if (command[3] === "install") return result();
+      if (command[3] === "install" || command[3]?.endsWith("/scripts/build-app.ts") === true) return result();
       if (command[3]?.endsWith("/scripts/verify-app-source.ts") === true) {
-        return result('{"kind":"hra-app-source-proof","schemaVersion":2}\n');
+        return result('{"kind":"hra-app-source-proof","schemaVersion":4}\n');
       }
     }
     const executable = command[0];
@@ -364,12 +396,37 @@ describe("Oompa browser app source proof launcher", () => {
       operatorArguments: commandCapacityArguments.slice(1),
       sourceCommit,
     });
+    expect(parseAppSourceProofLauncherArguments(quotaUpgradeArguments)).toEqual({
+      mode: "quota-upgrade",
+      operatorArguments: quotaUpgradeArguments.slice(1),
+      sourceCommit,
+    });
     for (const invalid of [
       proveArguments.slice(0, -2),
       [...proveArguments, "--unknown", "value"],
       [...proveArguments.slice(0, 7), "1.0.0-beta.1", ...proveArguments.slice(8)],
       [...proveArguments.slice(0, 7), `${"1".repeat(65)}.0.0`, ...proveArguments.slice(8)],
     ]) expect(() => parseAppSourceProofLauncherArguments(invalid)).toThrow("usage_invalid");
+  });
+
+  test("keeps hosted operator selection closed and requires one exact source commit", () => {
+    for (const mode of ["command-capacity", "quota-upgrade"]) {
+      for (const rest of [
+        [],
+        ["--source-commit"],
+        ["--source-commit", "main"],
+        ["--source-commit", sourceCommit, "--source-commit", sourceCommit],
+      ]) expect(() => parseAppSourceProofLauncherArguments([mode, ...rest])).toThrow("usage_invalid");
+      const parsed = parseAppSourceProofLauncherArguments([mode, "status", "--source-commit", sourceCommit]);
+      expect(Object.isFrozen(parsed)).toBe(true);
+      if (parsed.mode === "command-capacity" || parsed.mode === "quota-upgrade") {
+        expect(Object.isFrozen(parsed.operatorArguments)).toBe(true);
+      }
+    }
+    for (const mode of ["operator", "script", "./manage-quota-upgrade.ts", "/untrusted/operator.ts"]) {
+      expect(() => parseAppSourceProofLauncherArguments([mode, "--source-commit", sourceCommit]))
+        .toThrow("usage_invalid");
+    }
   });
 
   test("passes only a fixed non-provider environment with no hook or proxy input", () => {
@@ -440,6 +497,116 @@ describe("Oompa browser app source proof launcher", () => {
     }
   });
 
+  test("headroom diagnosis retains the fixed command-capacity source launcher", () => {
+    const fixture = launcherFixture();
+    const stdout = output();
+    const stderr = output();
+    const args = commandCapacityArguments.map((argument) => argument === "status" ? "diagnose-headroom" : argument);
+    try {
+      expect(executeAppSourceProofLauncher(args, {
+        ...fixture.dependencies,
+        runtimeEnvironment: { HOME: fixture.root },
+        stderr: stderr.writer, stdout: stdout.writer,
+      })).toBe(0);
+      const child = fixture.events.find((event) => event.includes("/scripts/manage-command-lifecycle-capacity.ts"));
+      expect(child).toContain("diagnose-headroom");
+      expect(child).toContain("/hra-app-source-verifier-");
+      expect(child).not.toContain(`${fixture.root}/scripts/manage-command-lifecycle-capacity.ts`);
+      expect(fixture.events.some((event) => event.includes("--frozen-lockfile"))).toBe(true);
+      expect(fixture.events.some((event) => event.startsWith("credential:"))).toBe(false);
+      expect(stderr.lines).toEqual([]);
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  test.each(["status", "diagnose"])("launches quota %s only after frozen installation and every source recheck", (action) => {
+    const fixture = launcherFixture({ remoteMain: "7".repeat(40) });
+    const stdout = output();
+    const stderr = output();
+    const runtimeEnvironment = {
+      HOME: fixture.root,
+      XDG_CONFIG_HOME: join(fixture.root, "config"),
+      CONVEX_DEPLOY_KEY: "fixture-secret",
+      CONVEX_DEPLOYMENT: "untrusted-target",
+      HTTPS_PROXY: "https://untrusted.invalid",
+      VERCEL_TOKEN: "fixture-secret",
+    };
+    try {
+      expect(executeAppSourceProofLauncher(quotaUpgradeArguments.map((value) => value === "status" ? action : value), {
+        ...fixture.dependencies, runtimeEnvironment, stderr: stderr.writer, stdout: stdout.writer,
+      })).toBe(0);
+      expect(stderr.lines).toEqual([]);
+      expect(stdout.lines).toEqual(['{"state":"ready"}\n']);
+      const commands = fixture.events.filter((event) => event.startsWith("command:"));
+      const install = commands.findIndex((event) => event.includes("\0install\0--frozen-lockfile\0--ignore-scripts\0--backend=copyfile"));
+      const child = commands.findIndex((event) => event.includes("/scripts/manage-quota-upgrade.ts\0"));
+      const sourceChecks = commands.map((event, index) => event.includes("\0ls-tree\0-r\0-z\0--full-tree") ? index : -1)
+        .filter((index) => index >= 0);
+      expect(sourceChecks).toHaveLength(4);
+      expect(sourceChecks.filter((index) => index < install)).toHaveLength(2);
+      expect(sourceChecks.filter((index) => index > install && index < child)).toHaveLength(2);
+      expect(commands[child]).toContain("/hra-app-source-verifier-");
+      expect(commands[child]).toContain(`/source/scripts/manage-quota-upgrade.ts\0${action}\0--source-commit\0`);
+      expect(commands[child]).not.toContain(`${fixture.root}/scripts/manage-quota-upgrade.ts`);
+      expect(commands[child]?.endsWith(":none")).toBe(true);
+      expect(commands.filter((event) => event.includes(":/trusted/bun\0")).every((event) =>
+        event.includes(":/trusted/bun\0--no-env-file\0--config=/dev/null\0"))).toBe(true);
+      expect(commands.some((event) => event.includes("\0ls-remote\0"))).toBe(false);
+      expect(fixture.events.some((event) => event.startsWith("credential:"))).toBe(false);
+      const childEnvironment = commandCapacityChildEnvironment(runtimeEnvironment);
+      expect(childEnvironment.HOME).toBe(fixture.root);
+      expect(childEnvironment.XDG_CONFIG_HOME).toBe(runtimeEnvironment.XDG_CONFIG_HOME);
+      for (const name of ["CONVEX_DEPLOY_KEY", "CONVEX_DEPLOYMENT", "HTTPS_PROXY", "VERCEL_TOKEN"]) {
+        expect(childEnvironment[name]).toBeUndefined();
+      }
+      expect(fixture.events).toContain(`quota-environment:${JSON.stringify(childEnvironment)}`);
+      expect(fixture.events.some((event) => event.includes("\0worktree\0remove\0--force"))).toBe(true);
+    } finally { fixture.cleanup(); }
+  });
+
+  test("quota-upgrade preserves refusal before effects and immutable-source rechecks", () => {
+    for (const options of [{ hiddenIndex: true }, { maskedOrigin: true }, { installFails: true }, { sourceChangesDuringInstall: true }]) {
+      const fixture = launcherFixture(options);
+      const stdout = output();
+      const stderr = output();
+      try {
+        expect(executeAppSourceProofLauncher(quotaUpgradeArguments, {
+          ...fixture.dependencies, stderr: stderr.writer, stdout: stdout.writer,
+        })).toBe(1);
+        expect(stdout.lines).toEqual([]);
+        expect(stderr.lines.join("")).toContain(options.installFails === true
+          ? '"code":"verifier_install_failed"' : '"code":"verifier_source_invalid"');
+        expect(fixture.events.some((event) => event.includes("/scripts/manage-quota-upgrade.ts\0"))).toBe(false);
+        expect(fixture.events.some((event) => event.startsWith("credential:"))).toBe(false);
+      } finally { fixture.cleanup(); }
+    }
+  });
+
+  test("quota-upgrade passes closed operator exit codes and refuses abnormal execution", () => {
+    for (const childExitCode of [0, 1, 75, 2]) {
+      const fixture = launcherFixture({ childExitCode });
+      const stdout = output();
+      const stderr = output();
+      try {
+        expect(executeAppSourceProofLauncher(quotaUpgradeArguments, {
+          ...fixture.dependencies, stderr: stderr.writer, stdout: stdout.writer,
+        })).toBe(childExitCode === 2 ? 1 : childExitCode);
+        expect(stdout.lines).toEqual(childExitCode === 2 ? [] : ['{"state":"ready"}\n']);
+        expect(stderr.lines.join("")).toBe(childExitCode === 2
+          ? '{"code":"verifier_execution_failed","schemaVersion":1,"status":"refused"}\n' : "");
+      } finally { fixture.cleanup(); }
+    }
+    const fixture = launcherFixture({ childSignal: "SIGTERM" });
+    const stderr = output();
+    try {
+      expect(executeAppSourceProofLauncher(quotaUpgradeArguments, {
+        ...fixture.dependencies, stderr: stderr.writer, stdout: output().writer,
+      })).toBe(1);
+      expect(stderr.lines.join("")).toContain('"code":"verifier_execution_failed"');
+    } finally { fixture.cleanup(); }
+  });
+
   test("requires a neutral stage-zero Bun invocation before launcher code runs", () => {
     expect(() => assertHardenedAppSourceProofStageZero(hardenedRuntimeArguments, {}))
       .not.toThrow();
@@ -461,11 +628,21 @@ describe("Oompa browser app source proof launcher", () => {
       )).toThrow("runtime_environment_unsafe");
     }
     const runbook = readFileSync(join(import.meta.dir, "..", "docs", "hosted-sync.md"), "utf8");
-    expect(runbook.match(/command bun --no-env-file --config=\/dev\/null/gu)).toHaveLength(3);
+    expect(runbook.match(/command bun --no-env-file --config=\/dev\/null/gu)).toHaveLength(4);
+    expect(runbook).toContain(String.raw`run_quota_upgrade() (
+  unset BUN_OPTIONS NODE_OPTIONS LD_AUDIT LD_LIBRARY_PATH LD_ORIGIN_PATH LD_PRELOAD \
+    DYLD_FALLBACK_FRAMEWORK_PATH DYLD_FALLBACK_LIBRARY_PATH DYLD_FRAMEWORK_PATH \
+    DYLD_IMAGE_SUFFIX DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_ROOT_PATH \
+    DYLD_VERSIONED_FRAMEWORK_PATH DYLD_VERSIONED_LIBRARY_PATH &&
+  command bun --no-env-file --config=/dev/null \
+    ./scripts/verify-app-source-launcher.ts quota-upgrade "$@"
+)`);
     expect(runbook).not.toContain("\nbun ./scripts/verify-app-source-launcher.ts");
     expect(runbook).not.toContain("bun run hosted:command-capacity");
-    expect(readFileSync(join(import.meta.dir, "..", "package.json"), "utf8"))
-      .not.toContain("hosted:command-capacity");
+    expect(runbook).not.toContain("bun run hosted:quota-upgrade");
+    const packageDocument = readFileSync(join(import.meta.dir, "..", "package.json"), "utf8");
+    expect(packageDocument).not.toContain("hosted:command-capacity");
+    expect(packageDocument).not.toContain("hosted:quota-upgrade");
 
     const root = mkdtempSync(join(realpathSync(tmpdir()), "oompa-app-source-stage-zero-"));
     const preload = join(root, "ambient-preload.ts");
@@ -559,7 +736,7 @@ describe("Oompa browser app source proof launcher", () => {
         stdout: stdout.writer,
       })).toBe(0);
       expect(stderr.lines).toEqual([]);
-      expect(stdout.lines.join("")).toContain('"schemaVersion":2');
+      expect(stdout.lines.join("")).toContain('"schemaVersion":4');
       expect(fixture.events.some((event) => event.startsWith("credential:opened:"))).toBe(true);
       expect(fixture.events.some((event) => event.includes("\0ls-tree\0-r\0-z\0--full-tree")))
         .toBe(true);
@@ -568,6 +745,114 @@ describe("Oompa browser app source proof launcher", () => {
     } finally {
       fixture.cleanup();
     }
+  });
+
+  test("hosted operator recheck uses the real exact-source boundary before and after source changes", () => {
+    const fixture = realRepositoryLauncherFixture({
+      ".gitattributes": "payload.txt text eol=crlf\n",
+      "payload.txt": "canonical\n",
+    });
+    try {
+      const commit = fixture.git(["rev-parse", "--verify", "HEAD^{commit}"]).trim();
+      const expected = { repositoryRoot: fixture.root, sourceCommit: commit };
+      expect(() => assertHostedOperatorSource(expected)).not.toThrow();
+      expect(fixture.events).toEqual([]);
+      rmSync(join(fixture.root, "payload.txt"));
+      fixture.git(["checkout", "--", "payload.txt"]);
+      expect(fixture.git(["status", "--porcelain=v1", "--untracked-files=all"])).toBe("");
+      expect(readFileSync(join(fixture.root, "payload.txt"), "utf8")).toBe("canonical\r\n");
+      expect(() => assertHostedOperatorSource(expected)).toThrow("verifier_source_invalid");
+      expect(fixture.events).toEqual([]);
+    } finally { fixture.cleanup(); }
+  });
+
+  test("hosted operator recheck refuses invalid identity, origin and hidden index without an execution seam", () => {
+    const fixture = realRepositoryLauncherFixture({ "package.json": trackedDocument });
+    try {
+      const commit = fixture.git(["rev-parse", "--verify", "HEAD^{commit}"]).trim();
+      const expected = { repositoryRoot: fixture.root, sourceCommit: commit };
+      for (const invalid of [
+        { ...expected, repositoryRoot: "relative" },
+        { ...expected, repositoryRoot: `${fixture.root}/..` },
+        { ...expected, sourceCommit: "main" },
+        { ...expected, sourceCommit },
+      ]) expect(() => assertHostedOperatorSource(invalid)).toThrow("verifier_source_invalid");
+      fixture.git(["update-index", "--assume-unchanged", "package.json"]);
+      expect(() => assertHostedOperatorSource(expected)).toThrow("verifier_source_invalid");
+      fixture.git(["update-index", "--no-assume-unchanged", "package.json"]);
+      fixture.git(["remote", "set-url", "origin", "https://untrusted.invalid/oompa.git"]);
+      expect(() => assertHostedOperatorSource(expected)).toThrow("verifier_source_invalid");
+      expect(fixture.events).toEqual([]);
+    } finally { fixture.cleanup(); }
+  });
+
+  test("captured source retains exact private content without claiming later Git state", () => {
+    const fixture = realRepositoryLauncherFixture({ "payload.txt": "canonical\n" });
+    try {
+      const commit = fixture.git(["rev-parse", "--verify", "HEAD^{commit}"]).trim();
+      const source = captureHostedOperatorSource({ repositoryRoot: fixture.root, sourceCommit: commit });
+      expect(Object.keys(source).sort()).toEqual(["assertCapturedContentCurrent", "sourceCommit", "sourceTree"]);
+      expect(Object.isFrozen(source)).toBe(true);
+      expect(source.sourceCommit).toBe(commit);
+      expect(source.sourceTree).toBe(fixture.git(["rev-parse", "--verify", "HEAD^{tree}"]).trim());
+      fixture.git(["remote", "set-url", "origin", "https://untrusted.invalid/oompa.git"]);
+      fixture.git(["update-index", "--assume-unchanged", "payload.txt"]);
+      writeFileSync(join(fixture.root, "untracked.txt"), "later unrelated file\n");
+      expect(() => source.assertCapturedContentCurrent()).not.toThrow();
+      expect(() => captureHostedOperatorSource({ repositoryRoot: fixture.root, sourceCommit: commit })).toThrow("verifier_source_invalid");
+      writeFileSync(join(fixture.root, "payload.txt"), "changed!!\n");
+      expect(() => source.assertCapturedContentCurrent()).toThrow("verifier_source_invalid");
+    } finally { fixture.cleanup(); }
+  });
+
+  test("captured source refuses root replacement and executable-mode drift", () => {
+    const fixture = realRepositoryLauncherFixture({ "payload.txt": "canonical\n" });
+    const moved = `${fixture.root}-retained`;
+    try {
+      const source = captureHostedOperatorSource({ repositoryRoot: fixture.root,
+        sourceCommit: fixture.git(["rev-parse", "--verify", "HEAD^{commit}"]).trim() });
+      chmodSync(join(fixture.root, "payload.txt"), 0o755);
+      expect(() => source.assertCapturedContentCurrent()).toThrow("verifier_source_invalid");
+      chmodSync(join(fixture.root, "payload.txt"), 0o644);
+      renameSync(fixture.root, moved);
+      mkdirSync(fixture.root, { mode: 0o700 });
+      writeFileSync(join(fixture.root, "payload.txt"), "canonical\n");
+      expect(() => source.assertCapturedContentCurrent()).toThrow("verifier_source_invalid");
+    } finally { fixture.cleanup(); rmSync(moved, { recursive: true, force: true }); }
+  });
+
+  test("captured source checks the named file after descriptor hashing", () => {
+    const fixture = realRepositoryLauncherFixture({ "payload.txt": "canonical\n" });
+    try {
+      const source = captureHostedOperatorSource({ repositoryRoot: fixture.root,
+        sourceCommit: fixture.git(["rev-parse", "--verify", "HEAD^{commit}"]).trim() });
+      const original = fs.fstatSync;
+      let reads = 0;
+      function observedStat(descriptor: number, options?: fs.StatOptions & { bigint?: false | undefined }): fs.Stats;
+      function observedStat(descriptor: number, options: fs.StatOptions & { bigint: true }): fs.BigIntStats;
+      function observedStat(descriptor: number, options?: fs.StatOptions): fs.Stats | fs.BigIntStats;
+      function observedStat(descriptor: number, options?: fs.StatOptions): fs.Stats | fs.BigIntStats {
+        const value = original(descriptor, options);
+        if (++reads === 2) {
+          renameSync(join(fixture.root, "payload.txt"), join(fixture.root, "retained.txt"));
+          writeFileSync(join(fixture.root, "payload.txt"), "canonical\n", { mode: 0o644 });
+        }
+        return value;
+      }
+      const observe = spyOn(fs, "fstatSync").mockImplementation(observedStat);
+      try { expect(() => source.assertCapturedContentCurrent()).toThrow("verifier_source_invalid"); }
+      finally { observe.mockRestore(); }
+      expect(reads).toBe(2);
+    } finally { fixture.cleanup(); }
+  });
+
+  test("capture rejects oversized tracked content before reading its bytes", () => {
+    const fixture = realRepositoryLauncherFixture({ "oversized.txt": "x".repeat(8 * 1024 * 1024 + 1) });
+    try {
+      const expected = { repositoryRoot: fixture.root,
+        sourceCommit: fixture.git(["rev-parse", "--verify", "HEAD^{commit}"]).trim() };
+      expect(() => captureHostedOperatorSource(expected)).toThrow("verifier_source_invalid");
+    } finally { fixture.cleanup(); }
   });
 
   test("rejects a real Git-clean smudge-filter checkout before scratch or credential access", () => {
@@ -639,7 +924,7 @@ describe("Oompa browser app source proof launcher", () => {
       });
       expect(code).toBe(0);
       expect(stderr.lines).toEqual([]);
-      expect(stdout.lines.join("")).toContain('"schemaVersion":2');
+      expect(stdout.lines.join("")).toContain('"schemaVersion":4');
       const opened = fixture.events.findIndex((event) => event.startsWith("credential:opened:"));
       const installed = fixture.events.findIndex((event) => event.includes("\0install\0--frozen-lockfile"));
       const mainReads = fixture.events
@@ -647,7 +932,7 @@ describe("Oompa browser app source proof launcher", () => {
         .filter((index) => index >= 0);
       const child = fixture.events.findIndex((event) => event.includes("/scripts/verify-app-source.ts\0"));
       expect(installed).toBeGreaterThan(-1);
-      expect(mainReads).toHaveLength(4);
+      expect(mainReads).toHaveLength(6);
       expect(mainReads.every((index) => fixture.events[index]?.startsWith("command:/:")))
         .toBe(true);
       expect(fixture.events
@@ -657,7 +942,7 @@ describe("Oompa browser app source proof launcher", () => {
       const runtimeCommands = fixture.events.filter((event) =>
         event.includes(":/trusted/bun\0")
       );
-      expect(runtimeCommands).toHaveLength(2);
+      expect(runtimeCommands).toHaveLength(3);
       expect(runtimeCommands.every((event) => event.includes(
         ":/trusted/bun\0--no-env-file\0--config=/dev/null\0",
       ))).toBe(true);
@@ -716,6 +1001,33 @@ describe("Oompa browser app source proof launcher", () => {
       expect(fixture.events.some((event) => event.includes("\0worktree\0remove\0--force"))).toBe(true);
     } finally {
       fixture.cleanup();
+    }
+  });
+
+  test("joins the fixed credential-free production build before opening auth and refuses build/source failure", () => {
+    for (const options of [{}, { buildFails: true }, { sourceChangesDuringBuild: true }, { buildSignal: "SIGTERM" as const }, { buildThrows: true }]) {
+      const fixture = launcherFixture(options);
+      const stdout = output();
+      const stderr = output();
+      try {
+        const code = executeAppSourceProofLauncher(proveArguments, { ...fixture.dependencies, stdout: stdout.writer, stderr: stderr.writer });
+        const built = fixture.events.findIndex((event) => event.endsWith("/scripts/build-app.ts:none"));
+        expect(built).toBeGreaterThan(-1);
+        const environment = fixture.events.find((event) => event.startsWith("build-environment:"));
+        expect(environment).toBe(`build-environment:${JSON.stringify({ ...appSourceProofChildEnvironment(), OOMPA_RELEASE_COMMIT: sourceCommit })}`);
+        if (Object.keys(options).length === 0) {
+          expect(code).toBe(0);
+          expect(fixture.events.findIndex((event) => event.startsWith("credential:opened:"))).toBeGreaterThan(built);
+        } else {
+          expect(code).toBe(1);
+          expect(fixture.events.some((event) => event.startsWith("credential:opened:"))).toBe(false);
+          expect(fixture.events.some((event) => event.includes("\0worktree\0remove\0"))).toBe(false);
+          expect(fixture.events.some((event) => event.startsWith("scratch:removed:"))).toBe(false);
+          const failure: unknown = JSON.parse(stderr.lines.join(""));
+          expect(failure).toMatchObject({ retainedBuild: { directory: expect.stringContaining("hra-app-source-verifier-"), locatorOnly: true } });
+          expect(Buffer.byteLength(stderr.lines.join(""))).toBeLessThan(1024);
+        }
+      } finally { fixture.cleanup(); }
     }
   });
 
@@ -819,6 +1131,7 @@ describe("Oompa browser app source proof launcher", () => {
       expect(code).toBe(0);
       expect(fixture.events.some((event) => event.startsWith("credential:"))).toBe(false);
       expect(fixture.events.some((event) => event.includes("\0--verify-retained\0"))).toBe(true);
+      expect(fixture.events.some((event) => event.includes("/scripts/build-app.ts"))).toBe(false);
     } finally {
       fixture.cleanup();
     }

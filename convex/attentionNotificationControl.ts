@@ -758,7 +758,7 @@ async function safetyFaultEvidenceAllowsReview(
     const rebuilt = buildOompaAttentionEmailBody(rows.map((row) => ({
       interactionKind: row.interactionKind,
       sessionPublicId: row.sessionPublicId,
-    })));
+    })), body.version);
     const bodyDigest = await sha256Hex(`hra-attention-body:v1\u0000${rebuilt.text}`);
     const idempotencyKey = await sha256Hex([
       "hra-attention-resend:v1",

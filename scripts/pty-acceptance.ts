@@ -196,11 +196,13 @@ const groupExists = (groupId: number): boolean => {
   }
 };
 
-const signalGroup = (groupId: number, signal: NodeJS.Signals): void => {
+const signalGroup = (groupId: number, signal: NodeJS.Signals): boolean => {
   try {
     process.kill(-groupId, signal);
+    return true;
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    throw error;
   }
 };
 
@@ -208,16 +210,73 @@ const sleep = async (milliseconds: number): Promise<void> => {
   await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 };
 
-const waitForGroupsGone = async (
-  groupIds: () => readonly number[],
-  maximumWaitMs: number,
-): Promise<boolean> => {
-  const deadline = Date.now() + maximumWaitMs;
-  do {
-    if (groupIds().every((groupId) => !groupExists(groupId))) return true;
-    await sleep(ptyGroupPollMs);
-  } while (Date.now() <= deadline);
-  return groupIds().every((groupId) => !groupExists(groupId));
+export const createPseudoTerminalGroupCleanup = (input: Readonly<{
+  groupIds: () => readonly number[];
+  exists: (groupId: number) => boolean;
+  signal: (groupId: number, signal: NodeJS.Signals) => boolean;
+  now: () => number;
+  sleep: (milliseconds: number) => Promise<void>;
+}>): Readonly<{
+  signalOwnedGroups: (signal: NodeJS.Signals) => void;
+  waitForGroupsGone: (maximumWaitMs: number) => Promise<boolean>;
+  assertGroupsGone: () => void;
+}> => {
+  // Absence is final: never signal a reused numeric group after an ESRCH proof.
+  const gone = new Set<number>();
+  const denied = new Map<number, Error>();
+  let unexpected: Error | undefined;
+  const observe = (groupId: number, operation: () => boolean): boolean => {
+    if (gone.has(groupId)) return true;
+    try {
+      if (!operation()) {
+        gone.add(groupId);
+        denied.delete(groupId);
+        return true;
+      }
+    } catch (error: unknown) {
+      const failure = error instanceof Error
+        ? error
+        : new Error("Pseudo-terminal group operation threw a non-Error value.");
+      // Darwin can refuse a group during exit. Only later ESRCH resolves that uncertainty.
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "EPERM") {
+        denied.set(groupId, failure);
+      } else {
+        unexpected ??= failure;
+      }
+    }
+    return false;
+  };
+  const probeOwnedGroups = (): boolean => {
+    let allGone = true;
+    for (const groupId of input.groupIds()) {
+      if (!observe(groupId, () => input.exists(groupId))) allGone = false;
+    }
+    return allGone;
+  };
+  return {
+    signalOwnedGroups: (signal) => {
+      // A refused operation must not prevent collection of the other owned group.
+      for (const groupId of input.groupIds()) observe(groupId, () => input.signal(groupId, signal));
+    },
+    waitForGroupsGone: async (maximumWaitMs) => {
+      const deadline = input.now() + maximumWaitMs;
+      do {
+        if (probeOwnedGroups()) return true;
+        await input.sleep(ptyGroupPollMs);
+      } while (input.now() <= deadline);
+      return probeOwnedGroups();
+    },
+    assertGroupsGone: () => {
+      if (unexpected !== undefined) throw unexpected;
+      const remaining = input.groupIds().filter((groupId) => !gone.has(groupId));
+      if (remaining.length === 0) return;
+      for (const groupId of remaining) {
+        const failure = denied.get(groupId);
+        if (failure !== undefined) throw failure;
+      }
+      throw new Error(`Pseudo-terminal cleanup could not prove exit of owned process groups ${remaining.join(", ")}.`);
+    },
+  };
 };
 
 export async function runInPseudoTerminal(input: PseudoTerminalInput): Promise<PseudoTerminalResult> {
@@ -293,6 +352,13 @@ export async function runInPseudoTerminal(input: PseudoTerminalInput): Promise<P
     const groupIds = (): readonly number[] => authorityPid === undefined || authorityPid === driverPid
       ? [driverPid]
       : [driverPid, authorityPid];
+    const groupCleanup = createPseudoTerminalGroupCleanup({
+      groupIds,
+      exists: groupExists,
+      signal: signalGroup,
+      now: Date.now,
+      sleep,
+    });
 
     const observeAuthority = (chunk: Buffer): void => {
       if (authorityPid !== undefined || authorityScan.length >= ptyAuthorityScanMaximumBytes) return;
@@ -311,21 +377,17 @@ export async function runInPseudoTerminal(input: PseudoTerminalInput): Promise<P
       if (authorityScan.includes(PTY_BEGIN_MARKER)) wrapperObservation.began = true;
     };
 
-    const signalOwnedGroups = (signal: NodeJS.Signals): void => {
-      for (const groupId of groupIds()) signalGroup(groupId, signal);
-    };
-
     const requestBoundedTermination = (): void => {
       if (terminationPromise !== undefined) return;
       try { child.stdin.write("\x03"); } catch { /* The PTY may already be closed. */ }
       terminationPromise = observePseudoTerminalCleanup((async () => {
         await sleep(ptyInitialInterruptGraceMs);
-        signalOwnedGroups("SIGTERM");
-        if (await waitForGroupsGone(groupIds, ptyTerminationGraceMs)) return;
-        signalOwnedGroups("SIGKILL");
-        if (!await waitForGroupsGone(groupIds, ptyForcedTerminationGraceMs)) {
-          throw new Error(`Pseudo-terminal cleanup could not prove exit of owned process groups ${groupIds().join(", ")}.`);
+        groupCleanup.signalOwnedGroups("SIGTERM");
+        if (!await groupCleanup.waitForGroupsGone(ptyTerminationGraceMs)) {
+          groupCleanup.signalOwnedGroups("SIGKILL");
+          await groupCleanup.waitForGroupsGone(ptyForcedTerminationGraceMs);
         }
+        groupCleanup.assertGroupsGone();
       })());
       hardSettlementTimer = setTimeout(() => {
         child.stdin.destroy();
@@ -416,7 +478,7 @@ export async function runInPseudoTerminal(input: PseudoTerminalInput): Promise<P
 
     let cleanupError = await settlePseudoTerminalCleanup({
       termination: () => terminationPromise,
-      observeExit: async () => await waitForGroupsGone(groupIds, 250),
+      observeExit: async () => await groupCleanup.waitForGroupsGone(250),
       requestTermination: requestBoundedTermination,
       markLingering: () => { failureState.lingering = true; },
       finalize: () => {
@@ -428,6 +490,13 @@ export async function runInPseudoTerminal(input: PseudoTerminalInput): Promise<P
       },
     });
 
+    try {
+      groupCleanup.assertGroupsGone();
+    } catch (error: unknown) {
+      cleanupError ??= error instanceof Error
+        ? error
+        : new Error("Pseudo-terminal cleanup threw a non-Error value.");
+    }
     if (wrapperObservation.began && authorityPid === undefined) {
       cleanupError ??= new Error("Pseudo-terminal wrapper began without publishing its exact owned process group.");
     }

@@ -72,7 +72,7 @@ async function fixture(kind: "attached" | "attachment_only" | "text" = "attached
   const authority = prepared.owner.sourceAuthority;
   const runtimeProfile = effectiveRuntimeProfileSchema.parse({
     profileId: profile.id, processGeneration: profile.processGeneration, observedAt: now, preset: "high",
-    model: "gpt-5.6-sol", reasoningEffort: "max", serviceTier: null, fast: false,
+    model: "gpt-6-astra", reasoningEffort: "max", serviceTier: null, fast: false,
     approvalPolicy: "on-request", reviewMode: "auto_review", permissionProfile: ":workspace",
     computerUse: true, pluginCapability: true, enabledApps: [],
   });
@@ -155,18 +155,18 @@ function assertV1Bytes(value: Fixture, model: string, daemon = value.daemon) {
 }
 
 describe("owned direct-send manifest admission", () => {
-  test("refuses historical Astra evidence for a current Sol session without consuming its owner", async () => {
+  test("refuses historical Sol evidence for a current Astra session without consuming its owner", async () => {
     const value = await fixture();
     expect(value.store.requireSessionPresetRequirement(value.session.id)).toEqual({
-      preset: "high", requirement: { model: "gpt-5.6-sol", effort: "max" },
+      preset: "high", requirement: { model: "gpt-6-astra", effort: "max" },
     });
-    const historicalRuntime = effectiveRuntimeProfileSchema.parse({ ...value.runtimeProfile, model: "gpt-6-astra" });
+    const historicalRuntime = effectiveRuntimeProfileSchema.parse({ ...value.runtimeProfile, model: "gpt-5.6-sol" });
     assertInert(value, () => value.store.beginOwnedDirectSendEffect({
       ...value.input, evidence: { ...value.evidence, runtimeProfile: historicalRuntime },
     }), "SESSION_RUNTIME_PROFILE_PRESET_CONTRACT_MISMATCH");
     expect(value.store.readOwnedSessionSend(value.request.idempotencyKey)?.state).toBe("input_required");
     expect(value.store.beginOwnedDirectSendEffect(value.input).dispatchGranted).toBe(true);
-    assertV1Bytes(value, "gpt-5.6-sol");
+    assertV1Bytes(value, "gpt-6-astra");
   });
 
   test("admits attached manifest atomically with one existing-format claim", async () => {
@@ -177,7 +177,7 @@ describe("owned direct-send manifest admission", () => {
     expect(begun).toMatchObject({ dispatchGranted: true, state: "effect_started", claim: { version: 1, mode: "direct" } });
     expect(begun.claim?.evidenceDigest).toBe(createHash("sha256").update(JSON.stringify(value.evidence)).digest("hex"));
     expect(value.store.messageAttachmentManifest(value.session.id, value.prepared.owner.attemptId)).toEqual(value.references);
-    assertV1Bytes(value, "gpt-5.6-sol");
+    assertV1Bytes(value, "gpt-6-astra");
     expect(value.pins()).toEqual(pinsBefore);
     for (const attachment of value.attachments) {
       expect(value.store.attachmentCustody(attachment.digest)).toMatchObject({ digest: attachment.digest,
@@ -189,7 +189,7 @@ describe("owned direct-send manifest admission", () => {
       const reopened = value.open(readonly);
       expect(reopened.readOwnedSessionSend(value.request.idempotencyKey)?.state).toBe("effect_started");
       expect(reopened.messageAttachmentManifest(value.session.id, value.prepared.owner.attemptId)).toEqual(value.references);
-      assertV1Bytes(value, "gpt-5.6-sol");
+      assertV1Bytes(value, "gpt-6-astra");
       expect(value.snapshot()).toEqual(beforeReopen);
     }
   });
@@ -201,7 +201,7 @@ describe("owned direct-send manifest admission", () => {
     expect(begun).toMatchObject({ dispatchGranted: true, state: "effect_started" });
     expect(value.store.messageAttachmentManifest(value.session.id, value.prepared.owner.attemptId)).toEqual(value.references);
     expect(value.store.messageAttachmentManifest(value.session.id, value.request.idempotencyKey)).toEqual([]);
-    assertV1Bytes(value, "gpt-5.6-sol");
+    assertV1Bytes(value, "gpt-6-astra");
   });
 
   for (const omitted of [false, true]) {
@@ -211,11 +211,11 @@ describe("owned direct-send manifest admission", () => {
       expect(value.store.beginOwnedDirectSendEffect(omitted ? value.claimInput : value.input).dispatchGranted).toBe(true);
       expect(value.store.messageAttachmentManifest(value.session.id, value.prepared.owner.attemptId)).toEqual([]);
       expect(value.database.query("SELECT * FROM attachments").all()).toEqual([]);
-      assertV1Bytes(value, "gpt-5.6-sol");
+      assertV1Bytes(value, "gpt-6-astra");
       const before = value.snapshot();
       for (const readonly of [false, true]) {
         expect(value.open(readonly).readOwnedSessionSend(value.request.idempotencyKey)?.state).toBe("effect_started");
-        assertV1Bytes(value, "gpt-5.6-sol");
+        assertV1Bytes(value, "gpt-6-astra");
         expect(value.snapshot()).toEqual(before);
       }
       expect(value.database.query("SELECT * FROM session_send_owners").all()).toEqual(ownerBefore);
@@ -378,7 +378,7 @@ describe("owned direct-send manifest admission", () => {
       const before = value.snapshot();
       expect(() => loser.beginOwnedDirectSendEffect(value.input)).toThrow("SESSION_SEND_CLAIM_CONFLICT");
       expect(value.snapshot()).toEqual(before);
-      assertV1Bytes(value, "gpt-5.6-sol");
+      assertV1Bytes(value, "gpt-6-astra");
     });
   }
 
@@ -410,7 +410,7 @@ describe("owned direct-send manifest admission", () => {
     }), "SESSION_SEND_CLAIM_CONFLICT");
     expect(value.store.beginOwnedDirectSendEffect(value.input).dispatchGranted).toBe(true);
     expect(value.store.messageAttachmentManifest(value.session.id, value.prepared.owner.attemptId)).toEqual(value.references);
-    assertV1Bytes(value, "gpt-5.6-sol");
+    assertV1Bytes(value, "gpt-6-astra");
   });
 
   test("retains old-boot owned pins without reviving restart-retired source authority", async () => {
@@ -462,7 +462,7 @@ describe("owned direct-send manifest admission", () => {
       expect(value.store.messageAttachmentManifest(value.session.id, begun.owner.attemptId)).toEqual(value.references);
       for (const attachment of value.attachments) expect(value.cleanup(attachment))
         .toEqual({ kind: "retained", reason: outcome === "ambiguous" ? "reserved" : "referenced" });
-      assertV1Bytes(value, "gpt-5.6-sol");
+      assertV1Bytes(value, "gpt-6-astra");
     });
   }
 });

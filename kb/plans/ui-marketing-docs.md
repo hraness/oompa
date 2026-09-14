@@ -1,5 +1,7 @@
 # Oompa product website and documentation
 
+Domain update, 2026-09-10: [the current domain plan](./oompa-app-domain.md) supersedes earlier host choices in this record. Current website and app destinations are `oompa.app` and `app.oompa.app`; prior hosts grant no current routing or authentication authority. Dated delivery evidence remains historical.
+
 Status: implemented; final integration and delivery pending. Owner: Hraness. Source checked: 2026-09-08. Reassess: 2026-10-20.
 
 ## Scope and decision
@@ -104,3 +106,19 @@ Immediately before merge, main advanced to `041a06a16015ff8b270a413b8c10ab9ca89e
 Remaining gates: resolve and independently review the theme join, reproduce the actual joined package inventory, run focused contracts and all required exact-tree local/native/package and CI gates, repeat visual review of the themed result, then merge, guarded website deployment and independent production verification. The preceding passing receipts are historical evidence, not acceptance of this new integration. No task PR merge, release, deployment or production acceptance is claimed. Exact final delivery receipts belong to PR #163 so later external state is not inferred from this pre-delivery source record.
 
 The fresh theme-joined archive has SHA-256 `e938814149d8fa317a89956744cb122967762e9ee1ddec14e75ae09f1f496e75`. Its actual canonical inventory remains 167 files, nine directories, 176 rows and 8,316 JSON bytes; the new inventory digest is `67d370005adcb3267c57939561e4a242eacfdc12680fde5064a4c5e048cda2e4`. All archive files match joined source, and all 164 nonmetadata hashes match exact main `041a06a`. Only README, notices and package metadata differ, with joined sizes of 7,455, 2,396 and 6,882 bytes. This is a fresh joined archive against exact base source, not a repeated or claimed second base archive operation. No package is published.
+
+## Lantern material preparation, 2026-09-12
+
+The website adopts the asset-free portable Lantern material from reviewed design-kit source `eccb0341d8d0ba960a0f02248cf59888062afb0a` without changing the installed component peers. The homepage hero carries the expressive wall. Navigable headers, opaque reading surfaces and the parent preview controls use quiet material paint; actual selected preview buttons and open native disclosures retain matched foreground/background states. The existing palette bootstrap, keyboard focus, disabled states, app examples, install restrictions and product copy remain authoritative.
+
+The canonical five-file snapshot enters the captured foundation after the existing foundations. Static compilation admits the snapshot before and after capture. Browser preparation admits it and binds every source file through the existing custody census. Its MIT license matches the already published shared attribution, so the public artifact inventory remains unchanged: fourteen fonts and two editorial textures, with no material asset URLs. Public-source scanning adds only the exact declaration path inside the complete pinned snapshot and continues scanning all text.
+
+Preparation is not release or production acceptance. Focused source and compiler contracts, independent review, the current-base complete Required CI, and the existing native browser gate remain required. Native material readback must cover light/dark and narrow/wide layouts, real appearance controls, selected preview tabs and disclosures, opaque reading panes, forced colors and reduced transparency. App-only promotion, root website aliases and all operational cutover guards remain outside this source change.
+
+## Material refinement delivery, 2026-09-13
+
+The current candidate uses design-kit 0.8.0 textured cells, softer frames, theme-aware highlighted commands, a compact installation path and a TTY-only orange-circle CLI introduction. Required CI on `b6ad075f4c7124acec9650cf49cf745df4092f3e` found the archive inventory still described its predecessor. Independent actual-archive inspection found only the new 440-byte CLI intro file and the CLI's 299-byte increase; all payload bytes and modes matched exact Git source. The unchanged inventory gate correctly rejected that unreviewed footprint.
+
+Current public guidance now recognizes the independently verified canonical v0.8.0 GitHub artifact, distinguishes its failed unpublished npm mirror, and keeps all historical v0.7.1 records and runtime capacity/startup/target restrictions. Its current installation guide uses the exact admitted transactional installer. Focused content and composition validation passed 71 tests and 2,536 assertions. The managed local-efficiency baseline is current.
+
+The final package inventory will be measured after these README changes, then independently reviewed and bound to the exact archive. Current-source native browser acceptance and the repository's complete Required CI remain required before PR203 merge and the protected v0.8.1 release. Release admission and production readback are pending; this preparation records neither publication nor runtime activation.

@@ -1,5 +1,11 @@
 import { isProductScene, parsePreviewMessage, productScenes, type ProductScene } from "./product-scenes.ts";
 import { createPreviewLoading } from "./preview-loading.ts";
+import { initWonkaArtifact } from "./wonka-renderer.ts";
+
+for (const artifact of document.querySelectorAll<HTMLElement>("[data-wonka-artifact]")) {
+  const dispose = initWonkaArtifact(artifact);
+  window.addEventListener("pagehide", (event) => { if (!event.persisted) dispose(); });
+}
 
 const previewUrl = (view: ProductScene): string => `/examples/app/index.html?view=${view}`;
 const loadingFor = (status: HTMLElement) => createPreviewLoading({

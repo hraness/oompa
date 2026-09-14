@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import appConfiguration from "../app/vercel.json";
+import { createAppSourceMarker } from "./app-source-marker";
+import { appLocalArtifactProofSchema, type AppLocalArtifactProof } from "./app-source-artifacts";
 import {
   linkSync,
   lstatSync,
@@ -19,7 +23,7 @@ import {
   executeAppSourceProof,
   executeRetainedAppSourceProofVerification,
   oompaAppAlias,
-  oompaAppBuildSettingsDigest,
+  oompaAppDeploymentObservedSettingsDigest,
   oompaAppProjectId,
   oompaAppRepositoryId,
   oompaAppTeamId,
@@ -120,7 +124,7 @@ const alias = {
 };
 
 const projectDomain = {
-  apexName: "oompa.dev",
+  apexName: "oompa.app",
   customEnvironmentId: null,
   gitBranch: null,
   name: oompaAppAlias,
@@ -138,7 +142,7 @@ const domainConfig = {
 };
 const rollingRelease = { rollingRelease: null };
 const bulkRedirects = {
-  pagination: { numPages: 0, page: 1, per_page: 1 },
+  pagination: { numPages: 0, page: 1, per_page: 10 },
   redirects: [],
 };
 const firewall = {
@@ -163,6 +167,26 @@ const marker = {
   source: { commit: sourceCommit },
   version: releaseVersion,
 };
+
+const artifactBodies = new Map<string, string>([
+  [".well-known/oompa-app.json", createAppSourceMarker({ version: releaseVersion }, { OOMPA_RELEASE_COMMIT: sourceCommit })],
+  ["graphs/client/assets/appearance-test.js", "export const appearance = true;\n"],
+  ["graphs/client/assets/foundation.css", "body { margin: 0 }\n"],
+  ["graphs/client/assets/main-test.js", "console.log('app');\n"],
+  ["index.html", "<!doctype html><html><body>App</body></html>\n"],
+  ["stylex.css", ".app { color: black }\n"],
+]);
+const localArtifacts = appLocalArtifactProofSchema.parse({
+  kind: "oompa-local-production-app-artifacts", sourceCommit, releaseVersion, runtimeVersion: "1.3.14",
+  packageSha256: "a".repeat(64), lockSha256: "b".repeat(64), publicationSha256: "c".repeat(64),
+  artifacts: [...artifactBodies].map(([path, body]) => ({ path, bytes: Buffer.byteLength(body),
+    sha256: createHash("sha256").update(body).digest("hex") })),
+});
+const artifactPlan = (): PlannedResponse[] => [...artifactBodies]
+  .filter(([path]) => path !== ".well-known/oompa-app.json")
+  .concat([["", artifactBodies.get("index.html") ?? ""]])
+  .map(([path, document]) => ({ document, url: `https://${oompaAppAlias}/${path}?proof=${nonce}`,
+    contentType: path === "" || path.endsWith(".html") ? "text/html" : path.endsWith(".css") ? "text/css" : "text/javascript" }));
 
 const exactSourceState = (
   overrides: Partial<AppSourceState> = {},
@@ -200,6 +224,7 @@ const deploymentListUrl = (until?: number): string => providerUrl(
 
 type PlannedResponse = Readonly<{
   cacheControl?: string;
+  omitHeader?: string;
   contentType?: string;
   document: unknown;
   redirected?: boolean;
@@ -213,14 +238,16 @@ type RecordedRequest = Readonly<{ init: RequestInit | undefined; url: string }>;
 const jsonResponse = (planned: PlannedResponse): Response => {
   const body = typeof planned.document === "string"
     ? planned.document
-    : JSON.stringify(planned.document);
+    : `${JSON.stringify(planned.document, null, 2)}\n`;
   const response = new Response(body, {
     headers: {
+      ...Object.fromEntries(appConfiguration.headers.flatMap((entry) => entry.source === "/(.*)" ? entry.headers.map(({ key, value }) => [key, value]) : [])),
       "cache-control": planned.cacheControl ?? "no-store",
       "content-type": planned.contentType ?? "application/json; charset=utf-8",
     },
     status: planned.status ?? 200,
   });
+  if (planned.omitHeader !== undefined) response.headers.delete(planned.omitHeader);
   Object.defineProperties(response, {
     redirected: { value: planned.redirected ?? false },
     url: { value: planned.responseUrl ?? planned.url },
@@ -231,11 +258,13 @@ const jsonResponse = (planned: PlannedResponse): Response => {
 type ProviderSampleOverrides = Partial<Readonly<{
   aliasDocument: unknown;
   bulkRedirectDocument: unknown;
+  bulkRedirectVersionsDocument: unknown;
   deploymentDocument: unknown;
   deploymentListPages: readonly Readonly<{ document: unknown; until?: number }>[];
   domainConfigDocument: unknown;
   exactRoutes: Readonly<{ document: unknown; versionId: string }>;
   firewallDocument: unknown;
+  firewallConfigurationsDocument: unknown;
   projectDocument: unknown;
   projectDomainDocument: unknown;
   rollingReleaseDocument: unknown;
@@ -281,13 +310,19 @@ const providerSample = (
     {
       document: documents.bulkRedirectDocument,
       url: providerUrl(
-        `/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=1`,
+        `/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=10`,
       ),
     },
+    ...(Object.hasOwn(overrides, "bulkRedirectVersionsDocument") ? [{
+      document: overrides.bulkRedirectVersionsDocument,
+      url: providerUrl(`/v1/bulk-redirects/versions?projectId=${oompaAppProjectId}`),
+    }] : []),
     {
-      document: documents.firewallDocument,
+      document: Object.hasOwn(overrides, "firewallConfigurationsDocument")
+        ? overrides.firewallConfigurationsDocument
+        : { active: documents.firewallDocument, draft: null, versions: [] },
       url: providerUrl(
-        `/v1/security/firewall/config/active?projectId=${oompaAppProjectId}`,
+        `/v1/security/firewall/config?projectId=${oompaAppProjectId}`,
       ),
     },
     {
@@ -324,17 +359,27 @@ const completePlan = (
   ...after,
 ];
 
+const unconfiguredSample = (overrides: ProviderSampleOverrides = {}): readonly PlannedResponse[] => providerSample({
+  bulkRedirectDocument: { redirects: [], version: null },
+  bulkRedirectVersionsDocument: { versions: [] },
+  firewallConfigurationsDocument: { active: null, draft: null, versions: [] },
+  ...overrides,
+});
+
 const plannedFetcher = (
   plan: readonly PlannedResponse[],
   requests: RecordedRequest[],
-): AuthorityFetcher => async (input, init) => {
+): AuthorityFetcher => {
+  const expanded = plan.flatMap((item) => item.url === markerUrl ? [item, ...artifactPlan()] : [item]);
+  return async (input, init) => {
   const url = input instanceof Request ? input.url : String(input);
   requests.push({ init, url });
-  const expected = plan[requests.length - 1];
+  const expected = expanded[requests.length - 1];
   if (expected === undefined || expected.url !== url) {
     throw new Error("unexpected app proof request");
   }
   return jsonResponse(expected);
+  };
 };
 
 const output = (): { readonly lines: string[]; readonly writer: { write(value: string): void } } => {
@@ -345,6 +390,7 @@ const output = (): { readonly lines: string[]; readonly writer: { write(value: s
 const execute = async (
   plan: readonly PlannedResponse[],
   sourceState: () => AppSourceState = () => exactSourceState(),
+  artifactReader: () => Promise<AppLocalArtifactProof> = async () => localArtifacts,
 ): Promise<Readonly<{
   code: number;
   requests: readonly RecordedRequest[];
@@ -364,6 +410,7 @@ const execute = async (
     accessToken,
     arguments: arguments_,
     clock: () => times.shift() ?? new Date("invalid"),
+    artifactReader,
     evidenceWriter: (path, value) => {
       expect(path).toBe(evidencePath);
       evidence.push(value);
@@ -389,6 +436,17 @@ const execute = async (
 };
 
 describe("Oompa browser app source proof", () => {
+  test("admits omitted list snapshot settings only alongside mandatory complete artifact proof", async () => {
+    const sample = providerSample({ deploymentListPages: [{ document: {
+      ...deploymentList,
+      deployments: [{ ...deploymentSnapshot, projectSettings: {
+        commandForIgnoringBuildStep: deploymentSettings.commandForIgnoringBuildStep,
+      } }],
+    } }] });
+    const result = await execute([...sample, { document: marker, url: markerUrl }, ...sample]);
+    expect(result.code).toBe(0);
+  });
+
   test("sandwiches the strict public marker between complete authenticated provider samples", async () => {
     const result = await execute(completePlan());
     expect(result.code).toBe(0);
@@ -398,35 +456,36 @@ describe("Oompa browser app source proof", () => {
       providerUrl(`/v9/projects/${oompaAppProjectId}/domains/${oompaAppAlias}`),
       providerUrl(`/v6/domains/${oompaAppAlias}/config?projectIdOrName=${oompaAppProjectId}`),
       providerUrl(`/v1/projects/${oompaAppProjectId}/rolling-release`),
-      providerUrl(`/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=1`),
-      providerUrl(`/v1/security/firewall/config/active?projectId=${oompaAppProjectId}`),
+      providerUrl(`/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=10`),
+      providerUrl(`/v1/security/firewall/config?projectId=${oompaAppProjectId}`),
       providerUrl(`/v1/projects/${oompaAppProjectId}/routes/versions`),
       deploymentListUrl(),
       providerUrl(`/v13/deployments/${deploymentId}?withGitRepoInfo=true`),
       providerUrl(`/v4/aliases/${oompaAppAlias}`),
       markerUrl,
+      ...artifactPlan().map((item) => item.url),
       providerUrl(`/v9/projects/${oompaAppProjectId}`),
       providerUrl(`/v9/projects/${oompaAppProjectId}/domains/${oompaAppAlias}`),
       providerUrl(`/v6/domains/${oompaAppAlias}/config?projectIdOrName=${oompaAppProjectId}`),
       providerUrl(`/v1/projects/${oompaAppProjectId}/rolling-release`),
-      providerUrl(`/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=1`),
-      providerUrl(`/v1/security/firewall/config/active?projectId=${oompaAppProjectId}`),
+      providerUrl(`/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=10`),
+      providerUrl(`/v1/security/firewall/config?projectId=${oompaAppProjectId}`),
       providerUrl(`/v1/projects/${oompaAppProjectId}/routes/versions`),
       deploymentListUrl(),
       providerUrl(`/v13/deployments/${deploymentId}?withGitRepoInfo=true`),
       providerUrl(`/v4/aliases/${oompaAppAlias}`),
     ]);
-    for (const [index, request] of result.requests.entries()) {
+    for (const request of result.requests) {
       const headers = new Headers(request.init?.headers);
       expect(request.init?.method).toBe("GET");
       expect(request.init?.redirect).toBe("error");
       expect(request.init?.cache).toBe("no-store");
       expect(headers.get("cache-control")).toBe("no-cache");
       expect(headers.get("authorization"))
-        .toBe(index === 10 ? null : `Bearer ${accessToken}`);
+        .toBe(request.url.startsWith(`https://${oompaAppAlias}/`) ? null : `Bearer ${accessToken}`);
     }
 
-    expect(Buffer.byteLength(result.stdout, "utf8")).toBeLessThan(4_096);
+    expect(Buffer.byteLength(result.stdout, "utf8")).toBeLessThan(64 * 1_024);
     expect(result.stdout).not.toContain(accessToken);
     expect(JSON.parse(result.stdout)).toEqual({
       alias: oompaAppAlias,
@@ -436,7 +495,9 @@ describe("Oompa browser app source proof", () => {
       bulkRedirectVersionId: null,
       cacheControl: "no-store",
       completedAt: "2026-09-06T14:00:01.000Z",
-      deploymentBuildSettingsDigest: oompaAppBuildSettingsDigest,
+      deploymentObservedSettingsDigest: oompaAppDeploymentObservedSettingsDigest,
+      deploymentRootSettingsAuthority: "not-attested",
+      publicArtifacts: expect.objectContaining({ local: localArtifacts, canonicalEntryMatches: true, completeLocalManifestMatches: true }),
       deploymentId,
       deploymentUrl,
       domainConfiguredBy: "CNAME",
@@ -453,7 +514,7 @@ describe("Oompa browser app source proof", () => {
       releaseVersion,
       repositoryId: oompaAppRepositoryId,
       rollingReleaseState: null,
-      schemaVersion: 2,
+      schemaVersion: 4,
       selfDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
       skewProtectionBoundaryAt: null,
       skewProtectionMaxAge: 0,
@@ -467,6 +528,21 @@ describe("Oompa browser app source proof", () => {
       verifierTrackedAndUntrackedClean: true,
     });
     expect(result.evidence).toEqual([JSON.parse(result.stdout)]);
+  });
+
+  test("refuses local publication drift after sampling and absence before provider access", async () => {
+    let reads = 0;
+    const changed = await execute(completePlan(), () => exactSourceState(), async () => {
+      reads += 1;
+      return reads === 1 ? localArtifacts : { ...localArtifacts, publicationSha256: "d".repeat(64) };
+    });
+    expect(changed.code).toBe(1);
+    expect(changed.evidence).toEqual([]);
+    expect(changed.stderr).toContain('"code":"authority_changed_during_observation"');
+    const absent = await execute([], () => exactSourceState(), async () => { throw new Error("absent"); });
+    expect(absent.code).toBe(1);
+    expect(absent.requests).toEqual([]);
+    expect(absent.evidence).toEqual([]);
   });
 
   test("requires the fixed project account and main Git link", async () => {
@@ -526,6 +602,7 @@ describe("Oompa browser app source proof", () => {
     const requests: RecordedRequest[] = [];
     try {
       const code = await executeAppSourceProof({
+    artifactReader: async () => localArtifacts,
         accessToken,
         arguments: proofArguments,
         clock: (() => {
@@ -553,6 +630,7 @@ describe("Oompa browser app source proof", () => {
         .toEqual(JSON.parse(stdout.lines.join("")));
 
       const replay = await executeAppSourceProof({
+    artifactReader: async () => localArtifacts,
         accessToken,
         arguments: proofArguments,
         clock: (() => {
@@ -641,7 +719,7 @@ describe("Oompa browser app source proof", () => {
         aliasUpdatedAt: proof.aliasUpdatedAt + 1,
       }).success).toBe(false);
       expect(appSourceProofEvidenceSchema.safeParse(redigestProof(proof, {
-        deploymentBuildSettingsDigest: "a".repeat(64),
+        deploymentObservedSettingsDigest: "a".repeat(64),
       })).success).toBe(false);
       expect(appSourceProofEvidenceSchema.safeParse(redigestProof(proof, {
         projectBuildSettingsDigest: "b".repeat(64),
@@ -807,6 +885,21 @@ describe("Oompa browser app source proof", () => {
     }
   });
 
+  test("refuses every missing mandatory v13 setting and every conflicting optional v7 value", async () => {
+    for (const key of Object.keys(deploymentSettings)) {
+      const settings = Object.fromEntries(Object.entries(deploymentSettings).filter(([name]) => name !== key));
+      const result = await execute(providerSample({ deploymentDocument: { ...deployment, projectSettings: settings } }));
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('"code":"provider_readback_invalid"');
+    }
+    for (const key of Object.keys(buildSettings)) {
+      const result = await execute(providerSample({ deploymentListPages: [{ document: { ...deploymentList,
+        deployments: [{ ...deploymentSnapshot, projectSettings: { [key]: "conflicting" } }] } }] }));
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain('"code":"provider_readback_invalid"');
+    }
+  });
+
   test("detects a change between the two accepted dashboard ignore states", async () => {
     const changed = await execute(completePlan(
       { document: marker, url: markerUrl },
@@ -872,6 +965,9 @@ describe("Oompa browser app source proof", () => {
   test("requires the direct verified project domain and non-proxy DNS", async () => {
     for (const hostileSample of [
       providerSample({
+        projectDomainDocument: { ...projectDomain, name: "app.oompa.dev", apexName: "oompa.dev" },
+      }),
+      providerSample({
         projectDomainDocument: { ...projectDomain, verified: false },
       }),
       providerSample({
@@ -903,6 +999,7 @@ describe("Oompa browser app source proof", () => {
 
   test("requires a READY production Git deployment and the exact alias tuple", async () => {
     for (const firstSample of [
+      providerSample({ aliasDocument: { ...alias, alias: "app.oompa.dev" } }),
       providerSample({ deploymentDocument: { ...deployment, readyState: "BUILDING" } }),
       providerSample({ deploymentDocument: { ...deployment, target: null } }),
       providerSample({ deploymentDocument: { ...deployment, source: "cli" } }),
@@ -971,7 +1068,7 @@ describe("Oompa browser app source proof", () => {
   test("refuses live bulk redirects and active WAF redirect rules", async () => {
     const bulkRedirect = await execute(providerSample({
       bulkRedirectDocument: {
-        pagination: { numPages: 1, page: 1, per_page: 1 },
+        pagination: { numPages: 1, page: 1, per_page: 10 },
         redirects: [{ destination: "https://attacker.invalid", source: "/" }],
         version: {
           id: "bulk-redirect-production",
@@ -986,7 +1083,7 @@ describe("Oompa browser app source proof", () => {
 
     const inconsistentEmptyRedirectPage = await execute(providerSample({
       bulkRedirectDocument: {
-        pagination: { numPages: 1, page: 1, per_page: 1 },
+        pagination: { numPages: 1, page: 1, per_page: 10 },
         redirects: [],
       },
     }));
@@ -1039,6 +1136,143 @@ describe("Oompa browser app source proof", () => {
     }
   });
 
+  test("accepts explicit unconfigured responses only with authenticated empty redirect history", async () => {
+    const result = await execute([
+      ...unconfiguredSample(), { document: marker, url: markerUrl }, ...unconfiguredSample(),
+    ]);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    const proof = appSourceProofEvidenceSchema.parse(result.evidence[0]);
+    expect(proof).toMatchObject({ schemaVersion: 4, bulkRedirectVersionId: null,
+      firewallConfigId: null, firewallConfigVersion: null, firewallEnabled: null });
+    const versionsUrl = providerUrl(`/v1/bulk-redirects/versions?projectId=${oompaAppProjectId}`);
+    const firewallUrl = providerUrl(`/v1/security/firewall/config?projectId=${oompaAppProjectId}`);
+    expect(result.requests.filter((request) => request.url === versionsUrl)).toHaveLength(2);
+    expect(result.requests.filter((request) => request.url === firewallUrl)).toHaveLength(2);
+    expect(result.requests.some((request) => request.url.includes("/config/active"))).toBe(false);
+    for (const request of result.requests.filter((entry) => entry.url.startsWith("https://api.vercel.com/"))) {
+      expect(request.init?.method).toBe("GET");
+      expect(request.init?.redirect).toBe("error");
+      expect(request.init?.cache).toBe("no-store");
+      expect(new Headers(request.init?.headers).get("authorization")).toBe(`Bearer ${accessToken}`);
+    }
+  });
+
+  test("refuses malformed empty redirect bodies and any unconfigured history ambiguity", async () => {
+    for (const bulkRedirectDocument of [
+      {}, { redirects: [] }, { version: null }, { redirects: null, version: null },
+      { redirects: [], version: {} }, { redirects: [null], version: null },
+      { redirects: [], version: null, pagination: null },
+      { redirects: [], version: null, pagination: { numPages: 0, page: 1, per_page: 10 } },
+      { redirects: [], version: null, error: { code: "forbidden" } },
+    ]) {
+      const result = await execute(unconfiguredSample({ bulkRedirectDocument }));
+      expect(result.code).toBe(1); expect(result.stdout).toBe("");
+      expect(result.requests.some((request) => request.url.includes("/bulk-redirects/versions"))).toBe(false);
+      expect(result.stderr).toContain('"code":"provider_readback_invalid"');
+    }
+    for (const bulkRedirectVersionsDocument of [
+      {}, null, { versions: null }, { versions: [], pagination: {} }, { versions: [], error: "forbidden" },
+      { versions: [{ id: "historic", isLive: false }] }, { versions: [{ id: "live", isLive: true, redirectCount: 0 }] },
+    ]) {
+      const result = await execute(unconfiguredSample({ bulkRedirectVersionsDocument }));
+      expect(result.code).toBe(1); expect(result.stdout).toBe("");
+      expect(result.requests.some((request) => request.url.includes("/security/firewall"))).toBe(false);
+      expect(result.stderr).toContain('"code":"provider_readback_invalid"');
+    }
+  });
+
+  test("requires exact requested redirect pagination even for an empty configured page", async () => {
+    for (const pagination of [
+      { numPages: 0, page: 1, per_page: 1 }, { numPages: 0, page: 1, per_page: 250 },
+      { numPages: 0, page: 2, per_page: 10 }, { numPages: 1, page: 1, per_page: 10 },
+      { numPages: 0, page: 1 }, { numPages: 0, page: "1", per_page: 10 },
+    ]) {
+      const result = await execute(providerSample({ bulkRedirectDocument: { redirects: [], pagination } }));
+      expect(result.code).toBe(1); expect(result.stdout).toBe("");
+      expect(result.stderr).toContain('"code":"provider_readback_invalid"');
+    }
+    const version = { id: "empty-live-bulk-version", isLive: true, redirectCount: 0 };
+    const sample = providerSample({ bulkRedirectDocument: { ...bulkRedirects, version } });
+    const valid = await execute([...sample, { document: marker, url: markerUrl }, ...sample]);
+    expect(valid.code).toBe(0);
+    expect(appSourceProofEvidenceSchema.parse(valid.evidence[0]).bulkRedirectVersionId).toBe(version.id);
+    expect(valid.requests.some((request) => request.url.includes("/bulk-redirects/versions"))).toBe(false);
+  });
+
+  test("firewall absence requires all three explicit empty fields and never infers disabled configuration", async () => {
+    for (const firewallConfigurationsDocument of [
+      {}, null, { active: null, draft: null }, { active: null, versions: [] },
+      { draft: null, versions: [] }, { active: null, draft: {}, versions: [] },
+      { active: null, draft: null, versions: [{}] }, { active: null, draft: null, versions: null },
+      { active: null, draft: null, versions: [], error: "not_found" },
+      { active: {}, draft: null, versions: [] },
+    ]) {
+      const result = await execute(unconfiguredSample({ firewallConfigurationsDocument }));
+      expect(result.code).toBe(1); expect(result.stdout).toBe("");
+      expect(result.stderr).toContain('"code":"provider_readback_invalid"');
+    }
+    const sample = providerSample({ firewallDocument: { ...firewall, firewallEnabled: false } });
+    const disabled = await execute([...sample, { document: marker, url: markerUrl }, ...sample]);
+    expect(disabled.code).toBe(0);
+    expect(appSourceProofEvidenceSchema.parse(disabled.evidence[0])).toMatchObject({
+      firewallConfigId: firewall.id, firewallConfigVersion: firewall.version, firewallEnabled: false,
+    });
+  });
+
+  test("new empty-state endpoints retain exact HTTP authorization, URL and redirect refusal", async () => {
+    const endpoints = [
+      providerUrl(`/v1/bulk-redirects?projectId=${oompaAppProjectId}&page=1&per_page=10`),
+      providerUrl(`/v1/bulk-redirects/versions?projectId=${oompaAppProjectId}`),
+      providerUrl(`/v1/security/firewall/config?projectId=${oompaAppProjectId}`),
+    ];
+    for (const endpoint of endpoints) {
+      for (const changes of [
+        ...[400, 401, 403, 404, 429, 500].map((status) => ({ status })),
+        { redirected: true }, { responseUrl: `${endpoint}&extra=1` },
+        { responseUrl: endpoint.replace(oompaAppProjectId, "prj_other") },
+        { responseUrl: endpoint.replace(oompaAppTeamId, "team_other") },
+        { responseUrl: "https://attacker.invalid/empty" }, { contentType: "text/html" },
+      ]) {
+        const sample = unconfiguredSample().map((response) => response.url === endpoint ? { ...response, ...changes } : response);
+        const result = await execute(sample);
+        expect(result.code).toBe(1); expect(result.stdout).toBe("");
+        expect(result.evidence).toHaveLength(0);
+        expect(result.stderr).toContain('"code":"provider_readback_invalid"');
+        expect(result.stderr).not.toContain(accessToken);
+      }
+    }
+  });
+
+  test("firewall absence and exact active identity must remain unchanged around the marker", async () => {
+    for (const [before, after] of [
+      [unconfiguredSample(), providerSample()], [providerSample(), unconfiguredSample()],
+      [providerSample(), providerSample({ firewallDocument: { ...firewall, id: "next-active" } })],
+      [providerSample(), providerSample({ firewallDocument: { ...firewall, version: firewall.version + 1 } })],
+      [providerSample(), providerSample({ firewallDocument: { ...firewall, firewallEnabled: false } })],
+    ] as const) {
+      const result = await execute([...before, { document: marker, url: markerUrl }, ...after]);
+      expect(result.code).toBe(1); expect(result.stdout).toBe("");
+      expect(result.stderr).toContain('"code":"authority_changed_during_observation"');
+    }
+  });
+
+  test("schema4 accepts only coherent firewall nulls and rejects earlier proof semantics", async () => {
+    const generated = await execute(completePlan());
+    const proof = appSourceProofEvidenceSchema.parse(generated.evidence[0]);
+    for (let mask = 0; mask < 8; mask += 1) {
+      const document = redigestProof(proof, {
+        firewallConfigId: (mask & 1) === 0 ? firewall.id : null,
+        firewallConfigVersion: (mask & 2) === 0 ? firewall.version : null,
+        firewallEnabled: (mask & 4) === 0 ? false : null,
+      });
+      expect(appSourceProofEvidenceSchema.safeParse(document).success).toBe(mask === 0 || mask === 7);
+    }
+    for (const schemaVersion of [1, 2, 3]) {
+      expect(appSourceProofEvidenceSchema.safeParse(redigestProof(proof, { schemaVersion })).success).toBe(false);
+    }
+  });
+
   test("accepts an exact live project-route version only when it has no rules", async () => {
     const liveVersion = {
       id: "route-version-empty-production",
@@ -1076,6 +1310,15 @@ describe("Oompa browser app source proof", () => {
         '{"code":"marker_readback_invalid","schemaVersion":1,"status":"refused"}\n',
       );
       expect(result.stderr).not.toContain("private-provider-data");
+    }
+  });
+
+  test("refuses every missing source-defined security header on the actual marker read", async () => {
+    for (const header of appConfiguration.headers.flatMap((entry) => entry.source === "/(.*)" ? entry.headers : [])) {
+      const result = await execute(completePlan({ document: marker, url: markerUrl, omitHeader: header.key }));
+      expect(result.code).toBe(1);
+      expect(result.evidence).toEqual([]);
+      expect(result.stderr).toContain('"code":"marker_readback_invalid"');
     }
   });
 
@@ -1199,6 +1442,7 @@ describe("Oompa browser app source proof", () => {
     const stdout = output();
     const stderr = output();
     const code = await executeAppSourceProof({
+    artifactReader: async () => localArtifacts,
       accessToken: "contains a space",
       arguments: arguments_,
       fetcher: async () => { throw new Error("must not fetch"); },

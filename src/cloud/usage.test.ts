@@ -78,6 +78,12 @@ describe("usage projection laws", () => {
     })).toBeNull();
   });
 
+  test("keeps v1 exact keys unchanged for older paired clients", () => {
+    expect(USAGE_CLOUD_PROJECTION_MAX_PLAINTEXT_BYTES).toBe(8_120);
+    expect(USAGE_CLOUD_ENVELOPE_MAX_CIPHERTEXT_CHARACTERS).toBe(10_848);
+    expect(parseUsageProjection({ ...ready, data: { ...ready.data, resetCredits: 3 } })).toBeNull();
+  });
+
   test("keeps unavailable distinct from a ready zero", () => {
     expect(parseUsageProjection({ state: "unavailable" })).toEqual({ state: "unavailable" });
     expect(parseUsageProjection(ready)).toEqual(ready);

@@ -12,12 +12,12 @@ async function assertDefaultShell(source: string): Promise<void> {
     } })
     .on('meta[name="color-scheme"]', { element(element) { schemes.push(element.getAttribute("content")); } })
     .transform(new Response(source)).arrayBuffer();
-  assert.deepEqual(palettes, ["catppuccin"], "Oompa must select its default palette before bootstrap delivery");
-  assert.deepEqual(themes, ["dark"], "Oompa must select dark until a saved preference is applied");
+  assert.deepEqual(palettes, ["paper"], "Oompa must select its default palette before bootstrap delivery");
+  assert.deepEqual(themes, ["light"], "Oompa must select its light fallback until the System or saved preference bootstrap runs");
   assert.deepEqual(schemes, ["dark light"], "Oompa must support both selectable appearances");
 }
 
-test("the authored shell names Catppuccin dark before the saved preference bootstrap", async () => {
+test("the authored shell names Paper light before the saved preference bootstrap", async () => {
   const source = await Bun.file(new URL("../index.html", import.meta.url)).text();
   await assertDefaultShell(source);
 });
@@ -25,10 +25,10 @@ test("the authored shell names Catppuccin dark before the saved preference boots
 test("appearance proof rejects absent defaults and a fixed light-only or dark-only scheme", async () => {
   const source = await Bun.file(new URL("../index.html", import.meta.url)).text();
   for (const changed of [
-    source.replace(' data-palette="catppuccin"', ""),
-    source.replace('data-palette="catppuccin"', 'data-palette="gruvbox"'),
-    source.replace(' data-theme="dark"', ""),
-    source.replace('data-theme="dark"', 'data-theme="light"'),
+    source.replace(' data-palette="paper"', ""),
+    source.replace('data-palette="paper"', 'data-palette="gruvbox"'),
+    source.replace(' data-theme="light"', ""),
+    source.replace('data-theme="light"', 'data-theme="dark"'),
     source.replace('name="color-scheme" content="dark light"', 'name="color-scheme" content="dark"'),
     source.replace('name="color-scheme" content="dark light"', 'name="color-scheme" content="light"'),
   ]) await expect(assertDefaultShell(changed)).rejects.toThrow();

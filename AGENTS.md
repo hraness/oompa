@@ -18,7 +18,7 @@
 
 - Keep Oompa one small Bun product. Add a package boundary only for a concrete second consumer.
 - Pin Bun to 1.3.14. Use one `bun.lock`; do not add another package manager or lockfile.
-- Provider runtimes own authentication, native sessions and threads, execution, tools, approvals, and hidden state. Oompa owns isolated profiles, the provider-neutral transcript and command record, process generations, local projections, encrypted sync, and recovery. Keep Codex-only account, usage, plugin, desktop, and native-transcript operations explicit rather than implying Claude Code parity.
+- Provider runtimes own authentication, native sessions and threads, execution, tools, approvals, and hidden state. Oompa owns isolated profiles, the provider-neutral transcript and command record, process generations, local projections, encrypted sync, and recovery. Keep Codex-only account, usage, plugin, and native-transcript operations explicit rather than implying Claude Code parity.
 - Parse every foreign value from `unknown`. Expose closed domain operations instead of a generic JSON-RPC, HTTP, filesystem, or shell escape hatch.
 - Record every mutation before dispatch, bind it to an idempotency key and exact authority generation, and reconcile an uncertain result without speculative replay.
 - Keep provider credentials, raw reasoning, environment values, arbitrary tool output, approval secrets, and unbounded paths out of cloud sync, logs, JSON output, and receipts.

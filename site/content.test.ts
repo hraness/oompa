@@ -28,7 +28,6 @@ import {
 } from "./content.ts";
 import { docsPages, docsPathForSection, docsPaths, findDocsPage, renderDocsMarkdown, type DocsPath } from "./docs-content.ts";
 import {
-  OOMPA_MAILING_TURNSTILE_SITEKEY_ENV,
   oompaMailingListConfig,
   renderOompaAnalyticsScript,
   renderOompaSiteFooter,
@@ -99,59 +98,61 @@ describe("public content contract", () => {
   });
 
   test("keeps the unadmitted candidate separate from the exact admitted predecessor", () => {
-    expect(publicContent.releaseVersion).toBe("0.8.0");
-    expect(admittedReleaseVersion).toBe("0.7.1");
+    expect(publicContent.releaseVersion).toBe("0.8.2");
+    expect(admittedReleaseVersion).toBe("0.8.1");
     expect(publicReleaseState).toBe("staged");
     expect(publicContent.endpoints.betaTag).toBe("beta-not-yet-live");
     const llms = renderLlmsText();
     expect(llms).toContain(publicContent.statusLine);
-    expect(llms).toContain("Local CLI v0.8.0 is a release candidate");
-    expect(llms).toContain("v0.7.1 remains the fully admitted public artifact");
-    expect(publicContent.links.admittedInstall).toBe("https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install");
+    expect(llms).toContain("Local CLI v0.8.2 is a release candidate");
+    expect(llms).toContain("v0.8.1 remains the admitted canonical GitHub artifact");
+    expect(publicContent.links.admittedInstall).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
     const visibleSite = htmlVisibleText(renderSiteHtml());
-    expect(visibleSite).toContain("The v0.8.0 candidate is not yet admitted.");
-    expect(visibleSite).toContain("The admitted v0.7.1 CLI has its own");
-    expect(visibleSite).not.toContain("The v0.7.1 candidate is not yet admitted.");
+    expect(visibleSite).toContain("The v0.8.2 candidate is not yet admitted.");
+    expect(visibleSite).toContain("The admitted v0.8.1 CLI has its own");
+    expect(visibleSite).not.toContain("The v0.8.0 candidate is not yet admitted.");
     expect(visibleSite).toContain("Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass.");
-    expect(visibleSite).not.toContain("v0.8.0 artifacts admitted");
+    expect(visibleSite).not.toContain("v0.8.2 artifacts admitted");
     for (const surface of [llms]) {
       expect(surface).toContain("Only after immutable GitHub release admission");
-      expect(surface).not.toContain("v0.7.1 candidate");
-      expect(surface).not.toContain("v0.8.0 artifacts admitted");
+      expect(surface).not.toContain("v0.8.0 candidate");
+      expect(surface).not.toContain("v0.8.2 artifacts admitted");
       expect(surface).toContain(publicContent.daemonRolloutNotice);
     }
     for (const surface of [renderDocumentationMarkdown("/docs/status/"), htmlVisibleText(renderDocumentationHtml("/docs/status/"))]) {
-      expect(surface).toContain("v0.8.0 is a candidate. v0.7.1 remains admitted.");
-      expect(surface).toContain("The v0.8.0 candidate is not yet admitted and requires its own immutable GitHub proof.");
-      expect(surface).toContain("The v0.7.1 CLI passed immutable GitHub and npm artifact admission.");
-      expect(surface).not.toContain("v0.7.1 candidate");
+      expect(surface).toContain("v0.8.2 is a candidate. v0.8.1 remains admitted.");
+      expect(surface).toContain("The v0.8.2 candidate is not yet admitted and requires its own immutable GitHub proof.");
+      expect(surface).toContain("The v0.8.1 CLI passed immutable GitHub artifact admission.");
+      expect(surface).not.toContain("v0.8.0 candidate");
       expect(surface).toContain(publicContent.daemonRolloutNotice);
-      expect(surface).not.toContain("v0.8.0 artifacts admitted");
+      expect(surface).not.toContain("v0.8.2 artifacts admitted");
     }
     const historicalAdmission = renderMarkdownBlocks(publicContent.introduction, 2);
-    expect(historicalAdmission).toContain("https://github.com/hraness/oompa/actions/runs/34367591503");
-    expect(historicalAdmission).toContain("https://github.com/hraness/oompa/releases/tag/v0.7.1");
-    expect(historicalAdmission).toContain("attempt 2");
+    expect(historicalAdmission).toContain("https://github.com/hraness/oompa/actions/runs/34781400584");
+    expect(historicalAdmission).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.1");
+    expect(historicalAdmission).toContain("attempt 1");
+    expect(historicalAdmission).toContain("optional npm mirror failed before publication and is not admitted");
+    expect(historicalAdmission).not.toContain("passed immutable GitHub and npm");
     expect(historicalAdmission).toContain("artifact admission does not authorize current-daemon startup or hosted command writers");
-    expect(historicalAdmission).toContain("does not admit v0.8.0");
+    expect(historicalAdmission).toContain("does not admit v0.8.2");
   });
 
   test("never transfers current admission to another version", () => {
-    expect(isAdmittedRelease("0.7.1")).toBe(true);
+    expect(isAdmittedRelease("0.8.1")).toBe(true);
     const admittedContent = { ...publicContent, releaseVersion: admittedReleaseVersion };
-    expect(renderLlmsText(admittedContent)).toContain("Install the admitted v0.7.1 local CLI artifact");
+    expect(renderLlmsText(admittedContent)).toContain("Install the admitted v0.8.1 local CLI artifact");
     for (const surface of [renderLlmsText(admittedContent)]) {
-      expect(surface).not.toContain("The v0.7.1 candidate is not yet admitted");
+      expect(surface).not.toContain("The v0.8.0 candidate is not yet admitted");
       expect(surface).toContain(admittedContent.daemonRolloutNotice);
     }
-    for (const version of ["0.7.0", "0.7.2", "0.8.0", "v0.7.1", "0.7.1-beta.1", ""]) {
+    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.2", "v0.8.0", "0.8.0-beta.1", ""]) {
       expect(isAdmittedRelease(version)).toBe(false);
     }
-    for (const version of ["0.7.2", "0.8.0"]) {
+    for (const version of ["0.7.2", "0.7.3", "0.8.2"]) {
       const content = { ...publicContent, releaseVersion: version };
       const llms = renderLlmsText(content);
       expect(llms).toContain("This release candidate is not yet admitted.");
-      expect(llms).toContain("https://github.com/hraness/oompa/blob/v0.7.1/docs/beta-release-notes.md#install");
+      expect(llms).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact");
       expect(llms.indexOf("This release candidate is not yet admitted."))
         .toBeLessThan(llms.indexOf(content.installCommand));
       expect(llms).not.toContain(`Install the admitted v${version} local CLI artifact`);
@@ -196,13 +197,13 @@ describe("public content contract", () => {
       doctorCommand: "oompa doctor --offline",
       initCommand: "oompa init --yes",
       installCommand: buildOompaGlobalInstallCommand(
-        "https://github.com/hraness/oompa/releases/download/v0.8.0/hraness-oompa-0.8.0.tgz",
+        "https://github.com/hraness/oompa/releases/download/v0.8.2/hraness-oompa-0.8.2.tgz",
       ),
       links: {
         github: "https://github.com/hraness/oompa",
       },
       productName: "Oompa",
-      siteUrl: "https://oompa.dev",
+      siteUrl: "https://oompa.app",
     });
   });
 
@@ -211,7 +212,7 @@ describe("public content contract", () => {
     expect(markdown.split("\n")[0]).toBe("# Oompa");
     expect(markdown).toContain(publicContent.thesis);
     expect(markdown).toContain(publicContent.statusLine);
-    expect(publicContent.statusLine).toContain("Local CLI v0.8.0 is a release candidate, not an admitted artifact");
+    expect(publicContent.statusLine).toContain("Local CLI v0.8.2 is a release candidate, not an admitted artifact");
     expect(publicContent.statusLine).toContain("hosted sync is live as an open beta");
     expect(markdown).toContain(publicContent.installNotice);
     expect(markdown).toContain(publicContent.links.admittedInstall);
@@ -276,31 +277,29 @@ describe("public content contract", () => {
       maintainer: { "@type": "Organization", name: "Hraness", url: "https://hraness.com/" },
     });
     expect(structured).not.toHaveProperty("softwareVersion");
-    expect(publicContent.description).toContain("v0.8.0 is a release candidate");
-    expect(publicContent.description).toContain("v0.7.1 remains admitted");
+    expect(publicContent.description).toContain("v0.8.2 is a release candidate");
+    expect(publicContent.description).toContain("v0.8.1 remains admitted");
     expect(publicContent.description).toContain("daemon and hosted command-writer rollout remains blocked on capacity");
     expect(html).toContain('href="/docs/status/"');
     expect(html).toContain(`<title>${publicContent.productName} | ${publicContent.tagline}</title>`);
-    const eyebrow = oneElement(html, "p.hraness-marketing-hero__eyebrow");
-    expect(eyebrow.textContent).toBe(publicContent.tagline);
-    expectCompiledClasses(eyebrow);
+    expect(parseHTML(html).document.querySelectorAll("p.hraness-marketing-hero__eyebrow")).toHaveLength(0);
     const previewEyebrow = oneElement(renderPreviewHtml(), "p.preview-eyebrow");
     expect(previewEyebrow.textContent).toBe(publicContent.tagline);
     expectCompiledClasses(previewEyebrow);
     expect(publicContent.socialCard).toEqual({
-      alt: "Oompa command-line card showing offline diagnostics and read-only status · v0.8.0 candidate · daemon rollout blocked on capacity · oompa.dev",
+      alt: "Oompa command-line card showing offline diagnostics and read-only status · v0.8.2 candidate · daemon rollout blocked on capacity · oompa.app",
       height: 630,
       path: "/social-card.png",
       width: 1200,
     });
     for (const document of [html, renderPrivacyHtml(), renderPreviewHtml()]) {
-      expect(document).toContain('<meta property="og:image" content="https://oompa.dev/social-card.png">');
+      expect(document).toContain('<meta property="og:image" content="https://oompa.app/social-card.png">');
       expect(document).toContain('<meta property="og:image:type" content="image/png">');
       expect(document).toContain('<meta property="og:image:width" content="1200">');
       expect(document).toContain('<meta property="og:image:height" content="630">');
       expect(document).toContain(`<meta property="og:image:alt" content="${publicContent.socialCard.alt}">`);
       expect(document).toContain('<meta name="twitter:card" content="summary_large_image">');
-      expect(document).toContain('<meta name="twitter:image" content="https://oompa.dev/social-card.png">');
+      expect(document).toContain('<meta name="twitter:image" content="https://oompa.app/social-card.png">');
       expect(document).not.toContain("social-card.svg");
     }
     const llms = renderLlmsText();
@@ -408,7 +407,7 @@ describe("public content contract", () => {
     const html = renderDocumentationHtml("/docs/reference/");
     const document = parseHTML(html).document;
     const commands = [...document.querySelectorAll("pre.command-list")];
-    for (const version of ["v0.7.1", "v0.8.0"]) {
+    for (const version of ["v0.8.1", "v0.8.2"]) {
       const versionCodes = [...document.querySelectorAll("code.oompa-inline-code")].filter((code) => code.textContent === version);
       expect(versionCodes.length).toBeGreaterThan(0);
       for (const code of versionCodes) expectCompiledClasses(code);
@@ -434,26 +433,26 @@ describe("public content contract", () => {
 
   test("separates the unadmitted candidate from its admitted predecessor in the owning status guide", () => {
     expect(publicReleaseState).toBe("staged");
-    expect(publicContent.releaseVersion).toBe("0.8.0");
+    expect(publicContent.releaseVersion).toBe("0.8.2");
     expect(publicContent.endpoints).toEqual({
       betaTag: "beta-not-yet-live", githubRepository: "live", hostedSync: "live", website: "live",
     });
     const markdown = renderDocsMarkdown("/docs/status/");
     const html = htmlVisibleText(renderDocumentationHtml("/docs/status/"));
     for (const surface of [markdown, html]) {
-      expect(surface).toContain("v0.7.1");
-      expect(surface).toContain("passed immutable GitHub and npm artifact admission");
-      expect(surface).toContain("The v0.8.0 candidate is not yet admitted");
-      expect(surface).not.toContain("The v0.7.1 candidate is not yet admitted");
-      expect(surface).not.toContain("v0.8.0 is released");
+      expect(surface).toContain("v0.8.1");
+      expect(surface).toContain("passed immutable GitHub artifact admission");
+      expect(surface).toContain("The v0.8.2 candidate is not yet admitted");
+      expect(surface).not.toContain("The v0.8.0 candidate is not yet admitted");
+      expect(surface).not.toContain("v0.8.2 is released");
       expect(surface).toContain("daemon and hosted command-writer rollout remains blocked on capacity");
       expect(surface).toContain("Artifact availability and the live sync service do not clear this gate");
       expect(surface).not.toContain("v0.7.0 candidate");
       expect(surface).not.toContain("v0.7.0 is a release candidate");
       expect(surface).toContain("This release candidate is not yet admitted");
       expect(surface).toContain(publicContent.installNotice);
-      expect(surface).not.toContain("v0.8.0 artifacts admitted");
-      expect(surface).not.toContain("v0.8.0 is the fully admitted public artifact");
+      expect(surface).not.toContain("v0.8.2 artifacts admitted");
+      expect(surface).not.toContain("v0.8.2 is the fully admitted public artifact");
       expect(surface).not.toContain("beta-not-yet-live");
 
       expect(surface).not.toContain("Beta not yet live");
@@ -467,18 +466,18 @@ describe("public content contract", () => {
       expect(noticePosition).toBeLessThan(commandPosition);
     }
     for (const surface of [renderLlmsText()]) {
-      expect(surface).toContain("admitted v0.7.1");
+      expect(surface).toContain("admitted v0.8.1");
       expect(surface).toContain(publicContent.daemonRolloutNotice);
       expect(surface).toContain("/docs/status/");
     }
-    expect(markdown).toContain("https://github.com/hraness/oompa/releases/tag/v0.7.1");
-    expect(markdown).toContain("https://github.com/hraness/oompa/actions/runs/34367591503");
-    expect(markdown).toContain("Local v0.8.0 candidate; hosted sync live as an open beta");
+    expect(markdown).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.1");
+    expect(markdown).toContain("https://github.com/hraness/oompa/actions/runs/34781400584");
+    expect(markdown).toContain("Local v0.8.2 candidate; hosted sync live as an open beta");
     const reference = renderDocsMarkdown("/docs/reference/");
     expect(reference).toContain("Local release boundary");
-    expect(reference).toContain("v0.7.1");
-    expect(reference).toContain("admitted local CLI release and are retained in the `v0.8.0` candidate");
-    expect(renderLlmsText()).toContain("Only after immutable GitHub release admission, install the v0.8.0 local CLI artifact");
+    expect(reference).toContain("v0.8.1");
+    expect(reference).toContain("admitted local CLI release and are retained in the `v0.8.2` candidate");
+    expect(renderLlmsText()).toContain("Only after immutable GitHub release admission, install the v0.8.2 local CLI artifact");
     for (const path of ["/docs/start/", "/docs/status/"] as const) {
       const guideHtml = renderDocumentationHtml(path);
       expect(guideHtml).toContain(publicContent.links.admittedInstall);
@@ -498,7 +497,7 @@ describe("public content contract", () => {
   test("keeps startup prerequisites adjacent to setup without turning the homepage into a runbook", () => {
     const prerequisite = publicContent.daemonRolloutNotice;
     expect(prerequisite).toContain("Do not initialize, start, or autostart");
-    expect(prerequisite).toContain("either the admitted v0.7.1 daemon or the v0.8.0 candidate");
+    expect(prerequisite).toContain("either the admitted v0.8.1 daemon or the v0.8.2 candidate");
     expect(prerequisite).toContain("protected two-pass zero-debt capacity evidence and its exact .activated readback receipt");
     expect(prerequisite).toContain("target marker-2 proofs before globally enabling hosted writers");
     const setupHtml = renderDocumentationHtml("/docs/start/");
@@ -645,8 +644,8 @@ describe("public content contract", () => {
   });
 
   test("publishes exact lost-login recovery without retaining provider credentials", () => {
-    const markdown = renderDocumentationMarkdown("/docs/sessions/");
-    const html = htmlVisibleText(renderDocumentationHtml("/docs/sessions/"));
+    const markdown = renderDocumentationMarkdown("/docs/start/");
+    const html = htmlVisibleText(renderDocumentationHtml("/docs/start/"));
     for (const surface of [markdown, html]) {
       expect(surface).toContain("the daemon restarts before completion");
       expect(surface).toContain("oompa account show personal");
@@ -669,8 +668,8 @@ describe("public content contract", () => {
   });
 
   test("removes active Devin claims and documents preserved historical data", () => {
-    const markdown = renderDocumentationMarkdown("/docs/sessions/");
-    const html = htmlVisibleText(renderDocumentationHtml("/docs/sessions/"));
+    const markdown = renderDocumentationMarkdown("/docs/start/");
+    const html = htmlVisibleText(renderDocumentationHtml("/docs/start/"));
     for (const surface of [markdown, html]) {
       expect(surface).toContain("Devin support has been removed");
       expect(surface).toContain("Existing Devin history is read-only");
@@ -682,12 +681,10 @@ describe("public content contract", () => {
   });
 
   test("preserves the adopted provider-usage boundary in its owning guides' Markdown and HTML", () => {
-    for (const surface of [renderDocumentationMarkdown("/docs/sessions/", "/docs/status/"), htmlVisibleText(renderDocumentationHtml("/docs/sessions/", "/docs/status/"))]) {
+    for (const surface of [renderDocumentationMarkdown("/docs/start/", "/docs/sessions/", "/docs/status/"), htmlVisibleText(renderDocumentationHtml("/docs/start/", "/docs/sessions/", "/docs/status/"))]) {
       expect(surface).toContain("Automatic account movement is not exposed yet.");
       expect(surface).toContain("Explicit sessions and work tasks stay pinned to the account you selected.");
       expect(surface).toContain("Claude and Devin accounts never rotate automatically, and Oompa never replays a failed or ambiguous turn under another account.");
-      expect(surface).toContain("The experimental desktop switch never copies");
-      expect(surface).toContain("changes Keychain blindly, responds to a provider limit, or retries an uncertain switch.");
       expect(surface).toContain("The separately adopted provider-usage contract permits bounded managed Codex movement only under fresh local authority; explicit sessions, work tasks, Claude accounts, and cross-machine execution remain outside that boundary.");
       expect(surface).not.toContain("rotates accounts to evade a provider limit");
     }
@@ -845,6 +842,19 @@ describe("public content contract", () => {
     expect(parseHTML(home).document.querySelectorAll("section.documentation-section")).toHaveLength(0);
   });
 
+  test.each([
+    ["/docs/", "project", "/docs/status/"],
+    ["/docs/sessions/", "first-account", "/docs/start/"],
+    ["/docs/sessions/", "first-session", "/docs/start/"],
+  ] as const)("preserves the moved public fragment %s#%s", (oldPath, id, newPath) => {
+    const source = renderDocumentationHtml(oldPath);
+    const link = oneElement(source, `a[data-moved-section="${id}"]`);
+    expect(link.getAttribute("href")).toBe(`${newPath}#${id}`);
+    expect(link.closest(`#${id}`)).not.toBeNull();
+    expect(oneElement(renderDocumentationHtml(newPath), `details#${id}`)).toBeDefined();
+    expect(oldPath).not.toBe(newPath);
+  });
+
   test("keeps the full privacy boundary on its canonical HTML and Markdown surfaces", () => {
     const sentinelClaims = [
       "Codex account labels and observed provider email and plan metadata when cloud sync is enabled.",
@@ -874,7 +884,7 @@ describe("public content contract", () => {
       "honors Do Not Track",
       "disables person profiles, autocapture, heatmaps, feature flags, surveys, conversations, and session recording",
       "Oompa sends no form values, account identity, provider or session data, URL query, or fragment.",
-      "Vercel serves oompa.dev",
+      "Vercel serves oompa.app",
       "GitHub hosts the source repository, releases, and release downloads",
     ];
     const surfaces = [
@@ -900,7 +910,7 @@ describe("public content contract", () => {
       "| command bun --no-env-file --config=/dev/null -e '",
     );
     expect(publicContent.installCommand).toContain(
-      "-- https://github.com/hraness/oompa/releases/download/v0.8.0/hraness-oompa-0.8.0.tgz",
+      "-- https://github.com/hraness/oompa/releases/download/v0.8.2/hraness-oompa-0.8.2.tgz",
     );
     expect(publicContent.installCommand).toContain("hra-install-safe");
     expect(publicContent.installCommand).not.toContain("bun add --global");
@@ -918,7 +928,7 @@ describe("public content contract", () => {
       expect(surface).toContain("hra-install-safe");
       expect(surface).toContain("fresh random private staging root");
       expect(surface).toContain("GitHub repository ID 1343008607");
-      expect(surface).toContain("published immutable v0.8.0 release");
+      expect(surface).toContain("published immutable v0.8.2 release");
       expect(surface).toContain("removes ambient Bun, Node, and native-library injection variables");
       expect(surface).toContain("disables Bun dotenv loading");
       expect(surface).toContain("/dev/null as the only Bun configuration");
@@ -942,7 +952,7 @@ describe("public content contract", () => {
       expect(surface).toContain("oompa daemon stop");
       expect(surface).toContain("oompa daemon status --json");
       expect(surface).toContain("oompa daemon start");
-      expect(surface).toContain("Only after immutable GitHub release admission for v0.8.0, install its exact release and verify the installed version and offline health");
+      expect(surface).toContain("Only after immutable GitHub release admission for v0.8.2, install its exact release and verify the installed version and offline health");
       expect(surface).not.toContain("bun remove --global oompa");
       expect(surface).not.toContain("uninstall the package");
     }
@@ -1093,9 +1103,9 @@ describe("public content contract", () => {
       ["The request version and any authored preset contract are part of changed-intent detection"],
       ["Each Work also freezes the meaning of its High and Ultra routes when it is created"],
       ["A fresh affected version 1 request is refused"],
-      ["An existing contract 2 Work whose coordinator and participating session authorities remain supported keeps Astra for already-declared tasks"],
+      ["An existing contract 1 Work whose coordinator and participating session authorities remain supported keeps Sol for already-declared tasks"],
       ["A Work associated with a retired Devin session remains readable but is fenced from mutation and execution"],
-      ["Current tooling does not append a new High or Ultra task to a historical contract 2 Work"],
+      ["Current tooling does not append a new High or Ultra task to a contract 1 Work"],
       ["Reusing that key with another version or contract is a conflict"],
       [
         "A source-sensitive Codex session start or provider-switch replay includes both --idempotency-key and its immutable --preset-contract",
@@ -1106,6 +1116,8 @@ describe("public content contract", () => {
       ["An older session-start release did not print the source contract"],
       ["--preset high --preset-contract 1", "`--preset high --preset-contract 1`"],
       ["Neither selector can resume a contractless prepared row"],
+      ["Contract 1 cannot authorize a fresh effect under the current Astra binding"],
+      ["contract 2 can authorize the exact Astra request when the key has no stored row"],
       ["If the originating meaning cannot be proved, use the retained old release rather than guessing"],
       ["A contractless prepared row has no supported cancellation or retirement command"],
       ["Do not use a fresh key or session abandon as a workaround", "Do not use a fresh key or `session abandon` as a workaround"],
@@ -1119,8 +1131,8 @@ describe("public content contract", () => {
   });
 
   test("publishes first-session walkthroughs for humans and agents", () => {
-    const markdown = renderDocumentationMarkdown("/docs/sessions/", "/docs/reference/");
-    const rawHtml = renderDocumentationHtml("/docs/sessions/", "/docs/reference/");
+    const markdown = renderDocumentationMarkdown("/docs/start/", "/docs/sessions/", "/docs/reference/");
+    const rawHtml = renderDocumentationHtml("/docs/start/", "/docs/sessions/", "/docs/reference/");
     const html = htmlVisibleText(rawHtml);
     const claims = [
       "Human terminal",
@@ -1176,8 +1188,8 @@ describe("public content contract", () => {
     expect(html).toContain("New Oompa-created Codex sessions that use high or ultra");
     expect(markdown).toContain("The `low` and `fable-max` bindings are unchanged");
     expect(markdown).not.toContain("every explicit preset selection use the Sol mapping");
-    expect(markdown).toContain("sessions already bound to historical contract 2 keep their exact Astra model and effort");
-    expect(html).toContain("sessions already bound to historical contract 2 keep their exact Astra model and effort");
+    expect(markdown).toContain("sessions already bound to contract 1 keep their exact Sol model and effort");
+    expect(html).toContain("sessions already bound to contract 1 keep their exact Sol model and effort");
     expect(markdown).not.toContain("session start personal --provider codex --preset high");
   });
 
@@ -1347,7 +1359,7 @@ describe("public content contract", () => {
   test("contains JSON-LD, owned appearance bootstrap, and one owned analytics module on public pages", () => {
     const html = renderSiteHtml();
     const privacy = renderPrivacyHtml();
-    expect(html).toContain('<link rel="canonical" href="https://oompa.dev/">');
+    expect(html).toContain('<link rel="canonical" href="https://oompa.app/">');
     expect(html).toContain('<meta property="og:type" content="website">');
     expect(html).toContain('<link rel="stylesheet" href="/styles.css">');
     expect(html).toContain('<script type="application/ld+json">');
@@ -1361,10 +1373,10 @@ describe("public content contract", () => {
     expect(html).not.toContain("onclick=");
     for (const page of docsPages) {
       const document = parseHTML(renderDocsHtml(page)).document;
-      expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(`https://oompa.dev${page.path}`);
+      expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(`https://oompa.app${page.path}`);
       expect([...document.querySelectorAll("script[src]")].map((script) => script.getAttribute("src"))).toEqual(["/appearance.js", "/analytics.js", "/site.js"]);
-      expect(document.documentElement.getAttribute("data-palette")).toBe("catppuccin");
-      expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+      expect(document.documentElement.getAttribute("data-palette")).toBe("paper");
+      expect(document.documentElement.getAttribute("data-theme")).toBe("light");
       expect(document.querySelectorAll("details[data-oompa-appearance]")).toHaveLength(1);
       expect(document.querySelectorAll('script[type="application/ld+json"]')).toHaveLength(1);
     }
@@ -1385,9 +1397,9 @@ describe("public content contract", () => {
       const footer = /<footer\b[\s\S]*?<\/footer>/u.exec(document)?.[0];
       expect(footer).toContain('data-slot="hraness-site-footer"');
       expect(footer?.match(/data-slot="hraness-mark"/gu)).toHaveLength(1);
-      expect(footer?.match(/data-slot="social-icon"/gu)).toHaveLength(5);
+      expect(footer?.match(/data-slot="social-icon"/gu)).toHaveLength(4);
       expect(footer).not.toContain("hraness-site-footer__wordmark");
-      expect(footer).toContain('data-mailing-list="none"');
+      expect(footer).toContain('data-mailing-list="signup"');
       expect(footer).toContain('href="https://substack.com/@hraness"');
       expect(
         [...(footer?.matchAll(/<a\b[^>]*\shref="([^"]+)"/gu) ?? [])]
@@ -1399,66 +1411,29 @@ describe("public content contract", () => {
     }
   });
 
-  test("renders only the Oompa mailing audience when Turnstile is configured", () => {
-    const sitekey = "1x00000000000000000000AA";
-    expect(oompaMailingListConfig({
-      [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: sitekey,
-    })).toEqual({
+  test("renders only the Oompa mailing audience without a client challenge", () => {
+    expect(oompaMailingListConfig()).toEqual({
       audience: "hra",
       kind: "signup",
-      turnstileSitekey: sitekey,
     });
-    expect(oompaMailingListConfig({})).toEqual({ kind: "none" });
-    expect(oompaMailingListConfig({
-      [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: "",
-    })).toEqual({ kind: "none" });
 
-    const footer = renderOompaSiteFooter({
-      [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: sitekey,
-    });
+    const footer = renderOompaSiteFooter();
     expect(footer).toContain('data-mailing-list="signup"');
     expect(footer).toContain('name="audience" type="hidden" value="hra"');
-    expect(footer).toContain('data-action="mailing_hra"');
+    expect(footer).toContain('name="website" tabindex="-1"');
     expect(footer).toContain(
       'action="https://account.hraness.com/api/mailing/subscribe"',
     );
-    expect(footer).toContain(
-      'src="https://challenges.cloudflare.com/turnstile/v0/api.js"',
-    );
+    expect(footer).not.toContain("challenges.cloudflare.com");
+    expect(footer).not.toContain("turnstile");
     expect(footer).toContain('href="https://substack.com/@hraness"');
-  });
-
-  test("fails production closed on missing or malformed Turnstile configuration", () => {
-    expect(oompaMailingListConfig({ VERCEL_ENV: "preview" }))
-      .toEqual({ kind: "none" });
-    for (const turnstileSitekey of [undefined, ""]) {
-      expect(() => {
-        oompaMailingListConfig({
-          [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: turnstileSitekey,
-          VERCEL_ENV: "production",
-        });
-      })
-        .toThrow(OOMPA_MAILING_TURNSTILE_SITEKEY_ENV);
-    }
-    for (const turnstileSitekey of [
-      "too-short",
-      "1x00000000000000000000AA!",
-      "x".repeat(101),
-    ]) {
-      expect(() => {
-        oompaMailingListConfig({
-          [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: turnstileSitekey,
-        });
-      })
-        .toThrow(OOMPA_MAILING_TURNSTILE_SITEKEY_ENV);
-    }
   });
 
   test("renders an inert noindex preview canonicalized to the full product page", () => {
     const preview = renderPreviewHtml();
     expectCompiledClasses(oneElement(preview, "body.preview-page"));
     expect(preview).toContain('<meta name="robots" content="noindex, nofollow">');
-    expect(preview).toContain('<link rel="canonical" href="https://oompa.dev/">');
+    expect(preview).toContain('<link rel="canonical" href="https://oompa.app/">');
     const title = oneElement(preview, "h1#preview-title");
     expect(title.textContent).toBe(publicContent.productName);
     expectCompiledClasses(title);
