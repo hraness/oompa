@@ -1657,6 +1657,7 @@ export const publicContent: PublicContent = {
             "oompa daemon start [--json]",
             "oompa daemon status|stop [--json]",
             "oompa daemon run",
+            "oompa menubar [--json]",
           ],
         },
         paragraph(
