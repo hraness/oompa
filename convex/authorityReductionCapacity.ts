@@ -5,12 +5,16 @@ import { isFiniteTimestamp, isSafePositiveInteger } from "../src/cloud/contracts
 import { digestAuthEmail } from "./authEmail";
 import { hasExactAccountDeletionJobCapacity } from "./jobLifecycleCapacity";
 import {
+  adjustQuotaForPatch,
   consumeAuthorityReductionPatchReservationQuota,
+  logicalDocumentBytes,
+  releaseQuotaForDelete,
   replaceAuthorityReductionReservationQuota,
   reserveQuotaForInsert,
 } from "./quota";
 import type { DataModel, MutationCtx, QueryCtx } from "./server";
 import {
+  accountDeletionInlineCapacityVersion,
   authorityReductionCapacityReservation,
   authorityReductionCapacityVersion,
 } from "./validators";
@@ -32,6 +36,10 @@ export type AccountDeletionCapacity = Readonly<{
   identity: AccountIdentityReservation;
   job: AccountJobReservation;
   kind: "reserved";
+}> | Readonly<{
+  subject: DataModel["authSubjects"]["document"];
+  job: AccountJobReservation;
+  kind: "inline_reserved";
 }> | Readonly<{ kind: "legacy" }>;
 
 export type DeviceRevocationCapacity = Readonly<{
@@ -142,7 +150,8 @@ async function hasExactDrainingDeletionTopology(
     && subject !== undefined
     && subject._id === job.subjectId
     && subject.userId === user._id
-    && subject.status === "disabled";
+    && subject.status === "disabled"
+    && subject.accountDeletionCapacity === undefined;
 }
 
 function canonicalReservation(
@@ -163,18 +172,43 @@ function canonicalReservation(
     && isFiniteTimestamp(reservation.createdAt);
 }
 
+function canonicalInlineReservation(
+  inline: Readonly<{ version: number; reservation: string; createdAt: number }>,
+): boolean {
+  return inline.version === accountDeletionInlineCapacityVersion
+    && inline.reservation === authorityReductionCapacityReservation
+    && isFiniteTimestamp(inline.createdAt);
+}
+
 export async function loadAccountDeletionCapacity(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
 ): Promise<AccountDeletionCapacity> {
-  const [identityRows, jobRows] = await Promise.all([
+  const [identityRows, jobRows, subjects] = await Promise.all([
     ctx.db.query("accountDeletionIdentityReservations")
       .withIndex("by_user", (builder) => builder.eq("userId", userId))
       .take(2),
     ctx.db.query("accountDeletionJobReservations")
       .withIndex("by_user", (builder) => builder.eq("userId", userId))
       .take(2),
+    ctx.db.query("authSubjects")
+      .withIndex("by_user", (builder) => builder.eq("userId", userId))
+      .take(2),
   ]);
+  if (subjects.length > 1) corrupt();
+  const subject = subjects[0];
+  const inline = subject?.accountDeletionCapacity;
+  if (subjects.some((row) => row.accountDeletionCapacity !== undefined)) {
+    const job = jobRows[0];
+    if (subjects.length !== 1 || subject === undefined || inline === undefined
+      || subject.userId !== userId || subject.status !== "active"
+      || !isSafePositiveInteger(subject.authEpoch)
+      || !canonicalInlineReservation(inline)
+      || identityRows.length !== 0 || jobRows.length !== 1 || job === undefined
+      || !canonicalReservation(job, userId, "job")
+      || job.createdAt !== inline.createdAt) corrupt();
+    return { subject, job, kind: "inline_reserved" };
+  }
   if (identityRows.length === 0 && jobRows.length === 0) {
     return { kind: "legacy" };
   }
@@ -274,6 +308,37 @@ export async function createAccountDeletionCapacityForNewUser(
   const storedIdentity = await ctx.db.get(identityId);
   if (storedIdentity === null) corrupt();
   await reserveQuotaForInsert(ctx, userId, "identity", storedIdentity);
+}
+
+async function createInlineAccountDeletionCapacityForLegacyUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+): Promise<void> {
+  const subjects = await ctx.db.query("authSubjects")
+    .withIndex("by_user", (builder) => builder.eq("userId", userId)).take(2);
+  const subject = subjects[0];
+  if (subjects.length !== 1 || subject?.status !== "active"
+    || subject.userId !== userId || subject.accountDeletionCapacity !== undefined
+    || !isSafePositiveInteger(subject.authEpoch)
+    || (await loadAccountDeletionCapacity(ctx, userId)).kind !== "legacy") corrupt();
+  const now = Date.now();
+  const patch = { accountDeletionCapacity: {
+    version: accountDeletionInlineCapacityVersion,
+    reservation: authorityReductionCapacityReservation,
+    createdAt: now,
+  } };
+  const jobId = await ctx.db.insert("accountDeletionJobReservations", {
+    capacityReservation: authorityReductionCapacityReservation,
+    capacityVersion: authorityReductionCapacityVersion,
+    category: "job", createdAt: now, userId,
+  });
+  const job = await ctx.db.get(jobId);
+  if (job === null) corrupt();
+  await reserveQuotaForInsert(ctx, userId, "job", job);
+  // Charge the actual added fields without inventing an identity record slot.
+  // Any ceiling refusal rolls back the job and subject patch together.
+  await adjustQuotaForPatch(ctx, userId, "identity", subject, patch);
+  await ctx.db.patch(subject._id, patch);
 }
 
 export async function createDeviceRevocationCapacityForNewDevice(
@@ -376,6 +441,7 @@ export async function inspectLegacyOtpOrphanCandidate(
     .take(2);
   if (matchingSubjects.length > 1) corrupt();
   const subject = matchingSubjects[0];
+  if (subject?.accountDeletionCapacity !== undefined) corrupt();
   if (
     subject !== undefined
     && (
@@ -394,6 +460,9 @@ export async function inspectLegacyOtpOrphanCandidate(
     .first();
   if (verificationCode !== null) return null;
   const capacity = await loadAccountDeletionCapacity(ctx, user._id);
+  // Inline capacity is bound to a unique owner subject, so it cannot belong
+  // to this unbound-subject orphan shape.
+  if (capacity.kind === "inline_reserved") corrupt();
   if (
     validation === "maintenance"
     && capacity.kind === "reserved"
@@ -515,7 +584,7 @@ export async function backfillAuthorityReductionCapacityForUser(
   if (!(await hasExactOompaAuthTopology(ctx, user))) corrupt();
   let reserved = 0;
   if ((await loadAccountDeletionCapacity(ctx, userId)).kind === "legacy") {
-    await createAccountDeletionCapacityForNewUser(ctx, userId);
+    await createInlineAccountDeletionCapacityForLegacyUser(ctx, userId);
     reserved += 1;
   }
   for (const device of devices) {
@@ -532,22 +601,51 @@ export async function backfillAuthorityReductionCapacityForUser(
   return { reserved };
 }
 
+/** Release separate rows before deleting the full charged subject, padding included. */
+export async function releaseAccountDeletionCapacityForSubjectDeletion(
+  ctx: MutationCtx,
+  capacity: AccountDeletionCapacity,
+  subject: DataModel["authSubjects"]["document"],
+): Promise<void> {
+  if (capacity.kind === "legacy") {
+    if (subject.accountDeletionCapacity !== undefined) corrupt();
+    return;
+  }
+  if (subject.userId !== capacity.job.userId
+    || (capacity.kind === "inline_reserved" && subject._id !== capacity.subject._id)) corrupt();
+  if (capacity.kind === "reserved") {
+    await releaseQuotaForDelete(ctx, capacity.job.userId, "identity", capacity.identity);
+    await ctx.db.delete(capacity.identity._id);
+  }
+  await releaseQuotaForDelete(ctx, capacity.job.userId, "job", capacity.job);
+  await ctx.db.delete(capacity.job._id);
+  // The caller releases and deletes this subject exactly once; stripping the
+  // padding here would undercharge that later full-row release.
+}
+
 export async function consumeAccountDeletionCapacity(
   ctx: MutationCtx,
-  capacity: Extract<AccountDeletionCapacity, { kind: "reserved" }>,
+  capacity: Exclude<AccountDeletionCapacity, { kind: "legacy" }>,
   subject: DataModel["authSubjects"]["document"],
   subjectPatch: LogicalDocument,
   jobDocument: Omit<DataModel["accountDeletionJobs"]["document"], "_creationTime" | "_id">,
 ): Promise<void> {
-  if (subject.userId !== capacity.identity.userId) corrupt();
-  await consumeAuthorityReductionPatchReservationQuota(
-    ctx,
-    capacity.identity.userId,
-    "identity",
-    capacity.identity,
-    subject,
-    subjectPatch,
-  );
+  if (subject.userId !== capacity.job.userId) corrupt();
+  const patch = capacity.kind === "inline_reserved"
+    ? { ...subjectPatch, accountDeletionCapacity: undefined } : subjectPatch;
+  if (capacity.kind === "inline_reserved") {
+    if (subject._id !== capacity.subject._id || subject.accountDeletionCapacity === undefined
+      || !canonicalInlineReservation(subject.accountDeletionCapacity)
+      || subject.accountDeletionCapacity.createdAt !== capacity.job.createdAt
+      || subject.status !== "active" || patch.status !== "disabled"
+      || patch.authEpoch !== subject.authEpoch + 1
+      || logicalDocumentBytes({ ...subject, ...patch }) > logicalDocumentBytes(subject)) corrupt();
+    await adjustQuotaForPatch(ctx, capacity.job.userId, "identity", subject, patch);
+  } else {
+    await consumeAuthorityReductionPatchReservationQuota(
+      ctx, capacity.identity.userId, "identity", capacity.identity, subject, patch,
+    );
+  }
   const jobId = await ctx.db.insert("accountDeletionJobs", jobDocument);
   const storedJob = await ctx.db.get(jobId);
   if (storedJob === null) corrupt();
@@ -558,9 +656,9 @@ export async function consumeAccountDeletionCapacity(
     capacity.job,
     storedJob,
   );
-  await ctx.db.delete(capacity.identity._id);
+  if (capacity.kind === "reserved") await ctx.db.delete(capacity.identity._id);
   await ctx.db.delete(capacity.job._id);
-  await ctx.db.patch(subject._id, subjectPatch as never);
+  await ctx.db.patch(subject._id, patch as never);
 }
 
 export async function consumeDeviceRevocationCapacity(

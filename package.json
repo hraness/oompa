@@ -33,6 +33,7 @@
     "local-efficiency:apply": "bun run ./plugins/oompa-local-efficiency/skills/oompa-local-efficiency/scripts/bootstrap.ts --apply",
     "local-efficiency:check": "bun run ./plugins/oompa-local-efficiency/skills/oompa-local-efficiency/scripts/bootstrap.ts --check",
     "acceptance:live": "bun ./scripts/live-acceptance.ts",
+    "acceptance:deletion-backend": "bun ./scripts/deletion-backend-acceptance.ts",
     "acceptance:live:claude": "bun ./scripts/claude-live-acceptance.ts",
     "hosted:bootstrap": "bun ./scripts/bootstrap-hosted-sync.ts",
     "hosted:admission": "bun ./scripts/manage-hosted-admission.ts",

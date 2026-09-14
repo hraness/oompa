@@ -775,13 +775,15 @@ describe("command lifecycle physical quota reservations", () => {
     expect(await world.testRuntime.run(async (ctx) => ({
       accountIdentity: await ctx.db.query("accountDeletionIdentityReservations").collect(),
       accountJob: await ctx.db.query("accountDeletionJobReservations").collect(),
+      inlineSubjects: (await ctx.db.query("authSubjects").collect()).filter((row) => row.accountDeletionCapacity !== undefined),
       device: await ctx.db.query("deviceRevocationDeviceReservations").collect(),
       deviceJob: await ctx.db.query("deviceRevocationJobReservations").collect(),
       deviceReceipt: await ctx.db.query("deviceRevocationReceiptReservations").collect(),
       deviceSecurity: await ctx.db.query("deviceRevocationSecurityReservations").collect(),
     }))).toMatchObject({
-      accountIdentity: [{ category: "identity" }, { category: "identity" }],
+      accountIdentity: [{ category: "identity" }],
       accountJob: [{ category: "job" }, { category: "job" }],
+      inlineSubjects: [{ userId: world.userId, accountDeletionCapacity: { version: 2, reservation: "0".repeat(2048) } }],
       device: [
         { category: "device", deviceId: world.deviceId },
         { category: "device" },
@@ -3163,8 +3165,8 @@ describe("read-only authority reduction quota page", () => {
     const result = await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, diagnosticArgs);
     expect(result).toMatchObject({
       activationAuthorized: false, capacityMissing: 1, consistency: "page_snapshot", evaluated: 1,
-      demand: { accountPairs: 1, deviceQuartets: 1, paddingBytesLowerBound: 12_288, totalRecords: 6 },
-      quotaAuthorityUnknown: 0, repairAuthorized: false, scanned: 1,
+      demand: { accountPairs: 1, deviceQuartets: 1, paddingBytesLowerBound: 12_288, totalRecords: 5 },
+      quotaAuthorityUnknown: 0, repairAuthorized: false, scanned: 1, schemaVersion: 2,
       ceilings: {
         security: { recordsBlocked: 1 },
         serviceTotal: { bytesBlockedByLowerBound: 1, recordsBlocked: 1 },
@@ -3214,7 +3216,7 @@ describe("read-only authority reduction quota page", () => {
       await ctx.db.delete(memory._id);
     });
     expect(await world.testRuntime.query(auditAuthorityReductionQuotaCeilingsPage, diagnosticArgs))
-      .toMatchObject({ capacityMissing: 1, evaluated: 0, quotaAuthorityUnknown: 1, demand: { totalRecords: 6 } });
+      .toMatchObject({ capacityMissing: 1, evaluated: 0, quotaAuthorityUnknown: 1, demand: { totalRecords: 5 } });
     await world.testRuntime.run(async (ctx) => {
       await ctx.db.insert("accountDeletionIdentityReservations", {
         capacityReservation: "0".repeat(2_048), capacityVersion: 1,

@@ -2,6 +2,7 @@
 
 - `schema.ts` defines Oompa cloud identity, device, envelope, projection, lease, command, and retention state.
 - Auth modules implement verified-email login and device enrollment.
+- `authorityReductionCapacity.ts` preserves dedicated deletion reserves for new identities and uses versioned padding on an existing unique active subject plus a job reserve for legacy backfill. Inline reservation charges bytes without another identity record; consumption proves the subject patch does not grow, and cleanup releases the full padded subject exactly once.
 - Sync and command modules authorize exact device and lease generations. Session commands are lease-fenced; device commands are addressed to a device and fenced by that daemon's boot authority instead.
 - `commandLifecycle.ts` exposes a bounded read-only authority-reduction quota diagnostic. It shares current ledger validation with quota accounting, emits aggregate ceiling counts and keeps unknown byte costs explicit.
 - `quota.ts` audits predecessor ledger upgrades and exposes bounded read-only corruption reason counts and missing-shape histograms through the same classifier. Its distinct empty-memory completion requires both owner memory indexes empty and inserts only absent memory authority rows. The older unmarked five-resource predecessor additionally requires the indexed owner detail stream empty before adding zero live-chunk authority; compact history and existing counters remain intact. Diagnosis never grants repair authority or changes stored counters.

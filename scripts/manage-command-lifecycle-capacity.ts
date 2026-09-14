@@ -178,7 +178,7 @@ export const authorityReductionQuotaDiagnosticPageSchema = z.object({
     accountPairs: z.number().int().min(0).max(pageSize),
     deviceQuartets: z.number().int().min(0).max(16 * pageSize),
     paddingBytesLowerBound: z.number().int().min(0).max(66 * pageSize * 2_048),
-    totalRecords: z.number().int().min(0).max(66 * pageSize),
+    totalRecords: z.number().int().min(0).max(65 * pageSize),
   }).strict(),
   evaluated: headroomCount,
   isDone: z.boolean(),
@@ -189,7 +189,7 @@ export const authorityReductionQuotaDiagnosticPageSchema = z.object({
   ready: headroomCount,
   repairAuthorized: z.literal(false),
   scanned: headroomCount,
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   topologyBlocked: headroomCount,
 }).strict().superRefine((value, context) => {
   const { accountPairs, deviceQuartets, paddingBytesLowerBound, totalRecords } = value.demand;
@@ -201,12 +201,13 @@ export const authorityReductionQuotaDiagnosticPageSchema = z.object({
     || accountPairs > value.capacityMissing
     || deviceQuartets > 16 * value.capacityMissing
     || accountPairs + deviceQuartets < value.capacityMissing
-    || totalRecords !== 2 * accountPairs + 4 * deviceQuartets
-    || paddingBytesLowerBound !== totalRecords * authorityReductionCapacityReservation.length
+    || totalRecords !== accountPairs + 4 * deviceQuartets
+    || paddingBytesLowerBound !== (2 * accountPairs + 4 * deviceQuartets) * authorityReductionCapacityReservation.length
     || AUTHORITY_REDUCTION_QUOTA_CEILINGS.some((key) =>
       value.ceilings[key].applicable > value.evaluated)
     || job.applicable !== value.evaluated
     || userTotal.applicable !== value.evaluated || serviceTotal.applicable !== value.evaluated
+    || identity.recordsBlocked !== 0
     || identity.applicable > accountPairs
     || identity.applicable < accountPairs - value.quotaAuthorityUnknown
     || device.applicable > deviceQuartets
@@ -309,6 +310,7 @@ export type CommandCapacityRetirementReceipt = z.infer<
 >;
 
 export const commandCapacityReadinessEvidenceSchema = z.object({
+  authorityReductionPolicy: z.literal("inline-account-deletion-backfill-v1"),
   authorityReductionServiceDebt: z.literal(0),
   authorityReductionUserCandidates: z.array(z.string().min(1).max(1_024)).max(
     pageSize,
@@ -330,7 +332,7 @@ export const commandCapacityReadinessEvidenceSchema = z.object({
   retirementRequests: z.number().int().min(0).max(maximumExplicitRetirements),
   retirementReceiptDigest: z.union([z.string().regex(digestPattern), z.null()]),
   runtimeRevision: z.string().uuid(),
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   selfDigest: z.string().regex(digestPattern),
   sourceCommit: z.string().regex(sourceCommitPattern),
   status: z.literal("ready"),
@@ -382,13 +384,14 @@ const capacityActivationReadbackSchema = z.object({
 }).strict();
 
 export const commandCapacityActivationReceiptSchema = z.object({
+  authorityReductionPolicy: z.literal("inline-account-deletion-backfill-v1"),
   activatedAtMs: z.number().int().nonnegative().safe(),
   candidateDeployDigest: z.string().regex(digestPattern),
   capacityEvidenceDigest: z.string().regex(digestPattern),
   kind: z.literal("command-capacity-activation-receipt"),
   lifecycleCapacityVersion: z.literal(commandLifecycleCapacityVersion),
   runtimeAttestation: runtimeReleaseAttestationSchema,
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   selfDigest: z.string().regex(digestPattern),
   sourceCommit: z.string().regex(sourceCommitPattern),
   status: z.literal("activated"),
@@ -1380,13 +1383,14 @@ export async function manageCommandLifecycleCapacity(
     await proveBinding();
     requireExactReadinessEvidence();
     const receipt = commandCapacityActivationReceiptSchema.parse(withSelfDigest({
+      authorityReductionPolicy: "inline-account-deletion-backfill-v1" as const,
       activatedAtMs: activated.readiness.activatedAt,
       candidateDeployDigest,
       capacityEvidenceDigest: evidence.selfDigest,
       kind: "command-capacity-activation-receipt" as const,
       lifecycleCapacityVersion: commandLifecycleCapacityVersion,
       runtimeAttestation: candidate.after,
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       sourceCommit: options.sourceCommit,
       status: "activated" as const,
       target,
@@ -1670,7 +1674,7 @@ export async function manageCommandLifecycleCapacity(
             kind: "authority_reduction_quota_diagnostic",
             pages: pageIndex + 1,
             repairAuthorized: false,
-            schemaVersion: 1,
+            schemaVersion: 2,
             state: "diagnostic_complete",
           };
         }
@@ -1947,6 +1951,7 @@ export async function manageCommandLifecycleCapacity(
     const evidencePath = options.evidencePath;
     if (evidencePath === undefined) throw new CapacityOperatorError("usage_invalid");
     const readinessEvidence = commandCapacityReadinessEvidenceSchema.parse(withSelfDigest({
+      authorityReductionPolicy: "inline-account-deletion-backfill-v1" as const,
       authorityReductionServiceDebt: 0 as const,
       authorityReductionUserCandidates: [],
       authorityReductionUserCandidatesTruncated: false as const,
@@ -1966,7 +1971,7 @@ export async function manageCommandLifecycleCapacity(
       retirementRequests: explicitRetirements.length,
       retirementReceiptDigest: retirementReceiptDigest ?? null,
       runtimeRevision: candidate.after.runtimeRevision,
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       sourceCommit: options.sourceCommit,
       status: "ready" as const,
       target,
@@ -2088,7 +2093,7 @@ export async function executeCommandLifecycleCapacity(options: ExecuteOptions): 
       ...result,
       candidateDeployEvidence: parsed.deployEvidencePath,
       sourceCommit: parsed.sourceCommit,
-      version: result.state === "diagnostic_complete" ? 1 : 2,
+      version: 2,
     })}\n`);
     return 0;
   } catch (error: unknown) {

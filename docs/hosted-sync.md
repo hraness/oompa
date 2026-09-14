@@ -276,14 +276,19 @@ launcher with a package-script alias.
 The additive command-lifecycle and durable-job-capacity deployment is a
 forward-only boundary as soon as it admits one command, creates one command
 lifecycle/security reservation, creates any account-deletion or
-device-revocation capacity row, or accepts a capacity-backed deletion or
-revocation job. The authority-reduction rows are the account identity/job pair
-and the device/job/security/receipt quartet for each non-revoked device. That
-is true for marker-absent traffic and migration repairs, not only after a
-marker-2 browser or daemon goes live. Once any such row exists, never redeploy
+device-revocation capacity row, adds an inline account-deletion reserve, or
+accepts a capacity-backed deletion or revocation job. Account capacity consists
+of either the dedicated identity/job pair or the legacy inline subject reserve
+and dedicated job row described below. Device capacity is a
+device/job/security/receipt quartet for each non-revoked device. That is true
+for marker-absent traffic and migration repairs, not only after a marker-2
+browser or daemon goes live. Once any such capacity exists, never redeploy
 a pre-capacity hosted predecessor: it cannot consume command reservations
 during settlement, account for the new physical job shape, exchange the
 authority-reduction rows, or erase every obligation during account deletion.
+Once an inline subject reserve exists, the same restriction applies to every
+pre-inline schema and runtime, including versions that support dedicated
+capacity rows: they cannot preserve or consume the inline field.
 Repair forward from the exact currently live candidate instead.
 
 Run the capacity operator after the candidate deployment and any required
@@ -344,7 +349,7 @@ run_command_capacity diagnose-headroom \
   --deployment-url https://steady-otter-321.convex.cloud
 ```
 
-The diagnostic emits a separate version-1 result with
+The diagnostic emits a separate version-2 result with
 `state: "diagnostic_complete"`, `repairAuthorized: false` and
 `activationAuthorized: false`. Completion means its bounded observations and
 source/target checks finished. It does not mean quota fits, clear a prior
@@ -353,14 +358,20 @@ version-2 results and existing acceptance requirements.
 
 Only aggregate counts leave the query. The seven fixed ceiling dimensions are
 identity, job, device, security and receipt categories, user total and service
-total. A missing account pair needs two records; each missing non-revoked-device
-quartet needs four. `recordsBlocked` is exact for completing that identity's
-missing sets from the observed ledger. `bytesBlockedByLowerBound` proves a
-refusal only when the required 2048-byte padding per row already exceeds a
-ceiling. All other byte cases remain `bytesUnknown`, including equality at that
-padding floor. Future document metadata is not invented. Counts across ceilings
-can overlap, and service observations do not simulate successively repairing
-every identity.
+total. A missing legacy account set needs one new job record; its identity
+reserve is added to the existing auth subject without adding an identity record.
+Each missing non-revoked-device quartet needs four records. Exact record demand
+is `accountPairs + 4 * deviceQuartets`. Padding demand remains
+`(2 * accountPairs + 4 * deviceQuartets) * 2048` bytes, because the inline
+subject reserve and dedicated account job each retain their own 2 KiB padding.
+
+`recordsBlocked` is exact for completing that identity's missing sets from the
+observed ledger. `bytesBlockedByLowerBound` proves a refusal only when the
+required padding already exceeds a ceiling. The inline reserve's actual stored
+byte growth is charged to identity; the diagnostic does not invent its metadata
+cost. All other byte cases remain `bytesUnknown`, including equality at the
+padding floor. Counts across ceilings can overlap, and service observations do
+not simulate successively repairing every identity.
 
 `ready` remains the existing capacity-classifier count, not quota admission.
 Only `capacityMissing` identities have their quota ledgers evaluated;
@@ -390,8 +401,12 @@ aggregate `authorityReductionCapacityMissingDebt`,
 `authorityReductionTopologyBlockedDebt` classifications. The legacy
 `authorityReductionUserCandidates` and
 `authorityReductionUserCandidatesTruncated` fields remain present but are
-always `[]` and `false`. Command-capacity stdout is version 2; protected
-readiness evidence remains schema version 1. Status cannot infer a hard quota
+always `[]` and `false`. Command-capacity stdout remains version 2. Protected
+local readiness evidence and its activation receipt use schema version 2 with
+`authorityReductionPolicy: "inline-account-deletion-backfill-v1"`. Historical
+schema-1 local receipts cannot authorize this policy. The hosted readiness and
+activation contract remains version 1, and the executor marker remains 2.
+Status cannot infer a hard quota
 without attempting a transactional reservation, so
 `authorityReductionHardQuotaBlockedThisRun` is zero on a read-only run. The
 remaining fields include `pendingPreparedDebt`, `lifecycleDebt` (unreserved `effect_started` rows),
@@ -418,15 +433,28 @@ run_command_capacity repair \
 
 `repair` classifies and, in the same runtime-fenced server operation,
 transactionally reclassifies each prospective mutation. It writes only the
-exact `capacity_missing` state. It then backfills a real account identity/job
-reservation pair and a real device/job/security/receipt quartet for every
-non-revoked device. Each row
-contains its own 2 KiB capacity field and is additionally charged for normal
-document metadata.
-New identities and devices create these rows atomically with admission. Delete
-and revoke exchange each category-matched row for its exact authority patch,
-job, security event, or idempotency receipt with a non-growing aggregate quota
-delta; they never bypass the hard ceiling. The same repair installs the
+exact `capacity_missing` state. For a legacy account without either reservation,
+it adds `authSubjects.accountDeletionCapacity` to the unique active subject and
+creates the dedicated account job reservation. The inline object contains
+`version: 2`, `reservation` as exactly 2048 ASCII `0` characters, and `createdAt`.
+The job row uses the same timestamp. Adding the inline object charges its exact
+stored byte growth to identity and adds zero identity records. The job row is
+charged normally. This preserves the 256-record identity limit and every other
+quota; it does not remove auth records or other user data to create headroom.
+
+Existing dedicated version-1 account pairs remain unchanged. Fresh identities
+still create that dedicated pair atomically with admission. Every missing
+non-revoked-device set receives the existing device/job/security/receipt quartet.
+Each dedicated row retains its own 2 KiB padding plus charged document metadata.
+
+Account deletion consumes an inline set by removing the inline reserve in the
+same subject patch that disables the subject and advances its auth epoch. It
+proves that the stored subject does not grow and exchanges the dedicated job
+row for the deletion job. Mixed inline/dedicated identity reserves, partial
+sets, duplicate subjects, mismatched timestamps or reservation drift refuse.
+Dedicated account deletion and device revocation continue to exchange their
+category-matched rows for the exact authority patch, job, security event or
+idempotency receipt with a non-growing quota delta. The same repair installs the
 physical session (352 KiB) or device (24 KiB) command lifecycle reservation and
 the one-record security reservation before a legacy command may cross the
 effect boundary. It also removes unsafe cleanup timestamps from unobserved
@@ -1418,9 +1446,10 @@ cleanup-eligible is 16,888,144 logical bytes, under a tenth of the tier; the
 tier holds twelve such accounts at once.
 
 Authority-reduction capacity is physical and is included in those same hard
-totals: two 2 KiB reservation documents per identity and four per non-revoked
-device, plus normal document metadata. It is intentionally not a virtual
-counter or an uncharged emergency exception. The rows slightly reduce space
+totals: each identity has either two dedicated 2 KiB reservation documents or
+an inline 2 KiB subject reserve and one dedicated job reserve. Each non-revoked
+device has four reservation documents, with normal document metadata charged
+in both forms. The reserved bytes slightly reduce space
 available to ordinary data, then are exchanged category-for-category when an
 account deletion or device revocation is accepted. Command lifecycle and
 terminal-security reservations are likewise charged while the command is in

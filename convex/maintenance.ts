@@ -31,6 +31,7 @@ import {
   authorityReductionOrphanRetentionMs,
   inspectLegacyOtpOrphanCandidate,
   loadAccountDeletionCapacity,
+  releaseAccountDeletionCapacityForSubjectDeletion,
 } from "./authorityReductionCapacity";
 import {
   ATTENTION_NOTIFICATION_TERMINAL_RETENTION_MS,
@@ -271,6 +272,7 @@ async function cleanAbandonedIdentity(ctx: MutationCtx, now: number, limit: numb
     .first();
   if (subject === null) return 0;
   if (subject.userId === undefined) {
+    if (subject.accountDeletionCapacity !== undefined) throw new Error("Maintenance authority is corrupt.");
     await releaseServiceQuotaForDelete(ctx, subject);
     await ctx.db.delete(subject._id);
     return 1;
@@ -355,17 +357,12 @@ async function cleanAbandonedIdentity(ctx: MutationCtx, now: number, limit: numb
   }
 
   const capacity = await loadAccountDeletionCapacity(ctx, user._id);
-  const required = capacity.kind === "reserved" ? 4 : 2;
+  const required = capacity.kind === "reserved" ? 4 : capacity.kind === "inline_reserved" ? 3 : 2;
   // Delete authority and its physical escape capacity in one transaction.
   // An earlier bounded sweep must never leave an active unverified identity
   // without the pair that guarantees account deletion at a hard ceiling.
   if (remaining < required) return limit - remaining;
-  if (capacity.kind === "reserved") {
-    await releaseQuotaForDelete(ctx, user._id, "identity", capacity.identity);
-    await releaseQuotaForDelete(ctx, user._id, "job", capacity.job);
-    await ctx.db.delete(capacity.identity._id);
-    await ctx.db.delete(capacity.job._id);
-  }
+  await releaseAccountDeletionCapacityForSubjectDeletion(ctx, capacity, subject);
   await releaseQuotaForDelete(ctx, user._id, "identity", subject);
   await releaseQuotaForStoredIdentity(ctx, user._id, user);
   await finalizeUserQuotaAuthorityForDelete(ctx, user._id);
@@ -404,6 +401,7 @@ async function cleanOrphanedAuthUsers(
     const orphan = await inspectLegacyOtpOrphanCandidate(ctx, user, now, "maintenance");
     if (orphan?.disposition !== "orphan_cleanup_eligible") continue;
     const { account, capacity, subject } = orphan;
+    if (capacity.kind === "inline_reserved") throw new Error("Maintenance authority is corrupt.");
     const required = (capacity.kind === "reserved" ? 4 : 2)
       + (subject === undefined ? 0 : 1);
     if (processed + required > limit) throw new Error("Maintenance category exceeded its budget.");

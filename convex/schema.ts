@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import {
   accountBindingState,
   accountDeletionCategory,
+  accountDeletionInlineCapacity,
   accountDeletionState,
   authorityReductionCapacityReservation,
   authorityReductionCapacityVersion,
@@ -55,6 +56,7 @@ export default defineSchema({
     .index("signature", ["signature"])
     .index("sessionId", ["sessionId"]),
   authSubjects: defineTable({
+    accountDeletionCapacity: v.optional(accountDeletionInlineCapacity),
     admissionInviteId: v.optional(v.id("authInvites")),
     admittedBy: v.optional(authSubjectAdmittedBy),
     authEpoch: v.number(),

@@ -1711,7 +1711,7 @@ export const auditAuthorityReductionQuotaCeilingsPage = internalQuery({
       kind: "authority_reduction_quota_diagnostic" as const,
       repairAuthorized: false as const,
       scanned: page.page.length,
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
     };
   },
 });
