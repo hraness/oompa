@@ -28,7 +28,6 @@ import {
 } from "./content.ts";
 import { docsPages, docsPathForSection, docsPaths, findDocsPage, renderDocsMarkdown, type DocsPath } from "./docs-content.ts";
 import {
-  OOMPA_MAILING_TURNSTILE_SITEKEY_ENV,
   oompaMailingListConfig,
   renderOompaAnalyticsScript,
   renderOompaSiteFooter,
@@ -1398,9 +1397,9 @@ describe("public content contract", () => {
       const footer = /<footer\b[\s\S]*?<\/footer>/u.exec(document)?.[0];
       expect(footer).toContain('data-slot="hraness-site-footer"');
       expect(footer?.match(/data-slot="hraness-mark"/gu)).toHaveLength(1);
-      expect(footer?.match(/data-slot="social-icon"/gu)).toHaveLength(5);
+      expect(footer?.match(/data-slot="social-icon"/gu)).toHaveLength(4);
       expect(footer).not.toContain("hraness-site-footer__wordmark");
-      expect(footer).toContain('data-mailing-list="none"');
+      expect(footer).toContain('data-mailing-list="signup"');
       expect(footer).toContain('href="https://substack.com/@hraness"');
       expect(
         [...(footer?.matchAll(/<a\b[^>]*\shref="([^"]+)"/gu) ?? [])]
@@ -1412,59 +1411,22 @@ describe("public content contract", () => {
     }
   });
 
-  test("renders only the Oompa mailing audience when Turnstile is configured", () => {
-    const sitekey = "1x00000000000000000000AA";
-    expect(oompaMailingListConfig({
-      [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: sitekey,
-    })).toEqual({
+  test("renders only the Oompa mailing audience without a client challenge", () => {
+    expect(oompaMailingListConfig()).toEqual({
       audience: "hra",
       kind: "signup",
-      turnstileSitekey: sitekey,
     });
-    expect(oompaMailingListConfig({})).toEqual({ kind: "none" });
-    expect(oompaMailingListConfig({
-      [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: "",
-    })).toEqual({ kind: "none" });
 
-    const footer = renderOompaSiteFooter({
-      [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: sitekey,
-    });
+    const footer = renderOompaSiteFooter();
     expect(footer).toContain('data-mailing-list="signup"');
     expect(footer).toContain('name="audience" type="hidden" value="hra"');
-    expect(footer).toContain('data-action="mailing_hra"');
+    expect(footer).toContain('name="website" tabindex="-1"');
     expect(footer).toContain(
       'action="https://account.hraness.com/api/mailing/subscribe"',
     );
-    expect(footer).toContain(
-      'src="https://challenges.cloudflare.com/turnstile/v0/api.js"',
-    );
+    expect(footer).not.toContain("challenges.cloudflare.com");
+    expect(footer).not.toContain("turnstile");
     expect(footer).toContain('href="https://substack.com/@hraness"');
-  });
-
-  test("fails production closed on missing or malformed Turnstile configuration", () => {
-    expect(oompaMailingListConfig({ VERCEL_ENV: "preview" }))
-      .toEqual({ kind: "none" });
-    for (const turnstileSitekey of [undefined, ""]) {
-      expect(() => {
-        oompaMailingListConfig({
-          [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: turnstileSitekey,
-          VERCEL_ENV: "production",
-        });
-      })
-        .toThrow(OOMPA_MAILING_TURNSTILE_SITEKEY_ENV);
-    }
-    for (const turnstileSitekey of [
-      "too-short",
-      "1x00000000000000000000AA!",
-      "x".repeat(101),
-    ]) {
-      expect(() => {
-        oompaMailingListConfig({
-          [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: turnstileSitekey,
-        });
-      })
-        .toThrow(OOMPA_MAILING_TURNSTILE_SITEKEY_ENV);
-    }
   });
 
   test("renders an inert noindex preview canonicalized to the full product page", () => {

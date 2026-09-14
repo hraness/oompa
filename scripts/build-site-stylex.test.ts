@@ -65,35 +65,29 @@ const makeComplete = () => {
 };
 
 describe("static site compiler projection", () => {
-  test("captures the three original renderers and six exact documentation paths with one environment", () => {
-    const environment = { OOMPA_PUBLIC_BUILD: "fixture" };
+  test("captures the three original renderers and six exact documentation paths", () => {
     const exports = renderersFor();
     const captured = captureSiteDocuments({
       ...exports,
-      renderSiteHtml: (content: undefined, received: unknown) => {
+      renderSiteHtml: (content: undefined) => {
         expect(content).toBeUndefined();
-        expect(received).toBe(environment);
         return exports.renderSiteHtml();
       },
-      renderDocsPages: (received: unknown) => {
-        expect(received).toBe(environment);
-        return docsMap();
-      },
-    }, environment);
+    });
     expect([...captured.keys()]).toEqual(htmlRoutes);
     expect(captured.get("docs/web/index.html")).toBe("<html>/docs/web/</html>");
     for (const change of [
       { renderSiteHtml: undefined }, { renderSiteHtml: () => 1 },
       { renderPrivacyHtml: undefined }, { renderPreviewHtml: undefined },
       { renderDocsPages: undefined },
-    ]) expect(() => captureSiteDocuments({ ...exports, ...change }, {})).toThrow();
+    ]) expect(() => captureSiteDocuments({ ...exports, ...change })).toThrow();
   });
 
   test("rejects incomplete, foreign, accessor, symbolic and non-string documentation outputs", () => {
     for (const route of docsRoutes) {
       const docs = Object.fromEntries(Object.entries(docsMap()).filter(([path]) => path !== route));
-      expect(() => captureSiteDocuments(renderersFor(docs), {})).toThrow();
-      expect(() => captureSiteDocuments(renderersFor({ ...docsMap(), [route]: undefined }), {})).toThrow();
+      expect(() => captureSiteDocuments(renderersFor(docs))).toThrow();
+      expect(() => captureSiteDocuments(renderersFor({ ...docsMap(), [route]: undefined }))).toThrow();
     }
     let invoked = false;
     const accessor = Object.defineProperty(docsMap(), "/docs/", { enumerable: true, get() { invoked = true; return "unexpected"; } });
@@ -102,7 +96,7 @@ describe("static site compiler projection", () => {
       { ...docsMap(), "/docs/private/": "html" },
       { ...docsMap(), [Symbol("hidden")]: "html" },
       Object.defineProperty(docsMap(), "/docs/", { enumerable: false }), accessor,
-    ]) expect(() => captureSiteDocuments(renderersFor(value), {})).toThrow();
+    ]) expect(() => captureSiteDocuments(renderersFor(value))).toThrow();
     expect(invoked).toBe(false);
   });
 
@@ -112,8 +106,8 @@ describe("static site compiler projection", () => {
       fc.string({ minLength: 1, maxLength: 80 }).filter((path) => !(docsRoutes as readonly string[]).includes(path)),
       (order, foreignPath) => {
         const docs = Object.fromEntries(order.map((route) => [route, `<html>${route}</html>`]));
-        expect([...captureSiteDocuments(renderersFor(docs), {}).keys()]).toEqual(htmlRoutes);
-        expect(() => captureSiteDocuments(renderersFor({ ...docs, [foreignPath]: "unexpected" }), {})).toThrow();
+        expect([...captureSiteDocuments(renderersFor(docs)).keys()]).toEqual(htmlRoutes);
+        expect(() => captureSiteDocuments(renderersFor({ ...docs, [foreignPath]: "unexpected" }))).toThrow();
       },
     ), { numRuns: 40 });
   });

@@ -42,41 +42,13 @@ const renderShellCode = (value: string): string => {
   return `<code class="${classes(highlighted.className, "codeContent")}">${highlighted.html}</code>`;
 };
 
-export const OOMPA_MAILING_TURNSTILE_SITEKEY_ENV =
-  "NEXT_PUBLIC_HRANESS_MAILING_TURNSTILE_SITEKEY" as const;
+export const oompaMailingListConfig = (): HranessMailingListConfig => ({
+  audience: "hra",
+  kind: "signup",
+});
 
-const turnstileSitekeyPattern = /^[A-Za-z0-9_-]{20,100}$/u;
-const emptySiteEnvironment: Readonly<Record<string, string | undefined>> =
-  Object.freeze({});
-
-export const oompaMailingListConfig = (
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
-): HranessMailingListConfig => {
-  const turnstileSitekey = environment[OOMPA_MAILING_TURNSTILE_SITEKEY_ENV];
-  if (turnstileSitekey === undefined || turnstileSitekey.length === 0) {
-    if (environment.VERCEL_ENV === "production") {
-      throw new Error(
-        `${OOMPA_MAILING_TURNSTILE_SITEKEY_ENV} must be configured for Vercel Production.`,
-      );
-    }
-    return { kind: "none" };
-  }
-  if (!turnstileSitekeyPattern.test(turnstileSitekey)) {
-    throw new Error(
-      `${OOMPA_MAILING_TURNSTILE_SITEKEY_ENV} must be a 20-100 character URL-safe public Cloudflare Turnstile sitekey.`,
-    );
-  }
-  return {
-    audience: "hra",
-    kind: "signup",
-    turnstileSitekey,
-  };
-};
-
-export const renderOompaSiteFooter = (
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
-): string => renderHranessSiteFooter({
-  mailingList: oompaMailingListConfig(environment),
+export const renderOompaSiteFooter = (): string => renderHranessSiteFooter({
+  mailingList: oompaMailingListConfig(),
 });
 
 export const renderAskAiAboutThis = (canonicalUrl: string): string =>
@@ -250,7 +222,6 @@ const renderProjectResources = (content: PublicContent): string => `<aside aria-
 
 export const renderSiteHtml = (
   content: PublicContent = publicContent,
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
 ): string => {
   return `<!doctype html>
 <html ${paletteAttributes} data-hraness-marketing-preset="editorial" data-hraness-material="lantern" lang="en">
@@ -270,7 +241,7 @@ ${renderMarketingPage(content)}
 </main>
 ${renderAskAiAboutThis(`${content.siteUrl}/`)}
 ${renderProjectResources(content)}
-${renderOompaSiteFooter(environment)}
+${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>
 </body>
@@ -310,7 +281,6 @@ ${renderHead(content, {
 
 export const renderPrivacyHtml = (
   content: PublicContent = publicContent,
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
 ): string => {
   const privacy = findSection(content, "privacy");
   return `<!doctype html>
@@ -331,7 +301,7 @@ ${renderMarketingHeader(content, "/privacy/")}
 </main>
 ${renderAskAiAboutThis(`${content.siteUrl}/privacy/`)}
 ${renderProjectResources(content)}
-${renderOompaSiteFooter(environment)}
+${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 </body>
 </html>
@@ -343,7 +313,6 @@ const docsLabel = (page: DocsPage): string => ({ "/docs/": "Overview", "/docs/st
 /** Static, navigable documents. Search and screen controls are progressive enhancements. */
 export const renderDocsHtml = (
   page: DocsPage,
-  environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment,
 ): string => {
   const content = publicContent;
   const reference = docsReferenceSections(page);
@@ -379,10 +348,10 @@ ${renderMarketingHeader(content, page.path)}
 </main></div>
 ${renderAskAiAboutThis(`${content.siteUrl}${page.path}`)}
 ${renderProjectResources(content)}
-${renderOompaSiteFooter(environment)}
+${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>
 </body></html>\n`;
 };
 
-export const renderDocsPages = (environment: Readonly<Record<string, string | undefined>> = emptySiteEnvironment): Readonly<Record<string, string>> => Object.fromEntries(docsPages.map((page) => [page.path, renderDocsHtml(page, environment)]));
+export const renderDocsPages = (): Readonly<Record<string, string>> => Object.fromEntries(docsPages.map((page) => [page.path, renderDocsHtml(page)]));
