@@ -877,6 +877,7 @@ async function finalizeDeletion(
   if (
     subject?.userId !== job.userId
     || subject.status !== "disabled"
+    || subject.accountDeletionCapacity !== undefined
     || user?._id !== job.userId
   ) rejectDeletion();
 
@@ -981,7 +982,7 @@ export const request = mutation({
     };
     const capacity = await loadAccountDeletionCapacity(ctx, userId);
     const jobDocument = {
-      ...(capacity.kind === "reserved"
+      ...(capacity.kind !== "legacy"
         ? { capacityReservation: durableJobCapacityReservation }
         : {}),
       category: "commands_and_leases",
@@ -993,7 +994,7 @@ export const request = mutation({
       updatedAt: now,
       userId,
     } as const;
-    if (capacity.kind === "reserved") {
+    if (capacity.kind !== "legacy") {
       await consumeAccountDeletionCapacity(
         ctx,
         capacity,

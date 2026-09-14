@@ -2,7 +2,7 @@
 title: Hosted memory quota authority upgrade
 description: Preserve predecessor quota accounting while adding proven-empty memory and live-tail authority through a bounded explicit migration.
 type: plan
-status: in-progress
+status: complete
 area: oompa
 tags: [convex, memory, quota, migration]
 relations:
@@ -11,28 +11,37 @@ relations:
 
 # Hosted memory quota authority upgrade
 
-## Current evidence and prepared follow-up
+## Completed quota upgrade
 
-The protected v0.8.2 candidate at
-`db5e4ba69e657ab179bbebffef1d13b4d0aa13ac` is deployed. Its live audit scanned
-four ledgers: two `legacy`, one `current` and one `corrupt`. The source-bound
-diagnostic identified exactly one unmarked eleven-category, five-resource
-ledger missing the `memory` category and the `live_chunk` and `memory_space`
-resources. It reported `schema_shape`; no repair has been performed and hosted
-capacity activation remains separate.
+[PR 207](https://github.com/hraness/oompa/pull/207) merged as
+`899bfb6fe6e1235643d88239033140e833d74ea9` and the protected forward candidate
+was deployed. The schema-3 operator completed the explicit additive repair of
+three ledgers: `upgraded: 2` and `upgradedLiveTail: 1`. Two complete clean audits
+verified all four ledgers as current, and the protected completion receipt was
+published. Existing accounting and content were preserved.
 
-Historical source confirms that the five-resource layout predates `live_chunk`.
-Detail chunks already existed then, so the missing row does not prove zero.
-The prepared schema-3 policy below admits only that exact layout after bounded
-owner-index absence checks in the same transaction. The focused operator suite
-passes 32 tests, including new count conservation, schema-1/schema-2 refusal,
-live-tail replay and lost-response reconciliation. The focused quota, schema
-and live-tail suites pass 95 tests. Strict TypeScript, scoped ESLint, baseline
-adoption and all 33 release-workflow equivalence tests pass. Independent
-full-change and impact review passes, including caller isolation, unchanged
-current ledger contracts and additive index deployment. Integration, deployment
-and live repair/readback for this policy remain pending. Earlier validation below does not qualify this new
-transition.
+Before repair, the v0.8.2 candidate at
+`db5e4ba69e657ab179bbebffef1d13b4d0aa13ac` had reported two `legacy`, one
+`current` and one `corrupt` ledger. Its diagnostic identified exactly one
+unmarked eleven-category, five-resource ledger missing `memory`, `live_chunk`
+and `memory_space`. Historical source confirmed that this shape predated
+`live_chunk`, while detail chunks already existed. The reviewed schema-3 policy
+therefore required bounded owner-index absence proofs before adding zero rows.
+
+The focused operator suite passed 32 tests, including count conservation,
+schema-1/schema-2 refusal, live-tail replay and lost-response reconciliation.
+Quota, schema and live-tail suites passed 95 tests. Strict TypeScript, scoped
+ESLint, baseline adoption and all 33 release-workflow equivalence tests passed.
+Independent full-change and impact review passed, including caller isolation,
+unchanged current ledger contracts and additive index deployment. Required
+integration checks passed before merge.
+
+Quota upgrade completion does not activate hosted command writers. The later
+capacity diagnostic validated all four ledgers and found three identities ready
+and one missing capacity, with an identity-record ceiling blocker. The separate
+[authority-reduction plan](authority-reduction-headroom.md) tracks that repair
+and its own protected zero-debt activation gates. No daily-driver qualification
+is inferred from this quota receipt.
 
 ## Earlier memory-upgrade evidence
 
@@ -116,7 +125,7 @@ no missing old authority or nonzero retained memory counter is reconstructed,
 reset or removed. Each page reclassifies current state, so a prior eligible
 audit does not authorize a later changed ledger.
 
-## Prepared empty-live-tail completion
+## Empty-live-tail completion
 
 The `legacy_empty_live_tail` disposition accepts only the historical unmarked
 eleven-category, five-resource ledger. The only absent authority rows are the
@@ -205,8 +214,8 @@ cover the six-way audit partition, `upgradedLiveTail` conservation and refusal o
 historical schema-2 evidence; all 32 focused operator tests and 95 server
 contract tests pass. Strict TypeScript, scoped ESLint, baseline adoption and
 all 33 release-workflow equivalence tests pass. Independent full-change
-and impact review passes. The exact integration gate remains pending for this
-extension.
+and impact review passes. PR 207 passed its integration gate, merged and was
+deployed; the protected repair and two clean readbacks are complete.
 
 1. Reproduction is complete: two ordinary writes fail on the explicit predecessor
    shape; the same counters pass when both new rows are supplied.
@@ -222,8 +231,8 @@ extension.
    launcher tests cover the preserved source and environment boundary, fixed
    command selection and neutral startup documentation. Neither status nor the
    completion receipt admits command activation.
-4. Independent review and the repository integration gates remain required.
-   Server tests alone do not admit deployment or a daily-driver claim.
+4. Independent review and the repository integration gates passed for PR 207.
+   This evidence admits its source and deployment, not a daily-driver claim.
 5. Source qualification, supported deployment, read-only audit, bounded repair
-   and readback remain separate operational steps. Existing hard-quota capacity
-   repair and activation retain their own guards and evidence requirements.
+   and two clean readbacks are complete for this quota policy. Hard-quota capacity
+   repair and activation retain their separate guards and evidence requirements.

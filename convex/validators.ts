@@ -154,6 +154,14 @@ export const maximumDurableJobCapacityCharacters = 512;
 // mutation only performs a physically non-growing exchange.
 export const authorityReductionCapacityVersion = 1 as const;
 export const authorityReductionCapacityReservation = "0".repeat(2 * 1_024);
+// Legacy backfill can reserve subject-patch bytes on its existing subject
+// without consuming an additional identity record. Fresh users retain v1 rows.
+export const accountDeletionInlineCapacityVersion = 2 as const;
+export const accountDeletionInlineCapacity = v.object({
+  version: v.literal(accountDeletionInlineCapacityVersion),
+  reservation: v.string(),
+  createdAt: v.number(),
+});
 export const attentionNotificationState = v.union(
   v.literal("pending"),
   v.literal("effect_started"),
