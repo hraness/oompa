@@ -1839,11 +1839,12 @@ export const hostedBootstrapStatus = internalQuery({
 });
 
 type QuotaUpgradeRuntime = Infer<typeof runtimeReleaseAttestation>;
-type QuotaUpgradeDisposition = "legacy" | "unmarked_current" | "current" | "incomplete_empty_memory";
+type QuotaUpgradeDisposition = "legacy" | "legacy_empty_live_tail" | "unmarked_current" | "current" | "incomplete_empty_memory";
 type QuotaUpgradeClassification = Readonly<{
   disposition: QuotaUpgradeDisposition;
   identityRowId: Id<"storageUsageByUser">;
   needsMarker: boolean;
+  needsLiveChunk: boolean;
   missingMemory: "none" | "category" | "resource" | "both";
 }>;
 
@@ -1851,7 +1852,7 @@ export const quotaUpgradeCorruptionReasons = [
   "identity_missing", "service_authority", "duplicate_categories", "duplicate_resources",
   "category_authority", "category_ceiling", "user_total", "service_total",
   "resource_authority", "resource_ceiling", "identity_category_missing",
-  "memory_counters", "schema_shape", "legacy_memory_present", "incomplete_memory_present", "unknown_authority",
+  "memory_counters", "schema_shape", "legacy_memory_present", "legacy_chunks_present", "incomplete_memory_present", "unknown_authority",
 ] as const;
 type QuotaUpgradeCorruptionReason = typeof quotaUpgradeCorruptionReasons[number];
 
@@ -1867,7 +1868,7 @@ export const emptyQuotaUpgradeCorruptionCounts = (): Record<QuotaUpgradeCorrupti
   identity_missing: 0, service_authority: 0, duplicate_categories: 0, duplicate_resources: 0,
   category_authority: 0, category_ceiling: 0, user_total: 0, service_total: 0,
   resource_authority: 0, resource_ceiling: 0, identity_category_missing: 0,
-  memory_counters: 0, schema_shape: 0, legacy_memory_present: 0, incomplete_memory_present: 0, unknown_authority: 0,
+  memory_counters: 0, schema_shape: 0, legacy_memory_present: 0, legacy_chunks_present: 0, incomplete_memory_present: 0, unknown_authority: 0,
 });
 
 class QuotaUpgradeClassificationError extends Error {
@@ -1881,7 +1882,7 @@ const quotaUpgradeCorrupt = (reason: QuotaUpgradeCorruptionReason): never => {
   throw new QuotaUpgradeClassificationError(reason);
 };
 
-// This list names one reviewed predecessor schema. Deriving it by subtracting
+// These lists name reviewed predecessor schemas. Deriving them by subtracting
 // today's additions would silently authorize future unknown upgrade shapes.
 const predecessorQuotaCategories = [
   "identity", "device", "account", "session", "chunk", "usage",
@@ -1890,6 +1891,12 @@ const predecessorQuotaCategories = [
 const predecessorQuotaResources = [
   "device", "codex_account", "session_head", "session_chunk",
   "nonterminal_command", "live_chunk",
+] as const;
+// The older 42d9195..b3af485 predecessor predates live_chunk authority.
+// Its detail stream already existed: only transactional absence of owner
+// detail chunks can justify adding zero authority. Compact history survives.
+const preLiveTailQuotaResources = [
+  "device", "codex_account", "session_head", "session_chunk", "nonterminal_command",
 ] as const;
 
 function quotaUpgradeRuntimeTuple(runtime: QuotaUpgradeRuntime): readonly unknown[] {
@@ -1976,11 +1983,19 @@ async function classifyUserQuotaUpgrade(
       disposition: identity.quotaSchemaVersion === undefined ? "unmarked_current" : "current",
       identityRowId: identity._id,
       needsMarker: identity.quotaSchemaVersion === undefined,
+      needsLiveChunk: false,
       missingMemory: "none",
     };
   }
   const memory = byCategory.get("memory");
   const memorySpace = byResource.get("memory_space");
+  const preLiveTailShape = identity.quotaSchemaVersion === undefined
+    && memory === undefined && memorySpace === undefined
+    && !byResource.has("live_chunk")
+    && categories.length === predecessorQuotaCategories.length
+    && resources.length === preLiveTailQuotaResources.length
+    && predecessorQuotaCategories.every((category) => byCategory.has(category))
+    && preLiveTailQuotaResources.every((resource) => byResource.has(resource));
   // Exactly this predecessor plus the two named additions. Do not interpret
   // any other missing authority as zero, including future schema additions.
   const incompleteMemoryShape = predecessorQuotaCategories.every((category) => byCategory.has(category))
@@ -1990,7 +2005,7 @@ async function classifyUserQuotaUpgrade(
     && (memory === undefined || memorySpace === undefined);
   const retainedMemoryIsZero = (memory === undefined || (memory.logicalBytes === 0 && memory.records === 0))
     && (memorySpace === undefined || memorySpace.records === 0);
-  if (!incompleteMemoryShape || !retainedMemoryIsZero) {
+  if ((!preLiveTailShape && !incompleteMemoryShape) || !retainedMemoryIsZero) {
     // Project the already validated rows at the exact failure. No second read
     // can describe a different ledger or turn missing authority into zero.
     throw new QuotaUpgradeClassificationError("schema_shape", {
@@ -2000,6 +2015,14 @@ async function classifyUserQuotaUpgrade(
       memoryCategory: memory === undefined ? "absent" : memory.records === 0 && memory.logicalBytes === 0 ? "zero" : "nonzero",
       memoryResource: memorySpace === undefined ? "absent" : memorySpace.records === 0 ? "zero" : "nonzero",
     });
+  }
+  if (preLiveTailShape) {
+    // This indexed absence check belongs to the same transaction as additions.
+    // Expired, orphaned and other-session detail chunks all disprove zero;
+    // never recount them or inspect encrypted content to infer live usage.
+    const detail = await ctx.db.query("sessionChunks")
+      .withIndex("by_user_and_stream", (query) => query.eq("userId", userId).eq("stream", "detail")).take(1);
+    if (detail.length !== 0) return quotaUpgradeCorrupt("legacy_chunks_present");
   }
   const legacy = identity.quotaSchemaVersion === undefined && memory === undefined && memorySpace === undefined;
   const [space, operation] = await Promise.all([
@@ -2014,9 +2037,10 @@ async function classifyUserQuotaUpgrade(
     return quotaUpgradeCorrupt(legacy ? "legacy_memory_present" : "incomplete_memory_present");
   }
   return {
-    disposition: legacy ? "legacy" : "incomplete_empty_memory",
+    disposition: preLiveTailShape ? "legacy_empty_live_tail" : legacy ? "legacy" : "incomplete_empty_memory",
     identityRowId: identity._id,
     needsMarker: identity.quotaSchemaVersion === undefined,
+    needsLiveChunk: preLiveTailShape,
     missingMemory: memory === undefined ? (memorySpace === undefined ? "both" : "category") : "resource",
   };
 }
@@ -2046,12 +2070,13 @@ export async function auditUserQuotaUpgradePageForRuntime(
     maximumRowsRead: maximumUserQuotaUpgradeBatch,
   });
   if (page.page.length > maximumUserQuotaUpgradeBatch) return corrupt();
-  const counts = { legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
+  const counts = { legacy: 0, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
   for (const user of page.page) {
     try {
       const result = await classifyUserQuotaUpgrade(ctx, user._id);
       switch (result.disposition) {
         case "legacy": counts.legacy += 1; break;
+        case "legacy_empty_live_tail": counts.legacyEmptyLiveTail += 1; break;
         case "unmarked_current": counts.unmarkedCurrent += 1; break;
         case "current": counts.current += 1; break;
         case "incomplete_empty_memory": counts.incompleteEmptyMemory += 1; break;
@@ -2061,7 +2086,7 @@ export async function auditUserQuotaUpgradePageForRuntime(
       counts.corrupt += 1;
     }
   }
-  return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone, scanned: page.page.length, schemaVersion: 2 as const };
+  return { ...counts, continueCursor: page.continueCursor, isDone: page.isDone, scanned: page.page.length, schemaVersion: 3 as const };
 }
 
 /** One first-failure reason per inconsistent ledger, never identities or raw counters. */
@@ -2081,12 +2106,13 @@ export async function diagnoseUserQuotaUpgradePageForRuntime(
   if (page.page.length > maximumUserQuotaUpgradeBatch) return corrupt();
   const reasons = emptyQuotaUpgradeCorruptionCounts();
   const shapes = new Map<string, { shape: QuotaUpgradeMissingShape; count: number }>();
-  const counts = { legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
+  const counts = { legacy: 0, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
   for (const user of page.page) {
     try {
       const result = await classifyUserQuotaUpgrade(ctx, user._id);
       switch (result.disposition) {
         case "legacy": counts.legacy += 1; break;
+        case "legacy_empty_live_tail": counts.legacyEmptyLiveTail += 1; break;
         case "unmarked_current": counts.unmarkedCurrent += 1; break;
         case "current": counts.current += 1; break;
         case "incomplete_empty_memory": counts.incompleteEmptyMemory += 1; break;
@@ -2104,7 +2130,7 @@ export async function diagnoseUserQuotaUpgradePageForRuntime(
   }
   return { ...counts, reasons, missingShapes: [...shapes.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
     .map(([, value]) => value), continueCursor: page.continueCursor, isDone: page.isDone,
-    scanned: page.page.length, schemaVersion: 2 as const };
+    scanned: page.page.length, schemaVersion: 3 as const };
 }
 
 export async function upgradeUserQuotaPageForRuntime(
@@ -2122,6 +2148,7 @@ export async function upgradeUserQuotaPageForRuntime(
   });
   if (page.page.length > maximumUserQuotaUpgradeBatch) return corrupt();
   let upgraded = 0;
+  let upgradedLiveTail = 0;
   let marked = 0;
   let changed = 0;
   let repairedMemory = 0;
@@ -2130,6 +2157,11 @@ export async function upgradeUserQuotaPageForRuntime(
     if (result.disposition === "current") continue;
     if (result.missingMemory !== "none") {
       const updatedAt = Date.now();
+      if (result.needsLiveChunk) {
+        await ctx.db.insert("storageResourceUsageByUser", {
+          resource: "live_chunk", records: 0, updatedAt, userId: user._id,
+        });
+      }
       if (result.missingMemory === "category" || result.missingMemory === "both") {
         await ctx.db.insert("storageUsageByUser", {
           category: "memory", logicalBytes: 0, records: 0, updatedAt, userId: user._id,
@@ -2142,6 +2174,7 @@ export async function upgradeUserQuotaPageForRuntime(
       }
     }
     if (result.disposition === "legacy") upgraded += 1;
+    if (result.disposition === "legacy_empty_live_tail") upgradedLiveTail += 1;
     if (result.disposition === "incomplete_empty_memory") repairedMemory += 1;
     if (result.needsMarker) {
       await ctx.db.patch(result.identityRowId, { quotaSchemaVersion: currentUserQuotaSchemaVersion });
@@ -2149,7 +2182,7 @@ export async function upgradeUserQuotaPageForRuntime(
     }
     changed += 1;
   }
-  return { continueCursor: page.continueCursor, current: page.page.length - changed, isDone: page.isDone, changed, marked, repairedMemory, scanned: page.page.length, schemaVersion: 2 as const, upgraded };
+  return { continueCursor: page.continueCursor, current: page.page.length - changed, isDone: page.isDone, changed, marked, repairedMemory, scanned: page.page.length, schemaVersion: 3 as const, upgraded, upgradedLiveTail };
 }
 
 /** Read-only aggregate classification; raw identity and quota rows stay internal. */

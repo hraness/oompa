@@ -135,6 +135,14 @@ describe("hosted schema invariants", () => {
     expect(HOSTED_TABLE_LIFECYCLE.sessionStreamEpochs).toMatchObject({ retention: "encrypted_history", disposition: "erase" });
   });
 
+  test("pre-live-tail quota upgrade can prove owner detail absence without scanning compact history", () => {
+    const table = z.object({
+      indexes: z.array(z.object({ indexDescriptor: z.string(), fields: z.array(z.string()) }).passthrough()),
+    }).passthrough().parse(schema.tables.sessionChunks);
+    expect(table.indexes.find((index) => index.indexDescriptor === "by_user_and_stream")?.fields)
+      .toEqual(["userId", "stream"]);
+  });
+
   test("live_tail is a distinct retention class from the table-wide compact history bulk class", () => {
     expect(DETAIL_CHUNK_RETENTION).toBe("live_tail");
     expect(DETAIL_CHUNK_RETENTION).not.toBe(HOSTED_TABLE_LIFECYCLE.sessionChunks.retention);

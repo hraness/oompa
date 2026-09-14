@@ -362,6 +362,7 @@ export default defineSchema({
     .index("by_session_stream_and_first", ["sessionId", "stream", "firstSequence"])
     .index("by_session_stream_and_last", ["sessionId", "stream", "lastSequence"])
     .index("by_stream_and_expires_at", ["stream", "expiresAt"])
+    .index("by_user_and_stream", ["userId", "stream"])
     .index("by_user", ["userId"]),
   sessionStreamEpochs: defineTable({
     authority: v.object({

@@ -183,9 +183,10 @@ run_quota_upgrade status \
   --deployment-url https://steady-otter-321.convex.cloud
 ```
 
-`status` makes bounded reads and reports closed schema-2 aggregate counts,
-including `incompleteEmptyMemory` for the narrowly eligible completion below. It does not
-publish an intent, upgrade an identity or clear the command-capacity hold. If
+`status` makes bounded reads and reports closed schema-3 aggregate counts:
+`legacy`, `legacyEmptyLiveTail`, `unmarkedCurrent`, `incompleteEmptyMemory`,
+`current` and `corrupt`. These six counts sum to `scanned`. It does not publish
+an intent, upgrade an identity or clear the command-capacity hold. If
 the audit reports corruption, stop and diagnose a forward repair; never
 reinitialize existing quota authority or infer a missing counter's value.
 
@@ -193,32 +194,49 @@ Repeat that read command with `diagnose` instead of `status` to identify the
 closed reason counts. It uses the same source, candidate, predecessor, target
 and runtime checks. It reports the first classification failure per identity:
 missing or duplicate authority, invalid counters or markers, exceeded ceilings,
-inconsistent totals, incomplete schema shape, or unexpected legacy memory data.
+inconsistent totals, incomplete schema shape, or unexpected legacy detail or
+memory data.
 For an incomplete shape, `missingShapes` groups identical marked or unmarked
 ledgers by their missing categories and resources. It also distinguishes absent,
 zero and nonzero retained memory counters, without exposing their values. Each
 group comes from the same validated rows as its failure; there are at most eight
 groups per page. The groups account for exactly the `schema_shape` count. A
 missing counter alone remains unknown, even when the remaining memory counter
-is zero. Schema-2 eligibility additionally requires both owner memory indexes
-to be empty in the same read. Such ledgers count as `incompleteEmptyMemory`;
-ones with owner data report `incomplete_memory_present`.
-It emits no identity, raw counter, cursor or content. Global service-authority
+is zero. Incomplete-memory eligibility additionally requires both owner memory
+indexes to be empty in the same read. Such ledgers count as
+`incompleteEmptyMemory`; ones with owner data report `incomplete_memory_present`.
+The exact older layout described below counts as `legacyEmptyLiveTail` only
+when both memory indexes and the owner detail-stream index are empty.
+`legacy_chunks_present` refuses that layout when any owner detail chunk exists;
+`legacy_memory_present` refuses it when memory data exists. The diagnostic emits
+no identity, raw counter, cursor or content. Global service-authority
 corruption still refuses the scan. Counts are consistent within each bounded
 page; a multi-page scan is not a single snapshot. Diagnosis publishes no repair
 evidence and authorizes neither repair nor activation. Both read commands
 reject mutation acknowledgements and an output evidence path.
 
-For an admissible legacy, unmarked current or incomplete-empty-memory ledger,
-repeat the same command
-with `repair` instead of `status` and add
+For an admissible legacy, empty-live-tail predecessor, unmarked current or
+incomplete-empty-memory ledger, repeat the same command with `repair` instead
+of `status` and add
 `--evidence-path /protected/release/quota-upgrade.json --execute --acknowledge-forward-only`.
 The operator re-audits before writing, binds a protected intent to the exact
 candidate, predecessor, target and runtime, and upgrades at most eight
-identities in each atomic page. An exact legacy ledger receives the two zero
-memory counters and an identity-row version marker. A complete unmarked
-current ledger receives only the marker. An incomplete-empty-memory ledger
-receives only its missing `memory` category and/or `memory_space` resource.
+identities in each atomic page. An exact eleven-category, six-resource legacy
+ledger receives the two zero memory counters and an identity-row version marker.
+
+The `legacy_empty_live_tail` disposition handles only the exact older unmarked
+eleven-category, five-resource ledger, missing the `memory` category and the
+`live_chunk` and `memory_space` resources. It requires no owner detail chunk:
+`sessionChunks.by_user_and_stream` reads at most one row for that user and
+`stream: "detail"`. Expired chunks, chunks without an expiry and orphan chunks
+all disprove zero, even if no session head remains. Compact-only history is
+preserved and does not block this transition. The mutation also proves that
+both owner memory indexes are empty in the same transaction. It adds exactly
+three zero authority rows and the identity marker; marked or partially filled
+variants of this older layout refuse.
+
+A complete unmarked current ledger receives only the marker. An
+incomplete-empty-memory ledger receives only its missing `memory` category and/or `memory_space` resource.
 This completion requires all fixed predecessor rows, only an absent or current
 identity marker, zero retained memory counters, and no owner `memorySpaces` or
 `memoryOperations`, including orphan operations. It adds an absent marker and
@@ -230,12 +248,14 @@ initialization.
 
 The operator rechecks that eligibility in each atomic mutation. A read-only
 eligible result does not authorize using stale counters or ignoring later owner
-data. Schema-2 page counts distinguish `changed` identities, legacy `upgraded`
-identities, newly `marked` identities and `repairedMemory` completions. The
-protected intent and receipt bind schema version 2 and fixed policy
-`empty-memory-authority-v1` to the exact source and deployment. Historical
-schema-1 evidence is retained and never reinterpreted as authority for this
-forward repair.
+data. Schema-3 page counts distinguish `changed` identities, six-resource legacy
+`upgraded` identities, five-resource `upgradedLiveTail` identities, newly `marked`
+identities and `repairedMemory` completions. The protected intent and receipt
+bind schema version 3 and fixed policy `empty-live-tail-memory-authority-v1` to
+the exact source and deployment. Historical schema-1 and schema-2 evidence is
+retained and never reused or reinterpreted as authority for this policy. The
+stored identity marker remains `quotaSchemaVersion: 2`; the wire version change
+does not alter current ledger accounting.
 
 After two complete clean audits, the operator publishes a protected completion
 receipt. An interrupted invocation retains its intent; the same bound repair
