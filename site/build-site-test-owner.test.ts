@@ -47,10 +47,9 @@ describe("owned site compiler case", () => {
 
   test("closed request serialization roundtrips independently of property order", () => {
     fc.assert(fc.property(fc.boolean(), fc.string({ maxLength: 64 }), fc.string({ maxLength: 64 }),
-      fc.string({ maxLength: 64 }), (check, releaseCommit, token, sitekey) => {
+      (check, releaseCommit, token) => {
         const input = { ...options, check, releaseCommit, environment: {
           VERCEL_ENV: "production", NEXT_PUBLIC_POSTHOG_KEY: token,
-          NEXT_PUBLIC_HRANESS_MAILING_TURNSTILE_SITEKEY: sitekey,
         } };
         const encoded = JSON.stringify(input);
         expect(siteTestBuildOptions.parse(JSON.parse(encoded) as unknown)).toEqual(input);
@@ -88,7 +87,6 @@ describe("owned site compiler case", () => {
   test("carries the actual named public configuration and preserves invalid builder inputs", () => {
     const input = { ...options, releaseCommit: "not-a-commit", environment: {
       VERCEL_ENV: "production", NEXT_PUBLIC_POSTHOG_KEY: "not-a-token",
-      NEXT_PUBLIC_HRANESS_MAILING_TURNSTILE_SITEKEY: "",
     } };
     expect(siteTestBuildOptions.parse(input)).toEqual(input);
     expect(() => siteTestBuildOptions.parse({ ...input, environment: { PRIVATE_KEY: "forbidden" } })).toThrow();
