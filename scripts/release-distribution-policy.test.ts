@@ -116,7 +116,7 @@ describe("Oompa public distribution policy", () => {
       dist: {
         attestations: {
           provenance: { predicateType: "https://slsa.dev/provenance/v1" },
-          url: "https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fhra@1.2.3",
+          url: "https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2foompa@1.2.3",
         },
         integrity: `sha512-${Buffer.alloc(64).toString("base64")}`,
         shasum: "b".repeat(40),

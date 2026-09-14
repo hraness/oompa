@@ -7,7 +7,7 @@ import { readNpmAttestations } from "./read-npm-attestations";
 import { selectNpmProvenanceAttestations } from "./verify-npm-provenance";
 
 const version = "0.6.3";
-const url = "https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fhra@0.6.3";
+const url = "https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2foompa@0.6.3";
 const document = { attestations: [] };
 
 function fixture(respond: (attempt: number, init: RequestInit) => Response | Promise<Response>) {
@@ -285,7 +285,7 @@ describe("bounded exact npm attestation visibility", () => {
         const f = fixture(() => Response.json(document));
         await readNpmAttestations(releaseVersion, f.runtime);
         expect(f.requests.map((request) => request.url)).toEqual([
-          `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fhra@${releaseVersion}`,
+          `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2foompa@${releaseVersion}`,
         ]);
       },
     ), { numRuns: 100, seed: 6304 });
