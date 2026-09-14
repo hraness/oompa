@@ -546,6 +546,8 @@ describe("hosted command lifecycle capacity operator", () => {
       commandCapacityReadinessEvidenceSchema,
     );
     expect(evidence).toMatchObject({
+      authorityReductionPolicy: "inline-account-deletion-backfill-v1",
+      schemaVersion: 2,
       candidateDeployDigest: harness.candidate.selfDigest,
       completedAtMs: 3_000,
       legacyRevoked: 2,
@@ -564,6 +566,8 @@ describe("hosted command lifecycle capacity operator", () => {
       activationReceiptPath: `${harness.evidencePath}.activated`,
     });
     expect(activationReceipt).toMatchObject({
+      authorityReductionPolicy: "inline-account-deletion-backfill-v1",
+      schemaVersion: 2,
       capacityEvidenceDigest: evidence.selfDigest,
       candidateDeployDigest: harness.candidate.selfDigest,
       status: "activated",
@@ -715,6 +719,27 @@ describe("hosted command lifecycle capacity operator", () => {
       capacityEvidenceDigest: result.evidenceDigest,
       status: "activated",
     });
+  });
+
+  test("local inline-policy evidence rejects historical versions and missing or changed policy", async () => {
+    const harness = await makeHarness();
+    await manageCommandLifecycleCapacity({ action: "repair", evidencePath: harness.evidencePath, ...harness.common });
+    const evidence = readProtectedJson(harness.evidencePath, commandCapacityReadinessEvidenceSchema);
+    const receipt = readProtectedJson(`${harness.evidencePath}.activated`, commandCapacityActivationReceiptSchema);
+    for (const [schema, value] of [[commandCapacityReadinessEvidenceSchema, evidence],
+      [commandCapacityActivationReceiptSchema, receipt]] as const) {
+      expect(value).toMatchObject({ schemaVersion: 2, authorityReductionPolicy: "inline-account-deletion-backfill-v1" });
+      expect(schema.safeParse(value).success).toBe(true);
+      expect(schema.safeParse({ ...value, schemaVersion: 1 }).success).toBe(false);
+      expect(schema.safeParse({ ...value, authorityReductionPolicy: "unreviewed" }).success).toBe(false);
+      const missing = { ...value }; Reflect.deleteProperty(missing, "authorityReductionPolicy");
+      expect(schema.safeParse(missing).success).toBe(false);
+    }
+    // The harness supplies the unchanged hosted V1 tuple; only local evidence changes.
+    expect(harness.activationWrites).toBe(1);
+    expect(await manageCommandLifecycleCapacity({ action: "repair", evidencePath: harness.evidencePath, ...harness.common }))
+      .toMatchObject({ replayed: true, state: "ready" });
+    expect(harness.activationWrites).toBe(1);
   });
 
   test("reports bounded authority-reduction categories without owner identifiers", async () => {
@@ -1237,12 +1262,12 @@ const quotaDiagnosticPage = (a = 1, d = 1) => {
       serviceTotal: ceiling(missing), userTotal: ceiling(missing),
     },
     consistency: "page_snapshot" as const, continueCursor: "done",
-    demand: { accountPairs: a, deviceQuartets: d, paddingBytesLowerBound: 2_048 * (2 * a + 4 * d), totalRecords: 2 * a + 4 * d },
+    demand: { accountPairs: a, deviceQuartets: d, paddingBytesLowerBound: 2_048 * (2 * a + 4 * d), totalRecords: a + 4 * d },
     evaluated: missing ? 1 : 0, isDone: true,
     kind: "authority_reduction_quota_diagnostic" as const,
     orphanEligible: 0, orphanPending: 0, quotaAuthorityUnknown: 0,
     ready: missing ? 0 : 1, repairAuthorized: false as const, scanned: 1,
-    schemaVersion: 1 as const, topologyBlocked: 0,
+    schemaVersion: 2 as const, topologyBlocked: 0,
   };
 };
 
@@ -1270,10 +1295,13 @@ describe("closed quota headroom operator", () => {
     }), { numRuns: 100 });
     const page = quotaDiagnosticPage();
     for (const changed of [
+      { ...page, schemaVersion: 1 },
       { ...page, userId: "private" }, { ...page, activationAuthorized: true },
       { ...page, repairAuthorized: true }, { ...page, byteCost: "exact" },
       { ...page, evaluated: 0 }, { ...page, scanned: 9 },
       { ...page, demand: { ...page.demand, paddingBytesLowerBound: 12_289 } },
+      { ...page, demand: { ...page.demand, paddingBytesLowerBound: page.demand.totalRecords * 2_048 } },
+      { ...page, ceilings: { ...page.ceilings, identity: { ...page.ceilings.identity, recordsBlocked: 1 } } },
       { ...page, ceilings: { ...page.ceilings, identity: { ...page.ceilings.identity, recordsBlocked: 2 } } },
       { ...page, ceilings: { ...page.ceilings, identity: { ...page.ceilings.identity, bytesUnknown: 0 } } },
       { ...page, ceilings: { ...page.ceilings, account: page.ceilings.identity } },
@@ -1338,8 +1366,8 @@ describe("closed quota headroom operator", () => {
     const emitted: unknown = JSON.parse(stdout[0] ?? "null");
     expect(emitted).toMatchObject({
       activationAuthorized: false, capacityMissing: 2, consistency: "per_page_only", evaluated: 2,
-      demand: { accountPairs: 2, deviceQuartets: 2, paddingBytesLowerBound: 24_576, totalRecords: 12 },
-      pages: 2, repairAuthorized: false, state: "diagnostic_complete", version: 1,
+      demand: { accountPairs: 2, deviceQuartets: 2, paddingBytesLowerBound: 24_576, totalRecords: 10 },
+      pages: 2, repairAuthorized: false, state: "diagnostic_complete", version: 2,
       ceilings: { userTotal: { bytesUnknown: 2 } },
     });
     expect(stdout[0]).not.toContain("opaque-page");

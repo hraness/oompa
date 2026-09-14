@@ -359,17 +359,20 @@ export function authorityReductionReservationDemand(accountPairs: number, device
     (accountPairs !== 0 && accountPairs !== 1)
     || !Number.isSafeInteger(deviceQuartets) || deviceQuartets < 0 || deviceQuartets > 16
   ) return corrupt();
-  const totalRecords = 2 * accountPairs + 4 * deviceQuartets;
+  // Legacy account backfill pads the existing auth subject and inserts its
+  // deletion job reserve. The subject patch costs bytes but adds no record.
+  const totalRecords = accountPairs + 4 * deviceQuartets;
   return {
     accountPairs, deviceQuartets,
-    paddingBytesLowerBound: totalRecords * authorityReductionCapacityReservation.length,
+    paddingBytesLowerBound: (2 * accountPairs + 4 * deviceQuartets)
+      * authorityReductionCapacityReservation.length,
     totalRecords,
   };
 }
 
 // These counts describe one identity's missing reservation sets. Padding alone
-// can prove a byte refusal; the remaining document/system fields are unknown
-// until insertion. No prospective size estimate is treated as an exact fit.
+// can prove a byte refusal; remaining field and document costs are unknown
+// until the reservation is stored. No prospective size estimate proves a fit.
 export async function inspectAuthorityReductionQuota(
   ctx: QueryCtx | MutationCtx,
   userId: Id<"users">,
@@ -383,14 +386,21 @@ export async function inspectAuthorityReductionQuota(
   try {
     const { byCategory, service, userLogicalBytes, userRecords } = await loadQuotaAccounting(ctx, userId);
     const records = {
-      device: deviceQuartets, identity: accountPairs, job: accountPairs + deviceQuartets,
+      device: deviceQuartets, identity: 0, job: accountPairs + deviceQuartets,
       receipt: deviceQuartets, security: deviceQuartets,
       serviceTotal: demand.totalRecords, userTotal: demand.totalRecords,
+    };
+    const paddingSlots = {
+      ...records,
+      identity: accountPairs,
+      serviceTotal: 2 * accountPairs + 4 * deviceQuartets,
+      userTotal: 2 * accountPairs + 4 * deviceQuartets,
     };
     const ceilings = emptyAuthorityReductionQuotaCeilings();
     for (const ceiling of AUTHORITY_REDUCTION_QUOTA_CEILINGS) {
       const additional = records[ceiling];
-      if (additional === 0) continue;
+      const padding = paddingSlots[ceiling];
+      if (additional === 0 && padding === 0) continue;
       const current = ceiling === "serviceTotal" ? service
         : ceiling === "userTotal" ? { logicalBytes: userLogicalBytes, records: userRecords }
         : byCategory.get(ceiling);
@@ -398,7 +408,7 @@ export async function inspectAuthorityReductionQuota(
       const limit = ceiling === "serviceTotal" ? SERVICE_TOTAL_QUOTA
         : ceiling === "userTotal" ? USER_TOTAL_QUOTA : CATEGORY_QUOTAS[ceiling];
       const byteBlocked = current.logicalBytes
-        + additional * authorityReductionCapacityReservation.length > limit.logicalBytes;
+        + padding * authorityReductionCapacityReservation.length > limit.logicalBytes;
       ceilings[ceiling] = {
         applicable: 1,
         bytesBlockedByLowerBound: byteBlocked ? 1 : 0,

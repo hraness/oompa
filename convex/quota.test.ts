@@ -1322,16 +1322,18 @@ const inspectDiagnostic = async (world: Awaited<ReturnType<typeof quotaWorld>>, 
   await world.testRuntime.run(async (ctx) => await inspectAuthorityReductionQuota(ctx, world.userId, a, d));
 
 describe("authority reduction quota ceiling diagnostic", () => {
-  test("exact record demand covers every bounded account/device combination", () => {
+  test("record demand and independent padding cover every bounded account/device combination", () => {
     for (const a of [0, 1]) for (let d = 0; d <= 16; d += 1) {
       expect(authorityReductionReservationDemand(a, d)).toEqual({
         accountPairs: a, deviceQuartets: d,
-        paddingBytesLowerBound: 2_048 * (2 * a + 4 * d), totalRecords: 2 * a + 4 * d,
+        paddingBytesLowerBound: 2_048 * (2 * a + 4 * d), totalRecords: a + 4 * d,
       });
     }
     fc.assert(fc.property(fc.integer(), fc.integer(), (a, d) => {
       if ((a === 0 || a === 1) && d >= 0 && d <= 16) {
-        expect(authorityReductionReservationDemand(a, d).totalRecords).toBeLessThanOrEqual(66);
+        const demand = authorityReductionReservationDemand(a, d);
+        expect(demand.totalRecords).toBeLessThanOrEqual(65);
+        expect(demand.paddingBytesLowerBound / 2_048 - demand.totalRecords).toBe(a);
       } else expect(() => authorityReductionReservationDemand(a, d)).toThrow("QUOTA_AUTHORITY_CORRUPT");
     }), { numRuns: 100 });
     for (const invalid of [NaN, Infinity, -Infinity, 0.5]) {
@@ -1339,7 +1341,7 @@ describe("authority reduction quota ceiling diagnostic", () => {
     }
   });
 
-  test.each(["identity", "job", "device", "security", "receipt"] as const)(
+  test.each(["job", "device", "security", "receipt"] as const)(
     "%s record equality fits only that dimension; one fewer slot blocks", async (category) => {
       const world = await quotaWorld();
       const needed = category === "job" ? 2 : 1;
@@ -1359,6 +1361,24 @@ describe("authority reduction quota ceiling diagnostic", () => {
     },
   );
 
+  test("inline account identity padding fits the full record ceiling but still requires bytes", async () => {
+    const world = await quotaWorld();
+    await setDiagnosticUsage(world, { identity: { records: CATEGORY_QUOTAS.identity.records } });
+    const atRecordCeiling = await inspectDiagnostic(world, 1, 0);
+    if (atRecordCeiling.state !== "observed") throw new Error("unproved diagnostic fixture");
+    expect(atRecordCeiling.ceilings.identity).toEqual({
+      applicable: 1, bytesBlockedByLowerBound: 0, bytesUnknown: 1, recordsBlocked: 0,
+    });
+    await setDiagnosticUsage(world, {
+      identity: { logicalBytes: CATEGORY_QUOTAS.identity.logicalBytes - 2_047 },
+    });
+    const byteBlocked = await inspectDiagnostic(world, 1, 0);
+    if (byteBlocked.state !== "observed") throw new Error("unproved diagnostic fixture");
+    expect(byteBlocked.ceilings.identity).toEqual({
+      applicable: 1, bytesBlockedByLowerBound: 1, bytesUnknown: 0, recordsBlocked: 0,
+    });
+  });
+
   test("user and service record ceilings are separate exact dimensions", async () => {
     const world = await quotaWorld();
     const others = await world.testRuntime.run(async (ctx) => {
@@ -1367,14 +1387,14 @@ describe("authority reduction quota ceiling diagnostic", () => {
         .reduce((sum, row) => sum + row.records, 0);
     });
     await setDiagnosticUsage(world, {
-      chunk: { records: 500_000 }, memory: { records: 300_000 - others - 6 }, usage: { records: 3_200_000 },
-    }, { records: SERVICE_TOTAL_QUOTA.records - 6 });
+      chunk: { records: 500_000 }, memory: { records: 300_000 - others - 5 }, usage: { records: 3_200_000 },
+    }, { records: SERVICE_TOTAL_QUOTA.records - 5 });
     const equal = await inspectDiagnostic(world);
     if (equal.state !== "observed") throw new Error("unproved diagnostic fixture");
     expect(equal.ceilings.userTotal.recordsBlocked).toBe(0);
     expect(equal.ceilings.serviceTotal.recordsBlocked).toBe(0);
-    await setDiagnosticUsage(world, { memory: { records: 300_000 - others - 5 } }, {
-      records: SERVICE_TOTAL_QUOTA.records - 5,
+    await setDiagnosticUsage(world, { memory: { records: 300_000 - others - 4 } }, {
+      records: SERVICE_TOTAL_QUOTA.records - 4,
     });
     const blocked = await inspectDiagnostic(world);
     if (blocked.state !== "observed") throw new Error("unproved diagnostic fixture");

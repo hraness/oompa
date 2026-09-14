@@ -276,6 +276,7 @@ async function reserveAuthDocument(
           || subject.status !== "active"
           || subject.userId !== undefined
           || subject.verifiedAt !== undefined
+          || subject.accountDeletionCapacity !== undefined
         ) return rejectAuthStore();
         const patch = { updatedAt: Date.now(), userId: owner.userId };
         await transferServiceQuotaToUserForPatch(
@@ -338,6 +339,10 @@ async function releaseAuthDocument(
     case "stored_identity":
       {
         const capacity = await loadAccountDeletionCapacity(ctx, owner.userId);
+        // Bound inline authority must be removed together with its subject by
+        // account deletion or abandoned-identity maintenance, never Auth's
+        // user-row deletion alone.
+        if (capacity.kind === "inline_reserved") return rejectAuthStore();
         if (capacity.kind === "reserved") {
           await releaseQuotaForDelete(
             ctx,
