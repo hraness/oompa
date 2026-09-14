@@ -43,8 +43,11 @@ describe("CLI parser", () => {
   });
 
   test("parses menubar launch without admitting effects or extra arguments", () => {
-    expect(parseCli(["menubar"])).toEqual({ json: false, kind: "menubar" });
-    expect(parseCli(["menubar", "--json"])).toEqual({ json: true, kind: "menubar" });
+    expect(parseCli(["menubar"])).toEqual({ action: "run", background: false, json: false, kind: "menubar" });
+    expect(parseCli(["menubar", "--json"])).toEqual({ action: "run", background: false, json: true, kind: "menubar" });
+    expect(parseCli(["menubar", "run", "--background"])).toEqual({ action: "run", background: true, json: false, kind: "menubar" });
+    expect(parseCli(["menubar", "install"])).toEqual({ action: "install", background: false, json: false, kind: "menubar" });
+    expect(parseCli(["menubar", "uninstall", "--json"])).toEqual({ action: "uninstall", background: false, json: true, kind: "menubar" });
     expect(() => parseCli(["menubar", "extra"])).toThrow(CliUsageError);
   });
 

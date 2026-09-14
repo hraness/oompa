@@ -165,7 +165,7 @@ export type CliInvocation =
   | { kind: "init"; yes: boolean; json: boolean }
   | { kind: "daemon.start"; json: boolean }
   | { kind: "daemon.run" }
-  | { kind: "menubar"; json: boolean }
+  | { action: "run" | "install" | "uninstall"; background: boolean; kind: "menubar"; json: boolean }
   | { kind: "remote"; command: RemoteCliCommand; idempotencyKey?: string; json: boolean }
   | ProtectedAuthLoginCliInvocation
   | ProtectedInteractionCliInvocation
@@ -232,7 +232,7 @@ Usage:
   oompa init [--yes] [--json]
   oompa doctor [--offline] [--json]
   oompa daemon start|status|stop|run
-  oompa menubar [--json]
+  oompa menubar [--background] [--json]
   oompa account add|list|show|login|login-cancel|logout|usage|usage-history|switch|switch-recover
   oompa account list --provider codex|claude
   oompa usage auto status|on|off|inherit
@@ -347,14 +347,19 @@ Examples:
   menubar: `Oompa menu bar
 
 Usage:
-  oompa menubar [--json]
+  oompa menubar [--background] [--json]
 
-Launches the detached menu-bar companion, which shows daemon status and live
-sessions in the macOS status item. Build it once with
+Runs the menu-bar companion, which shows daemon status and live
+sessions in the macOS status item. \`install\` copies a prebuilt release binary
+to the user application-support directory and registers a RunAtLoad LaunchAgent
+without KeepAlive. Build it once with
 \`cargo build --release --manifest-path desktop/Cargo.toml\`.
 
 Examples:
-  oompa menubar`,
+  $ oompa menubar run
+  $ oompa menubar run --background
+  $ oompa menubar install
+  $ oompa menubar uninstall`,
   account: `Oompa account
 
 Usage:
@@ -2410,8 +2415,15 @@ export function parseCli(argv: readonly string[], cwd = process.cwd()): CliInvoc
     throw new CliUsageError("Unknown daemon action. Run `oompa daemon --help` for supported actions.");
   }
   if (group === "menubar") {
+    const actionValue = takeOptional(cursor);
+    const action = actionValue === undefined || actionValue === "run" ? "run" : actionValue;
+    if (action !== "run" && action !== "install" && action !== "uninstall") {
+      throw new CliUsageError("Unknown menu-bar action. Use `run`, `install`, or `uninstall`.");
+    }
+    const background = flag(cursor, "--background");
+    if (background && action !== "run") throw new CliUsageError("--background is supported only by `oompa menubar run`.");
     finish(cursor);
-    return { kind: "menubar", json };
+    return { action, background, kind: "menubar", json };
   }
   if (group === "remote") {
     // The two policy switches are local daemon state, not a hosted command, so

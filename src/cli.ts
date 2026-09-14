@@ -46,7 +46,7 @@ import {
   ProtectedOutputFile,
   type DeviceLoginDocument,
 } from "./cli/protected-output";
-import { launchMenubar } from "./cli/menubar";
+import { installMenubar, launchMenubar, uninstallMenubar } from "./cli/menubar";
 import { InvalidCommandResponseError, renderFailure, renderProtectedInteractionDetail, renderRootStatus, renderSuccess, safeDiagnostic, safeJson, terminalSafe, type Output } from "./cli/render";
 import { redactCompleteSensitiveText } from "./cli/sensitive-text";
 import { compileShellLine, formatShellPrompt, shellHelp, type ShellSelection } from "./cli/shell";
@@ -6387,7 +6387,9 @@ async function executeInvocation(
     // The menu bar is a disposable client of the daemon, not a daemon command.
     // It launches before any state or daemon requirement so `oompa menubar`
     // alone can grow a status item that offers `Start daemon`.
-    return await launchMenubar(invocation.json, output);
+    if (invocation.action === "install") return await installMenubar(invocation.json, output);
+    if (invocation.action === "uninstall") return await uninstallMenubar(invocation.json, output);
+    return await launchMenubar(invocation.json, output, invocation.background);
   }
   if (invocation.kind === "session.attach") {
     // The CLI, and only the CLI, turns a path into bytes. It admits each file
