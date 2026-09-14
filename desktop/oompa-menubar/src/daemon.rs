@@ -161,6 +161,10 @@ impl Daemon {
     pub fn session_list(&self, limit: u32) -> Result<Value, CallError> {
         self.call(json!({ "kind": "session.list", "archived": false, "limit": limit }))
     }
+
+    pub fn account_list(&self) -> Result<Value, CallError> {
+        self.call(json!({ "kind": "account.list" }))
+    }
 }
 
 #[cfg(test)]

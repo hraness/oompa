@@ -20,6 +20,10 @@ use desktop_foundation::{Host, MenuModel, MenuNode, Options};
 use daemon::{CallError, Daemon};
 
 const SESSION_LIMIT: u32 = 8;
+const STATUS_MARK: &str = "Oo";
+const WEB_APP_URL: &str = "https://app.oompa.app/";
+const WEB_USAGE_URL: &str = "https://app.oompa.app/#/settings/usage";
+const WEB_ACCOUNTS_URL: &str = "https://app.oompa.app/#/settings";
 
 struct OompaHost {
     daemon: Daemon,
@@ -55,6 +59,22 @@ impl OompaHost {
         }
         nodes
     }
+
+    fn account_summary_node(&self) -> MenuNode {
+        match self.daemon.account_list() {
+            Ok(data) => {
+                let count = data
+                    .get("accounts")
+                    .and_then(|accounts| accounts.as_array())
+                    .map_or(0, Vec::len);
+                MenuNode::disabled(format!(
+                    "{count} provider account{}",
+                    if count == 1 { "" } else { "s" }
+                ))
+            }
+            Err(_) => MenuNode::disabled("Provider account count unavailable"),
+        }
+    }
 }
 
 impl Host for OompaHost {
@@ -66,6 +86,7 @@ impl Host for OompaHost {
                 let pid = status.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
                 nodes.push(MenuNode::disabled(format!("Daemon running · pid {pid}")));
                 nodes.push(MenuNode::Separator);
+                nodes.push(self.account_summary_node());
                 nodes.extend(self.session_nodes());
                 tooltip = format!("Oompa — daemon running (pid {pid})");
             }
@@ -82,9 +103,13 @@ impl Host for OompaHost {
         nodes.push(MenuNode::Separator);
         nodes.extend(self.outputs.nodes());
         nodes.push(MenuNode::Separator);
+        nodes.push(MenuNode::item("web.dashboard", "Open Oompa workspace"));
+        nodes.push(MenuNode::item("web.usage", "View usage"));
+        nodes.push(MenuNode::item("web.accounts", "Manage accounts"));
+        nodes.push(MenuNode::Separator);
         nodes.push(MenuNode::quit("Quit Oompa"));
         MenuModel {
-            title: Some("Oompa".to_owned()),
+            title: Some(STATUS_MARK.to_owned()),
             tooltip: Some(tooltip),
             icon: None,
             nodes,
@@ -93,6 +118,23 @@ impl Host for OompaHost {
 
     fn dispatch(&self, id: &str) {
         if self.outputs.dispatch(id) {
+            return;
+        }
+        let url = match id {
+            "web.dashboard" => Some(WEB_APP_URL),
+            "web.usage" => Some(WEB_USAGE_URL),
+            "web.accounts" => Some(WEB_ACCOUNTS_URL),
+            _ => None,
+        };
+        if let Some(url) = url {
+            // Fixed destinations only: the menu bar never accepts arbitrary
+            // opener input or a shell command from the daemon or web UI.
+            let _ = std::process::Command::new("/usr/bin/open")
+                .arg(url)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
             return;
         }
         if id == "daemon.start" {
