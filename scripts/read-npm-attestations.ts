@@ -1,4 +1,5 @@
 import { readBoundedJsonResponse } from "./bounded-json-response";
+import { publicPackageAttestationName } from "./release-distribution-policy";
 
 type AttestationReaderRuntime = Readonly<{
   fetch: (url: string, init: RequestInit) => Promise<Response>;
@@ -61,7 +62,7 @@ export async function readNpmAttestations(
     // Keep one signal across headers, body consumption, and parser cleanup.
     const signal = dependencies.timeoutSignal(Math.min(20_000, remainingMs()));
     const response = await withinSignal(signal, () => dependencies.fetch(
-      `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fhra@${version}`,
+      `https://registry.npmjs.org/-/npm/v1/attestations/${publicPackageAttestationName}@${version}`,
       {
         cache: "no-store",
         headers: { Accept: "application/json", "Cache-Control": "no-cache" },

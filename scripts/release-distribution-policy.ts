@@ -11,6 +11,7 @@ const OIDC_CONFIGURATION = /^oidc:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4
 const GITHUB_BRANCH = /^[A-Za-z0-9._/-]+$/u;
 
 export const publicPackageName = "@hraness/oompa";
+export const publicPackageAttestationName = publicPackageName.split("/").join("%2f");
 export const publicRepository = "hraness/oompa";
 
 function record(value: unknown, label: string): JsonRecord {
@@ -155,7 +156,7 @@ export function parseNpmRelease(value: unknown, version: string): NpmReleaseCoor
   const attestations = record(dist.attestations, "npm release attestations");
   const provenance = record(attestations.provenance, "npm release provenance");
   const expectedAttestationUrl =
-    `https://registry.npmjs.org/-/npm/v1/attestations/@hraness%2fhra@${version}`;
+    `https://registry.npmjs.org/-/npm/v1/attestations/${publicPackageAttestationName}@${version}`;
   if (
     npmUser.name !== "GitHub Actions"
     || npmUser.email !== "npm-oidc-no-reply@github.com"
