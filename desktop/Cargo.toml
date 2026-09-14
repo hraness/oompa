@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["oompa-menubar"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+strip = true

@@ -1,0 +1,4 @@
+# Cargo's built-in libgit2 fetcher cannot use the system credential helper;
+# the pinned `desktop-foundation` git dependency resolves through the git CLI.
+[net]
+git-fetch-with-cli = true

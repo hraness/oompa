@@ -134,13 +134,13 @@ export function assertPublicSensitiveText(value: string, label: string): void {
   }
 }
 
-const excludedDirectories = new Set([".git", "dist", "node_modules"]);
+const excludedDirectories = new Set([".git", "dist", "node_modules", "target"]);
 /**
  * Files whose prose is public copy: root Markdown, the package manifest, the
  * generated-site source, published docs, and the GitHub issue templates.
  */
 const publicCopyFile = /^(?:[A-Z_]+\.md|package\.json|site\/.+|docs\/.+\.md|\.github\/ISSUE_TEMPLATE\/.+)$/u;
-const textFile = /(?:^|\/)(?:CODEOWNERS|LICENSE|\.bun-version|\.editorconfig|\.gitattributes|\.gitignore)$|\.(?:c|css|h|html|json|lock|md|mjs|ps1|svg|toml|ts|tsx|txt|xml|yaml|yml|zig)$/u;
+const textFile = /(?:^|\/)(?:CODEOWNERS|LICENSE|\.bun-version|\.editorconfig|\.gitattributes|\.gitignore)$|\.(?:c|css|h|html|json|lock|md|mjs|ps1|rs|svg|toml|ts|tsx|txt|xml|yaml|yml|zig)$/u;
 // This synthetic logical dump is a reviewed migration input, not a general
 // database-file exception. It still passes every public sensitive-text check.
 const releasedStateSql = "scripts/fixtures/released-state/v0.5.0/control-plane.sql";
@@ -183,6 +183,19 @@ async function assertMarketingPublicSource(root: string, label: string): Promise
   }
 }
 
+const desktopIconPng = /^desktop\/[a-z0-9-]+\/icons\/[a-z0-9-]+\.png$/u;
+const assertDesktopIconPng = async (path: string, label: string): Promise<void> => {
+  const bytes = await readFile(path);
+  if (
+    bytes.byteLength < 67
+    || bytes.byteLength > 2_000_000
+    || bytes.toString("hex", 0, 8) !== "89504e470d0a1a0a"
+    || bytes.toString("ascii", 12, 16) !== "IHDR"
+  ) {
+    throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
+  }
+};
+
 const assertEditorialWebp = async (path: string, label: string): Promise<void> => {
   const bytes = await readFile(path);
   const riffSize = bytes.byteLength >= 8 ? bytes.readUInt32LE(4) : -1;
@@ -214,6 +227,8 @@ async function scanPublicTree(root: string, skipCheckoutTmp: boolean): Promise<v
         await assertAuthoritySupervisorArtifactPublicFile(root, label);
       } else if (entry.isFile() && editorialWebp.test(label)) {
         await assertEditorialWebp(child, label);
+      } else if (entry.isFile() && desktopIconPng.test(label)) {
+        await assertDesktopIconPng(child, label);
       } else if (entry.isFile() && label === `${marketingDirectory}/${marketingFont}`) {
         await assertMarketingPublicSource(root, label);
       } else if (entry.isFile() && (textFile.test(child) || label === releasedStateSql || label === marketingDeclaration || label === materialDeclaration)) {

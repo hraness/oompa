@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Oompa Menubar",
+  "version": "0.1.0",
+  "identifier": "com.hraness.oompa.menubar",
+  "build": {
+    "frontendDist": "frontend"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}

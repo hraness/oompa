@@ -42,6 +42,12 @@ describe("CLI parser", () => {
     ])).toThrow("not supported by status");
   });
 
+  test("parses menubar launch without admitting effects or extra arguments", () => {
+    expect(parseCli(["menubar"])).toEqual({ json: false, kind: "menubar" });
+    expect(parseCli(["menubar", "--json"])).toEqual({ json: true, kind: "menubar" });
+    expect(() => parseCli(["menubar", "extra"])).toThrow(CliUsageError);
+  });
+
   test("keeps the protected login handoff path at the CLI boundary", () => {
     const idempotencyKey = "00000000-0000-4000-8000-000000000101";
     expect(parseCli([
