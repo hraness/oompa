@@ -27,12 +27,12 @@ const commit = z.string().regex(/^[0-9a-f]{40}$/u);
 const pageSize = 8;
 const maximumPages = Math.ceil(SERVICE_TOTAL_QUOTA.identities / pageSize) + 1;
 const count = z.number().int().min(0).max(pageSize);
-const page = z.object({ schemaVersion: z.literal(2), continueCursor: z.string().max(4096), isDone: z.boolean(), scanned: count });
+const page = z.object({ schemaVersion: z.literal(3), continueCursor: z.string().max(4096), isDone: z.boolean(), scanned: count });
 
 export const quotaUpgradeAuditPageSchema = page.extend({
-  legacy: count, unmarkedCurrent: count, incompleteEmptyMemory: count, current: count, corrupt: count,
+  legacy: count, legacyEmptyLiveTail: count, unmarkedCurrent: count, incompleteEmptyMemory: count, current: count, corrupt: count,
 }).strict().superRefine((value, context) => {
-  if (value.legacy + value.unmarkedCurrent + value.incompleteEmptyMemory + value.current + value.corrupt !== value.scanned) {
+  if (value.legacy + value.legacyEmptyLiveTail + value.unmarkedCurrent + value.incompleteEmptyMemory + value.current + value.corrupt !== value.scanned) {
     context.addIssue({ code: "custom", message: "quota_upgrade_counts_invalid" });
   }
 });
@@ -53,17 +53,20 @@ const missingShapeSchema = z.strictObject({
     || (value.missingCategories.every((category) => category === "memory")
       && value.missingResources.every((resource) => resource === "memory_space")
       && value.memoryCategory !== "nonzero" && value.memoryResource !== "nonzero")
+    || (value.marker === "unmarked"
+      && JSON.stringify(value.missingCategories) === JSON.stringify(["memory"])
+      && JSON.stringify(value.missingResources) === JSON.stringify(["live_chunk", "memory_space"]))
     || value.missingCategories.includes("memory") !== (value.memoryCategory === "absent")
     || value.missingResources.includes("memory_space") !== (value.memoryResource === "absent")) {
     context.addIssue({ code: "custom", message: "quota_upgrade_shape_invalid" });
   }
 });
 export const quotaUpgradeDiagnosticPageSchema = page.extend({
-  legacy: count, unmarkedCurrent: count, incompleteEmptyMemory: count, current: count, corrupt: count,
+  legacy: count, legacyEmptyLiveTail: count, unmarkedCurrent: count, incompleteEmptyMemory: count, current: count, corrupt: count,
   reasons: z.record(z.enum(quotaUpgradeCorruptionReasons), count),
   missingShapes: z.array(z.strictObject({ shape: missingShapeSchema, count: count.min(1) })).max(pageSize),
 }).strict().superRefine((value, context) => {
-  if (value.legacy + value.unmarkedCurrent + value.incompleteEmptyMemory + value.current + value.corrupt !== value.scanned
+  if (value.legacy + value.legacyEmptyLiveTail + value.unmarkedCurrent + value.incompleteEmptyMemory + value.current + value.corrupt !== value.scanned
     || Object.values(value.reasons).reduce((total, amount) => total + amount, 0) !== value.corrupt
     || value.missingShapes.reduce((total, entry) => total + entry.count, 0) !== value.reasons.schema_shape
     || value.missingShapes.some((entry, index) => index > 0
@@ -72,10 +75,10 @@ export const quotaUpgradeDiagnosticPageSchema = page.extend({
   }
 });
 
-export const quotaUpgradeMutationPageSchema = page.extend({ current: count, changed: count, upgraded: count, marked: count, repairedMemory: count })
+export const quotaUpgradeMutationPageSchema = page.extend({ current: count, changed: count, upgraded: count, upgradedLiveTail: count, marked: count, repairedMemory: count })
   .strict().superRefine((value, context) => {
     if (value.current + value.changed !== value.scanned
-      || value.upgraded + value.repairedMemory > value.changed
+      || value.upgraded + value.upgradedLiveTail + value.repairedMemory > value.changed
       || value.marked > value.changed || value.marked < value.changed - value.repairedMemory) {
       context.addIssue({ code: "custom", message: "quota_upgrade_counts_invalid" });
     }
@@ -90,10 +93,10 @@ const operationBinding = z.object({
   targetDigest: digest,
 });
 export const quotaUpgradeIntentSchema = operationBinding.extend({
-  kind: z.literal("quota-schema-upgrade-intent"), schemaVersion: z.literal(2), repairPolicy: z.literal("empty-memory-authority-v1"), quotaSchemaVersion: z.literal(2), selfDigest: digest,
+  kind: z.literal("quota-schema-upgrade-intent"), schemaVersion: z.literal(3), repairPolicy: z.literal("empty-live-tail-memory-authority-v1"), quotaSchemaVersion: z.literal(2), selfDigest: digest,
 }).strict();
 export const quotaUpgradeReceiptSchema = operationBinding.extend({
-  kind: z.literal("quota-schema-upgrade-receipt"), schemaVersion: z.literal(2), repairPolicy: z.literal("empty-memory-authority-v1"), quotaSchemaVersion: z.literal(2),
+  kind: z.literal("quota-schema-upgrade-receipt"), schemaVersion: z.literal(3), repairPolicy: z.literal("empty-live-tail-memory-authority-v1"), quotaSchemaVersion: z.literal(2),
   intentDigest: digest, selfDigest: digest, verificationPasses: z.literal(2), state: z.literal("complete"),
   activationAuthorized: z.literal(false),
 }).strict();
@@ -147,8 +150,8 @@ export function parseQuotaUpgradeArguments(args: readonly string[]): QuotaUpgrad
     ...(evidencePath === undefined ? {} : { evidencePath }), target: targetArgs.target };
 }
 
-type Audit = Readonly<{ scanned: number; legacy: number; unmarkedCurrent: number; incompleteEmptyMemory: number; current: number; corrupt: number }>;
-type Mutation = Readonly<{ scanned: number; current: number; changed: number; upgraded: number; marked: number; repairedMemory: number }>;
+type Audit = Readonly<{ scanned: number; legacy: number; legacyEmptyLiveTail: number; unmarkedCurrent: number; incompleteEmptyMemory: number; current: number; corrupt: number }>;
+type Mutation = Readonly<{ scanned: number; current: number; changed: number; upgraded: number; upgradedLiveTail: number; marked: number; repairedMemory: number }>;
 type PageArguments = Readonly<{
   expectedRuntimeAttestation: RuntimeReleaseAttestation;
   paginationOpts: Readonly<{ numItems: number; cursor: string | null }>;
@@ -195,7 +198,7 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
     await dependencies.assertSource();
   };
   if (options.action === "diagnose") {
-    let total: Audit = { scanned: 0, legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
+    let total: Audit = { scanned: 0, legacy: 0, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
     const reasons = emptyQuotaUpgradeCorruptionCounts();
     const shapes = new Map<string, z.infer<typeof quotaUpgradeDiagnosticPageSchema>["missingShapes"][number]>();
     let cursor: string | null = null;
@@ -209,6 +212,7 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
       if (!parsed.success) return refuse("provider_result_invalid");
       const value = parsed.data;
       total = { scanned: total.scanned + value.scanned, legacy: total.legacy + value.legacy,
+        legacyEmptyLiveTail: total.legacyEmptyLiveTail + value.legacyEmptyLiveTail,
         unmarkedCurrent: total.unmarkedCurrent + value.unmarkedCurrent, incompleteEmptyMemory: total.incompleteEmptyMemory + value.incompleteEmptyMemory, current: total.current + value.current,
         corrupt: total.corrupt + value.corrupt };
       if (total.scanned > SERVICE_TOTAL_QUOTA.identities) return refuse("pagination_invalid");
@@ -217,7 +221,7 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
         const key = JSON.stringify(entry.shape);
         shapes.set(key, { shape: entry.shape, count: (shapes.get(key)?.count ?? 0) + entry.count });
       }
-      if (value.isDone) return { schemaVersion: 2 as const, kind: "quota_upgrade_diagnostic" as const,
+      if (value.isDone) return { schemaVersion: 3 as const, kind: "quota_upgrade_diagnostic" as const,
         state: "diagnostic_complete" as const, ...total, reasons,
         missingShapes: [...shapes.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, entry]) => entry), pages: index + 1,
         consistency: "per_page_only" as const, reasonSelection: "first_failure_per_identity" as const,
@@ -228,7 +232,7 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
     return refuse("pagination_invalid");
   }
   const audit = async (): Promise<Audit> => {
-    let total: Audit = { scanned: 0, legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
+    let total: Audit = { scanned: 0, legacy: 0, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
     let cursor: string | null = null;
     const seen = new Set<string>();
     for (let index = 0; index < maximumPages; index += 1) {
@@ -240,6 +244,7 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
       if (!parsed.success) return refuse("provider_result_invalid");
       const value = parsed.data;
       total = { scanned: total.scanned + value.scanned, legacy: total.legacy + value.legacy,
+        legacyEmptyLiveTail: total.legacyEmptyLiveTail + value.legacyEmptyLiveTail,
         unmarkedCurrent: total.unmarkedCurrent + value.unmarkedCurrent, incompleteEmptyMemory: total.incompleteEmptyMemory + value.incompleteEmptyMemory, current: total.current + value.current, corrupt: total.corrupt + value.corrupt };
       if (total.scanned > SERVICE_TOTAL_QUOTA.identities) return refuse("pagination_invalid");
       if (value.isDone) return total;
@@ -249,15 +254,15 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
     return refuse("pagination_invalid");
   };
   const before = await audit();
-  if (options.action === "status") return { schemaVersion: 2 as const, state: before.corrupt + before.legacy + before.unmarkedCurrent + before.incompleteEmptyMemory === 0 ? "ready" as const : "debt" as const,
+  if (options.action === "status") return { schemaVersion: 3 as const, state: before.corrupt + before.legacy + before.legacyEmptyLiveTail + before.unmarkedCurrent + before.incompleteEmptyMemory === 0 ? "ready" as const : "debt" as const,
     ...before, activationAuthorized: false as const };
   if (before.corrupt !== 0) return refuse("quota_upgrade_corrupt");
   if (options.evidencePath === undefined) return refuse("usage_invalid");
   const intentPath = `${options.evidencePath}.intent`;
   const intent = quotaUpgradeIntentSchema.parse(withSelfDigest({ ...binding, kind: "quota-schema-upgrade-intent" as const,
-    schemaVersion: 2 as const, repairPolicy: "empty-memory-authority-v1" as const, quotaSchemaVersion: 2 as const }));
+    schemaVersion: 3 as const, repairPolicy: "empty-live-tail-memory-authority-v1" as const, quotaSchemaVersion: 2 as const }));
   const receipt = quotaUpgradeReceiptSchema.parse(withSelfDigest({ ...binding, kind: "quota-schema-upgrade-receipt" as const,
-    schemaVersion: 2 as const, repairPolicy: "empty-memory-authority-v1" as const, quotaSchemaVersion: 2 as const, intentDigest: intent.selfDigest,
+    schemaVersion: 3 as const, repairPolicy: "empty-live-tail-memory-authority-v1" as const, quotaSchemaVersion: 2 as const, intentDigest: intent.selfDigest,
     verificationPasses: 2 as const, state: "complete" as const, activationAuthorized: false as const }));
   await prove();
   const existingIntent = dependencies.readIntent(intentPath);
@@ -267,9 +272,9 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
   if (existingIntent === undefined) dependencies.writeIntent(intentPath, intent);
   const assertIntent = (): void => { if (!same(dependencies.readIntent(intentPath), intent)) refuse("evidence_invalid"); };
   assertIntent();
-  let repaired: Mutation = { scanned: 0, current: 0, changed: 0, upgraded: 0, marked: 0, repairedMemory: 0 };
-  if (existingReceipt !== undefined && before.legacy + before.unmarkedCurrent + before.incompleteEmptyMemory !== 0) return refuse("evidence_invalid");
-  if (existingReceipt === undefined && before.legacy + before.unmarkedCurrent + before.incompleteEmptyMemory !== 0) {
+  let repaired: Mutation = { scanned: 0, current: 0, changed: 0, upgraded: 0, upgradedLiveTail: 0, marked: 0, repairedMemory: 0 };
+  if (existingReceipt !== undefined && before.legacy + before.legacyEmptyLiveTail + before.unmarkedCurrent + before.incompleteEmptyMemory !== 0) return refuse("evidence_invalid");
+  if (existingReceipt === undefined && before.legacy + before.legacyEmptyLiveTail + before.unmarkedCurrent + before.incompleteEmptyMemory !== 0) {
     let cursor: string | null = null;
     const seen = new Set<string>();
     let done = false;
@@ -282,7 +287,8 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
       if (!parsed.success) return refuse("provider_result_invalid");
       const value = parsed.data;
       repaired = { scanned: repaired.scanned + value.scanned, current: repaired.current + value.current,
-        changed: repaired.changed + value.changed, upgraded: repaired.upgraded + value.upgraded, marked: repaired.marked + value.marked, repairedMemory: repaired.repairedMemory + value.repairedMemory };
+        changed: repaired.changed + value.changed, upgraded: repaired.upgraded + value.upgraded,
+        upgradedLiveTail: repaired.upgradedLiveTail + value.upgradedLiveTail, marked: repaired.marked + value.marked, repairedMemory: repaired.repairedMemory + value.repairedMemory };
       if (repaired.scanned > SERVICE_TOTAL_QUOTA.identities) return refuse("pagination_invalid");
       if (value.isDone) { done = true; break; }
       if (value.scanned === 0 || value.continueCursor === "" || seen.has(value.continueCursor)) return refuse("pagination_invalid");
@@ -292,13 +298,13 @@ export async function manageQuotaUpgrade(options: QuotaUpgradeArguments, depende
   }
   for (let pass = 0; pass < 2; pass += 1) {
     const verified = await audit();
-    if (verified.corrupt + verified.legacy + verified.unmarkedCurrent + verified.incompleteEmptyMemory !== 0) return refuse("quota_upgrade_debt_remaining");
+    if (verified.corrupt + verified.legacy + verified.legacyEmptyLiveTail + verified.unmarkedCurrent + verified.incompleteEmptyMemory !== 0) return refuse("quota_upgrade_debt_remaining");
   }
   await prove(); assertIntent();
   if (existingReceipt === undefined) dependencies.writeReceipt(options.evidencePath, receipt);
   if (!same(dependencies.readReceipt(options.evidencePath), receipt)) return refuse("evidence_invalid");
   await prove(); assertIntent();
-  return { schemaVersion: 2 as const, state: "complete" as const, ...repaired, verificationPasses: 2 as const, activationAuthorized: false as const };
+  return { schemaVersion: 3 as const, state: "complete" as const, ...repaired, verificationPasses: 2 as const, activationAuthorized: false as const };
 }
 
 const readOptional = <T>(path: string, schema: z.ZodType<T>): T | undefined => {

@@ -69,7 +69,12 @@ const genesisHardAuthority = makeFunctionReference<
   "mutation", Record<string, never>, Readonly<{ enforcement: "hard" }>
 >("quota:genesisHardAuthority");
 
-async function predecessorQuotaWorld() {
+// Independently fixed 42d9195..b3af485 resource shape, before live_chunk.
+const preLiveTailResources = [
+  "device", "codex_account", "session_head", "session_chunk", "nonterminal_command",
+] as const;
+
+async function predecessorQuotaWorld(preLiveTail = false) {
   const runtime = convexTest(schema, testModules);
   await runtime.mutation(genesisHardAuthority, {});
   const addUser = async () => await runtime.run(async (ctx) => {
@@ -90,7 +95,7 @@ async function predecessorQuotaWorld() {
         userId: id,
       });
     }
-    for (const resource of predecessorResources) {
+    for (const resource of preLiveTail ? preLiveTailResources : predecessorResources) {
       await ctx.db.insert("storageResourceUsageByUser", {
         resource, records: 0, updatedAt: now, userId: id,
       });
@@ -121,6 +126,9 @@ async function snapshot(world: World) {
     resources: await ctx.db.query("storageResourceUsageByUser").collect(),
     spaces: await ctx.db.query("memorySpaces").collect(),
     operations: await ctx.db.query("memoryOperations").collect(),
+    chunks: await ctx.db.query("sessionChunks").collect(),
+    heads: await ctx.db.query("sessionHeads").collect(),
+    devices: await ctx.db.query("devices").collect(),
   }));
 }
 async function assertConserved(world: World, before: Awaited<ReturnType<typeof snapshot>>) {
@@ -129,6 +137,9 @@ async function assertConserved(world: World, before: Awaited<ReturnType<typeof s
   expect(after.service).toEqual(before.service);
   expect(after.spaces).toEqual(before.spaces);
   expect(after.operations).toEqual(before.operations);
+  expect(after.chunks).toEqual(before.chunks);
+  expect(after.heads).toEqual(before.heads);
+  expect(after.devices).toEqual(before.devices);
   for (const row of before.categories) {
     expect(after.categories.find((candidate) => candidate._id === row._id))
       .toEqual(row.category === "identity" ? { ...row, quotaSchemaVersion: 2 } : row);
@@ -163,6 +174,264 @@ async function addMemorySpace(world: World, charge = false) {
   });
 }
 
+async function addSessionChunk(world: World, stream: "compact" | "detail", orphan = false, withExpiry = true) {
+  await world.runtime.run(async (ctx) => {
+    const device = {
+      activatedAt: 1, authEpoch: 1, createdAt: 1, credentialGeneration: 1,
+      encryptedLabel: envelope, keyVersion: 1, publicId: "chunk-device", revision: 1,
+      signingPublicKey: "fixture", status: "active" as const, updatedAt: 1,
+      userId: world.userId, wrappingPublicKey: "fixture",
+    };
+    const deviceId = await ctx.db.insert("devices", device);
+    const head = {
+      compactHeadSequence: 0, detailHeadSequence: 0,
+      createdAt: 1, executionDeviceId: deviceId, metadataRevision: 0, projectionRevision: 0,
+      publicId: "chunk-session", state: "idle" as const, updatedAt: 1, userId: world.userId,
+    };
+    const sessionId = await ctx.db.insert("sessionHeads", head);
+    const chunk = {
+      authority: { bootGeneration: 1, bootId: "chunk-boot", fence: 1 }, createdAt: 1,
+      digest: "a".repeat(64), envelope, firstSequence: 1, lastSequence: 1,
+      sessionId, sourceDeviceId: deviceId, stream, userId: world.userId,
+      ...(stream === "detail" && withExpiry ? { expiresAt: 2 } : {}),
+    };
+    await ctx.db.insert("sessionChunks", chunk);
+    if (orphan) await ctx.db.delete(sessionId);
+    // Preserve the predecessor's real charges; the upgrade must not replace
+    // existing session_chunk authority with a count inferred from live data.
+    const charges = [
+      { category: "device", resource: "device", document: device },
+      ...(!orphan ? [{ category: "session", resource: "session_head", document: head } as const] : []),
+      { category: "chunk", resource: "session_chunk", document: chunk },
+    ] as const;
+    const service = await ctx.db.query("storageUsageService").unique();
+    if (service === null) throw new Error("missing chunk service fixture");
+    let bytes = 0;
+    for (const charge of charges) {
+      const category = await ctx.db.query("storageUsageByUser")
+        .withIndex("by_user_and_category", (q) => q.eq("userId", world.userId).eq("category", charge.category)).unique();
+      const resource = await ctx.db.query("storageResourceUsageByUser")
+        .withIndex("by_user_and_resource", (q) => q.eq("userId", world.userId).eq("resource", charge.resource)).unique();
+      if (category === null || resource === null) throw new Error("missing chunk authority fixture");
+      const addedBytes = logicalDocumentBytes(charge.document);
+      bytes += addedBytes;
+      await ctx.db.patch(category._id, { logicalBytes: category.logicalBytes + addedBytes, records: category.records + 1 });
+      await ctx.db.patch(resource._id, { records: resource.records + 1 });
+    }
+    if (stream === "detail") {
+      const live = await ctx.db.query("storageResourceUsageByUser")
+        .withIndex("by_user_and_resource", (q) => q.eq("userId", world.userId).eq("resource", "live_chunk")).unique();
+      if (live !== null) await ctx.db.patch(live._id, { records: live.records + 1 });
+    }
+    await ctx.db.patch(service._id, {
+      logicalBytes: service.logicalBytes + bytes, records: service.records + charges.length,
+      userLogicalBytes: service.userLogicalBytes + bytes, userRecords: service.userRecords + charges.length,
+    });
+  });
+}
+
+async function addOrphanMemoryOperation(world: World) {
+  const memorySpaceId = await addMemorySpace(world);
+  await world.runtime.run(async (ctx) => {
+    const deviceId = await ctx.db.insert("devices", {
+      activatedAt: 1, authEpoch: 1, createdAt: 1, credentialGeneration: 1,
+      encryptedLabel: envelope, keyVersion: 1, publicId: "memory-device", revision: 1,
+      signingPublicKey: "fixture", status: "active", updatedAt: 1,
+      userId: world.userId, wrappingPublicKey: "fixture",
+    });
+    await ctx.db.insert("memoryOperations", {
+      adoptionProof: null, baseRevision: 1, createdAt: 1, genesisToken: "fixture-genesis",
+      headToken: "fixture-head", keyVersion: 1, memorySpaceId, operation: envelope,
+      priorToken: "fixture-prior", sequence: 1, sourceDeviceId: deviceId,
+      terminalHeadProof: envelope, userId: world.userId,
+    });
+    await ctx.db.delete(memorySpaceId);
+  });
+}
+
+describe("pre-live-tail hosted quota upgrade", () => {
+  test("adds exactly three zero rows, preserves compact history and old charges, and is concurrent-idempotent", async () => {
+    for (const compactHistory of [false, true]) {
+      const world = await predecessorQuotaWorld(true);
+      if (compactHistory) await addSessionChunk(world, "compact");
+      const before = await snapshot(world);
+      expect(await world.runtime.query(audit, pageArgs)).toEqual({
+        schemaVersion: 3, continueCursor: expect.any(String), isDone: true, scanned: 1,
+        legacy: 0, legacyEmptyLiveTail: 1, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0,
+      });
+      expect(await world.runtime.query(diagnose, pageArgs)).toMatchObject({
+        schemaVersion: 3, legacyEmptyLiveTail: 1, reasons: emptyQuotaUpgradeCorruptionCounts(), missingShapes: [],
+      });
+      expect(await snapshot(world)).toEqual(before);
+      const results = await Promise.all([world.runtime.mutation(upgrade, pageArgs), world.runtime.mutation(upgrade, pageArgs)]);
+      for (const key of ["changed", "marked", "upgradedLiveTail"] as const) {
+        expect(results.reduce((sum, result) => sum + result[key], 0)).toBe(1);
+      }
+      for (const key of ["upgraded", "repairedMemory"] as const) {
+        expect(results.reduce((sum, result) => sum + result[key], 0)).toBe(0);
+      }
+      await assertConserved(world, before);
+      const after = await snapshot(world);
+      expect(after.categories).toHaveLength(12); expect(after.resources).toHaveLength(7);
+      expect(after.categories.filter((row) => !before.categories.some((old) => old._id === row._id))
+        .map(({ category, logicalBytes, records, userId }) => ({ category, logicalBytes, records, userId })))
+        .toEqual([{ category: "memory", logicalBytes: 0, records: 0, userId: world.userId }]);
+      expect(after.resources.filter((row) => !before.resources.some((old) => old._id === row._id))
+        .map(({ resource, records, userId }) => ({ resource, records, userId }))
+        .sort((a, b) => a.resource.localeCompare(b.resource)))
+        .toEqual([
+          { resource: "live_chunk", records: 0, userId: world.userId },
+          { resource: "memory_space", records: 0, userId: world.userId },
+        ]);
+      expect(after.categories.find((row) => row.category === "identity")?.quotaSchemaVersion).toBe(2);
+      expect(await world.runtime.mutation(upgrade, pageArgs)).toMatchObject({
+        schemaVersion: 3, changed: 0, current: 1, marked: 0, upgraded: 0, upgradedLiveTail: 0, repairedMemory: 0,
+      });
+      expect(await snapshot(world)).toEqual(after);
+    }
+  });
+
+  test("every missing or duplicate old counter, marker, and present memory row refuses", async () => {
+    const cases = [
+      ...predecessorCategories.flatMap((category) => [
+        { category, duplicate: false }, { category, duplicate: true },
+      ]),
+      ...preLiveTailResources.flatMap((resource) => [
+        { resource, duplicate: false }, { resource, duplicate: true },
+      ]),
+      ...([1, 2, 3] as const).map((marker) => ({ marker })),
+      ...(["category", "resource", "both"] as const).map((memory) => ({ memory })),
+    ];
+    for (const kind of cases) {
+      const world = await predecessorQuotaWorld(true);
+      await world.runtime.run(async (ctx) => {
+        if ("category" in kind) {
+          const row = await ctx.db.query("storageUsageByUser")
+            .withIndex("by_user_and_category", (q) => q.eq("userId", world.userId).eq("category", kind.category)).unique();
+          if (row === null) throw new Error("missing category fixture");
+          if (kind.duplicate) await ctx.db.insert("storageUsageByUser", { category: row.category,
+            logicalBytes: row.logicalBytes, records: row.records, updatedAt: row.updatedAt, userId: row.userId });
+          else await ctx.db.delete(row._id);
+        } else if ("resource" in kind) {
+          const row = await ctx.db.query("storageResourceUsageByUser")
+            .withIndex("by_user_and_resource", (q) => q.eq("userId", world.userId).eq("resource", kind.resource)).unique();
+          if (row === null) throw new Error("missing resource fixture");
+          if (kind.duplicate) await ctx.db.insert("storageResourceUsageByUser", {
+            resource: row.resource, records: row.records, updatedAt: row.updatedAt, userId: row.userId });
+          else await ctx.db.delete(row._id);
+        } else if ("marker" in kind) {
+          const identity = await ctx.db.query("storageUsageByUser")
+            .withIndex("by_user_and_category", (q) => q.eq("userId", world.userId).eq("category", "identity")).unique();
+          if (identity === null) throw new Error("missing identity fixture");
+          await ctx.db.patch(identity._id, { quotaSchemaVersion: kind.marker });
+        } else {
+          if (kind.memory !== "resource") await ctx.db.insert("storageUsageByUser", {
+            category: "memory", logicalBytes: 0, records: 0, updatedAt: 1, userId: world.userId,
+          });
+          if (kind.memory !== "category") await ctx.db.insert("storageResourceUsageByUser", {
+            resource: "memory_space", records: 0, updatedAt: 1, userId: world.userId,
+          });
+        }
+      });
+      const before = await snapshot(world);
+      expect(await world.runtime.query(audit, pageArgs)).toMatchObject({ legacyEmptyLiveTail: 0, corrupt: 1 });
+      await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+      expect(await snapshot(world)).toEqual(before);
+    }
+  });
+
+  test("expired, nonexpiring and orphan detail chunks refuse even when compact history precedes them", async () => {
+    for (const orphan of [false, true]) for (const withExpiry of [false, true]) {
+      const world = await predecessorQuotaWorld(true);
+      await addSessionChunk(world, "compact");
+      await addSessionChunk(world, "detail", orphan, withExpiry);
+      const before = await snapshot(world);
+      expect(await world.runtime.query(diagnose, pageArgs)).toMatchObject({ legacyEmptyLiveTail: 0, corrupt: 1,
+        reasons: { ...emptyQuotaUpgradeCorruptionCounts(), legacy_chunks_present: 1 } });
+      await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+      expect(await snapshot(world)).toEqual(before);
+    }
+  });
+
+  test("owner memory spaces and orphan operations refuse the oldest shape", async () => {
+    for (const orphan of [false, true]) {
+      const world = await predecessorQuotaWorld(true);
+      if (orphan) await addOrphanMemoryOperation(world); else await addMemorySpace(world);
+      const before = await snapshot(world);
+      expect(await world.runtime.query(diagnose, pageArgs)).toMatchObject({ legacyEmptyLiveTail: 0, corrupt: 1,
+        reasons: { ...emptyQuotaUpgradeCorruptionCounts(), legacy_memory_present: 1 } });
+      await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+      expect(await snapshot(world)).toEqual(before);
+    }
+  });
+
+  test("another owner's detail chunks and memory do not alter empty live-tail authority", async () => {
+    const world = await predecessorQuotaWorld(true);
+    const other = { ...world, userId: await world.addUser() };
+    await world.runtime.mutation(upgrade, pageArgs);
+    await addSessionChunk(other, "detail", true);
+    await addMemorySpace(other, true);
+    // Restore only this owner's exact predecessor; the foreign current owner
+    // remains charged and need not be recounted to classify this owner.
+    await world.runtime.run(async (ctx) => {
+      const categories = await ctx.db.query("storageUsageByUser")
+        .withIndex("by_user_and_category", (q) => q.eq("userId", world.userId)).collect();
+      const resources = await ctx.db.query("storageResourceUsageByUser")
+        .withIndex("by_user_and_resource", (q) => q.eq("userId", world.userId)).collect();
+      for (const row of categories) {
+        if (row.category === "memory") await ctx.db.delete(row._id);
+        if (row.category === "identity") await ctx.db.patch(row._id, { quotaSchemaVersion: undefined });
+      }
+      for (const row of resources) if (row.resource === "memory_space" || row.resource === "live_chunk") await ctx.db.delete(row._id);
+    });
+    const before = await snapshot(world);
+    expect(await world.runtime.query(audit, pageArgs)).toMatchObject({ legacyEmptyLiveTail: 1, current: 1, corrupt: 0 });
+    expect(await world.runtime.mutation(upgrade, pageArgs)).toMatchObject({ upgradedLiveTail: 1, changed: 1, current: 1 });
+    await assertConserved(world, before);
+  });
+
+  test("a later user's detail chunk rolls back all three additions and marker for earlier users", async () => {
+    const world = await predecessorQuotaWorld(true);
+    const later = { ...world, userId: await world.addUser() };
+    await addSessionChunk(later, "detail", true);
+    const before = await snapshot(world);
+    expect(await world.runtime.query(audit, pageArgs)).toMatchObject({ legacyEmptyLiveTail: 1, corrupt: 1 });
+    await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+    expect(await snapshot(world)).toEqual(before);
+  });
+
+  test("audit does not authorize a later mutation after detail or memory appears", async () => {
+    for (const inserted of ["detail", "space", "operation"] as const) {
+      const world = await predecessorQuotaWorld(true);
+      expect(await world.runtime.query(audit, pageArgs)).toMatchObject({ legacyEmptyLiveTail: 1, corrupt: 0 });
+      if (inserted === "detail") await addSessionChunk(world, "detail", true);
+      else if (inserted === "space") await addMemorySpace(world);
+      else await addOrphanMemoryOperation(world);
+      const before = await snapshot(world);
+      await expect(world.runtime.mutation(upgrade, pageArgs)).rejects.toThrow("QUOTA_AUTHORITY_CORRUPT");
+      expect(await snapshot(world)).toEqual(before);
+    }
+  });
+
+  test("the oldest shape retains bounded page traversal and distinct aggregate accounting", async () => {
+    const world = await predecessorQuotaWorld(true);
+    for (let index = 0; index < 9; index += 1) await world.addUser();
+    const before = await snapshot(world);
+    const firstDiagnostic = await world.runtime.query(diagnose, pageArgs);
+    expect(firstDiagnostic).toMatchObject({ scanned: 8, legacy: 0, legacyEmptyLiveTail: 8, corrupt: 0, isDone: false });
+    expect(await world.runtime.query(diagnose, { ...pageArgs,
+      paginationOpts: { cursor: firstDiagnostic.continueCursor, numItems: 8 },
+    })).toMatchObject({ scanned: 2, legacyEmptyLiveTail: 2, isDone: true });
+    expect(await snapshot(world)).toEqual(before);
+    const first = await world.runtime.mutation(upgrade, pageArgs);
+    expect(first).toMatchObject({ scanned: 8, changed: 8, upgraded: 0, upgradedLiveTail: 8, isDone: false });
+    expect(await world.runtime.mutation(upgrade, { ...pageArgs,
+      paginationOpts: { cursor: first.continueCursor, numItems: 8 },
+    })).toMatchObject({ scanned: 2, changed: 2, upgraded: 0, upgradedLiveTail: 2, isDone: true });
+    await assertConserved(world, before);
+  });
+});
+
 const incompleteForms = [
   { missing: "category", marked: false }, { missing: "resource", marked: false },
   { missing: "category", marked: true }, { missing: "resource", marked: true },
@@ -192,7 +461,7 @@ describe("predecessor hosted quota upgrade", () => {
       await makeIncompleteMemory(world, form);
       const before = await snapshot(world);
       expect(await world.runtime.query(audit, pageArgs)).toMatchObject({
-        schemaVersion: 2, legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 1, corrupt: 0,
+        schemaVersion: 3, legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 1, corrupt: 0,
       });
       expect(await world.runtime.query(diagnose, pageArgs)).toMatchObject({
         incompleteEmptyMemory: 1, corrupt: 0, reasons: emptyQuotaUpgradeCorruptionCounts(), missingShapes: [],
@@ -351,8 +620,8 @@ describe("predecessor hosted quota upgrade", () => {
     });
     const before = await snapshot(world);
     const result = await world.runtime.query(diagnose, pageArgs);
-    expect(result).toEqual({ schemaVersion: 2, continueCursor: expect.any(String), isDone: true,
-      scanned: 4, legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 2, current: 0, corrupt: 2,
+    expect(result).toEqual({ schemaVersion: 3, continueCursor: expect.any(String), isDone: true,
+      scanned: 4, legacy: 0, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 2, current: 0, corrupt: 2,
       reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 2 },
       missingShapes: [
         { count: 1, shape: { marker: "current", missingCategories: ["device"], missingResources: [], memoryCategory: "zero", memoryResource: "zero" } },
@@ -378,8 +647,8 @@ describe("predecessor hosted quota upgrade", () => {
     });
     const before = await snapshot(world);
     const result = await world.runtime.query(diagnose, pageArgs);
-    expect(result).toEqual({ schemaVersion: 2, continueCursor: expect.any(String), isDone: true,
-      scanned: 4, legacy: 1, unmarkedCurrent: 1, incompleteEmptyMemory: 0, current: 1, corrupt: 1,
+    expect(result).toEqual({ schemaVersion: 3, continueCursor: expect.any(String), isDone: true,
+      scanned: 4, legacy: 1, legacyEmptyLiveTail: 0, unmarkedCurrent: 1, incompleteEmptyMemory: 0, current: 1, corrupt: 1,
       reasons: { ...emptyQuotaUpgradeCorruptionCounts(), category_authority: 1 }, missingShapes: [] });
     expect(await snapshot(world)).toEqual(before);
     await expect(world.runtime.query(productionDiagnose, pageArgs)).rejects.toThrow("QUOTA_UPGRADE_RUNTIME_CHANGED");
@@ -458,8 +727,8 @@ describe("predecessor hosted quota upgrade", () => {
     const world = await predecessorQuotaWorld();
     const before = await snapshot(world);
     const result = await world.runtime.query(audit, pageArgs);
-    expect(result).toEqual({ schemaVersion: 2, continueCursor: expect.any(String), isDone: true,
-      scanned: 1, legacy: 1, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 });
+    expect(result).toEqual({ schemaVersion: 3, continueCursor: expect.any(String), isDone: true,
+      scanned: 1, legacy: 1, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 });
     expect(await snapshot(world)).toEqual(before);
   });
 
@@ -545,8 +814,8 @@ describe("predecessor hosted quota upgrade", () => {
   });
 
   test("preserves arbitrary valid predecessor accounting during the additive transition", async () => {
-    await fc.assert(fc.asyncProperty(fc.integer({ min: 1, max: 100 }), fc.integer({ min: 1, max: 1000 }), async (records, perRecord) => {
-      const world = await predecessorQuotaWorld();
+    await fc.assert(fc.asyncProperty(fc.boolean(), fc.integer({ min: 1, max: 100 }), fc.integer({ min: 1, max: 1000 }), async (preLiveTail, records, perRecord) => {
+      const world = await predecessorQuotaWorld(preLiveTail);
       await world.runtime.run(async (ctx) => {
         const row = await ctx.db.query("storageUsageByUser")
           .withIndex("by_user_and_category", (query) => query.eq("userId", world.userId).eq("category", "receipt")).unique();

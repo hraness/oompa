@@ -31,7 +31,7 @@ const arguments_ = ["repair", "--source-commit", sourceCommit, "--deploy-evidenc
   "--execute", "--acknowledge-forward-only", "--team-id", "513923", "--project-id", "2854545",
   "--deployment-id", "7654321", "--deployment", target.deploymentName, "--deployment-url", target.deploymentUrl];
 
-function world(form: "legacy" | "incomplete_marked" | "incomplete_unmarked" = "legacy") {
+function world(form: "legacy" | "legacy_live_tail" | "incomplete_marked" | "incomplete_unmarked" = "legacy") {
   const state: {
     current: boolean; corrupt: boolean; calls: string[]; audits: number; mutations: number; receipts: number;
     intent?: ReturnType<QuotaUpgradeDependencies["readIntent"]>;
@@ -46,16 +46,17 @@ function world(form: "legacy" | "incomplete_marked" | "incomplete_unmarked" = "l
       expect(args).toEqual({ expectedRuntimeAttestation: after, paginationOpts: { numItems: 8, cursor: null } });
       if (name === "quota:auditUserQuotaUpgradePage") {
         state.calls.push("audit"); state.audits += 1;
-        return { schemaVersion: 2, continueCursor: "", isDone: true, scanned: 1,
-          legacy: state.corrupt || state.current || form !== "legacy" ? 0 : 1, unmarkedCurrent: 0,
-          incompleteEmptyMemory: state.corrupt || state.current || form === "legacy" ? 0 : 1,
+        return { schemaVersion: 3, continueCursor: "", isDone: true, scanned: 1,
+          legacy: state.corrupt || state.current || form !== "legacy" ? 0 : 1,
+          legacyEmptyLiveTail: state.corrupt || state.current || form !== "legacy_live_tail" ? 0 : 1, unmarkedCurrent: 0,
+          incompleteEmptyMemory: state.corrupt || state.current || !form.startsWith("incomplete_") ? 0 : 1,
           current: !state.corrupt && state.current ? 1 : 0, corrupt: state.corrupt ? 1 : 0 };
       }
       expect(state.intent).toBeDefined();
       expect(state.audits).toBeGreaterThan(0);
       state.calls.push("mutation"); state.mutations += 1; state.current = true;
-      return { schemaVersion: 2, continueCursor: "", isDone: true, scanned: 1, current: 0, changed: 1, upgraded: form === "legacy" ? 1 : 0,
-        marked: form === "incomplete_marked" ? 0 : 1, repairedMemory: form === "legacy" ? 0 : 1 };
+      return { schemaVersion: 3, continueCursor: "", isDone: true, scanned: 1, current: 0, changed: 1, upgraded: form === "legacy" ? 1 : 0, upgradedLiveTail: form === "legacy_live_tail" ? 1 : 0,
+        marked: form === "incomplete_marked" ? 0 : 1, repairedMemory: form.startsWith("incomplete_") ? 1 : 0 };
     },
     readIntent: () => state.intent,
     writeIntent: (_path, value) => { state.calls.push("intent"); state.intent = value; },
@@ -70,8 +71,8 @@ describe("quota upgrade operator", () => {
     deployEvidencePath: options.deployEvidencePath, previousDeployEvidencePath: options.previousDeployEvidencePath };
   const shape = { marker: "current" as const, missingCategories: ["device" as const, "memory" as const],
     missingResources: ["memory_space" as const], memoryCategory: "absent" as const, memoryResource: "absent" as const };
-  const diagnosticPage = { schemaVersion: 2 as const, continueCursor: "", isDone: true, scanned: 2,
-    legacy: 1, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 1,
+  const diagnosticPage = { schemaVersion: 3 as const, continueCursor: "", isDone: true, scanned: 2,
+    legacy: 1, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 1,
     reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 1 }, missingShapes: [{ shape, count: 1 }] };
 
   test("diagnose rejects mutation flags and evidence paths before effects", async () => {
@@ -103,8 +104,8 @@ describe("quota upgrade operator", () => {
       readReceipt: () => { throw new Error("unexpected receipt read"); },
       writeReceipt: () => { throw new Error("unexpected receipt write"); },
     });
-    expect(result).toEqual({ schemaVersion: 2, kind: "quota_upgrade_diagnostic", state: "diagnostic_complete",
-      scanned: 4, legacy: 2, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 2,
+    expect(result).toEqual({ schemaVersion: 3, kind: "quota_upgrade_diagnostic", state: "diagnostic_complete",
+      scanned: 4, legacy: 2, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 2,
       reasons: { ...emptyQuotaUpgradeCorruptionCounts(), schema_shape: 2 }, missingShapes: [{ shape, count: 2 }], pages: 2,
       consistency: "per_page_only", reasonSelection: "first_failure_per_identity", repairAuthorized: false, activationAuthorized: false });
   });
@@ -157,6 +158,20 @@ describe("quota upgrade operator", () => {
     const valid = { ...shape, missingCategories: ["device", "memory"] };
     expect(quotaUpgradeDiagnosticPageSchema.safeParse({ ...diagnosticPage,
       missingShapes: [{ shape: valid, count: 1 }] }).success).toBe(true);
+  });
+
+  test("diagnostic distinguishes supported old live-tail layout from malformed variants", () => {
+    const liveTailShape = { marker: "unmarked", missingCategories: ["memory"],
+      missingResources: ["live_chunk", "memory_space"], memoryCategory: "absent", memoryResource: "absent" };
+    const frame = { ...diagnosticPage, missingShapes: [{ shape: liveTailShape, count: 1 }] };
+    expect(quotaUpgradeDiagnosticPageSchema.safeParse(frame).success).toBeFalse();
+    for (const variant of [{ ...liveTailShape, marker: "current" },
+      { ...liveTailShape, missingCategories: [], memoryCategory: "zero" },
+      { ...liveTailShape, missingResources: ["live_chunk"], memoryResource: "zero" }]) {
+      expect(quotaUpgradeDiagnosticPageSchema.safeParse({ ...frame, missingShapes: [{ shape: variant, count: 1 }] }).success).toBeTrue();
+    }
+    expect(quotaUpgradeDiagnosticPageSchema.safeParse({ ...frame, missingShapes: [],
+      reasons: { ...emptyQuotaUpgradeCorruptionCounts(), legacy_chunks_present: 1 } }).success).toBeTrue();
   });
 
   test("diagnostic refuses stalled cursors and bounded scan overflow", async () => {
@@ -241,7 +256,7 @@ describe("quota upgrade operator", () => {
     expect(state.intent).toBeUndefined();
   });
 
-  test("empty-memory repair records v2 policy intent, preserves actual marker counts and reconciles lost responses", async () => {
+  test("empty-memory repair records v3 policy intent, preserves actual marker counts and reconciles lost responses", async () => {
     for (const form of ["incomplete_marked", "incomplete_unmarked"] as const) {
       const { state, dependencies } = world(form);
       await expect(manageQuotaUpgrade(options, { ...dependencies, invoke: async (name, args) => {
@@ -249,15 +264,15 @@ describe("quota upgrade operator", () => {
         if (name === "quota:upgradeUserQuotaPage") throw new Error("response lost");
         return result;
       } })).rejects.toThrow("response lost");
-      expect(state.intent).toMatchObject({ schemaVersion: 2, repairPolicy: "empty-memory-authority-v1" });
+      expect(state.intent).toMatchObject({ schemaVersion: 3, repairPolicy: "empty-live-tail-memory-authority-v1" });
       expect(state.receipt).toBeUndefined(); expect(state.mutations).toBe(1);
       const recovered = await manageQuotaUpgrade(options, dependencies);
-      expect(recovered).toMatchObject({ schemaVersion: 2, state: "complete", changed: 0, repairedMemory: 0, marked: 0, activationAuthorized: false });
+      expect(recovered).toMatchObject({ schemaVersion: 3, state: "complete", changed: 0, repairedMemory: 0, marked: 0, activationAuthorized: false });
       expect(state.mutations).toBe(1);
-      expect(state.receipt).toMatchObject({ schemaVersion: 2, repairPolicy: "empty-memory-authority-v1", verificationPasses: 2 });
+      expect(state.receipt).toMatchObject({ schemaVersion: 3, repairPolicy: "empty-live-tail-memory-authority-v1", verificationPasses: 2 });
       const fresh = world(form);
       expect(await manageQuotaUpgrade(options, fresh.dependencies)).toMatchObject({
-        changed: 1, repairedMemory: 1, upgraded: 0, marked: form === "incomplete_marked" ? 0 : 1,
+        changed: 1, repairedMemory: 1, upgraded: 0, upgradedLiveTail: 0, marked: form === "incomplete_marked" ? 0 : 1,
       });
       expect(fresh.state.calls.indexOf("intent")).toBeLessThan(fresh.state.calls.indexOf("mutation"));
     }
@@ -271,15 +286,15 @@ describe("quota upgrade operator", () => {
         expect(args.expectedRuntimeAttestation).toEqual(after); expect(args.paginationOpts.numItems).toBe(8);
         const index = args.paginationOpts.cursor === null ? 0 : 1;
         expect(args.paginationOpts.cursor).toBe(index === 0 ? null : "second");
-        const page = { schemaVersion: 2, continueCursor: index === 0 ? "second" : "", isDone: index === 1, scanned: 1 };
+        const page = { schemaVersion: 3, continueCursor: index === 0 ? "second" : "", isDone: index === 1, scanned: 1 };
         if (name === "quota:auditUserQuotaUpgradePage") return { ...page,
-          legacy: 0, unmarkedCurrent: 0, incompleteEmptyMemory: complete[index] ? 0 : 1,
+          legacy: 0, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: complete[index] ? 0 : 1,
           current: complete[index] ? 1 : 0, corrupt: 0 };
         expect(name).toBe("quota:upgradeUserQuotaPage"); expect(state.intent).toBeDefined();
         const changed = complete[index] ? 0 : 1;
         effects[index] = (effects[index] ?? 0) + changed; complete[index] = true;
         if (loseResponse && index === lostPage) { loseResponse = false; throw new Error("page response lost"); }
-        return { ...page, current: 1 - changed, changed, upgraded: 0, marked: 0, repairedMemory: changed };
+        return { ...page, current: 1 - changed, changed, upgraded: 0, upgradedLiveTail: 0, marked: 0, repairedMemory: changed };
       } };
       await expect(manageQuotaUpgrade(options, paged)).rejects.toThrow("page response lost");
       expect(state.intent).toBeDefined(); expect(state.receipt).toBeUndefined();
@@ -296,14 +311,50 @@ describe("quota upgrade operator", () => {
     expect(quotaUpgradeIntentSchema.safeParse(state.intent).success).toBeTrue();
     expect(quotaUpgradeReceiptSchema.safeParse(state.receipt).success).toBeTrue();
     for (const [schema, value] of [[quotaUpgradeIntentSchema, state.intent], [quotaUpgradeReceiptSchema, state.receipt]] as const) {
-      expect(schema.safeParse({ ...value, schemaVersion: 1 }).success).toBeFalse();
+      for (const schemaVersion of [1, 2]) expect(schema.safeParse({ ...value, schemaVersion }).success).toBeFalse();
+      expect(schema.safeParse({ ...value, repairPolicy: "empty-memory-authority-v1" }).success).toBeFalse();
       expect(schema.safeParse({ ...value, repairPolicy: "arbitrary-repair" }).success).toBeFalse();
       const missingPolicy = { ...value }; Reflect.deleteProperty(missingPolicy, "repairPolicy");
       expect(schema.safeParse(missingPolicy).success).toBeFalse();
     }
-    for (const schema of [quotaUpgradeAuditPageSchema, quotaUpgradeDiagnosticPageSchema]) {
-      expect(schema.safeParse({ ...diagnosticPage, schemaVersion: 1 }).success).toBeFalse();
+    const auditPage = { schemaVersion: 3, continueCursor: "", isDone: true, scanned: 1,
+      legacy: 0, legacyEmptyLiveTail: 1, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
+    const mutationPage = { schemaVersion: 3, continueCursor: "", isDone: true, scanned: 1,
+      current: 0, changed: 1, upgraded: 0, upgradedLiveTail: 1, marked: 1, repairedMemory: 0 };
+    for (const [schema, value] of [[quotaUpgradeAuditPageSchema, auditPage],
+      [quotaUpgradeDiagnosticPageSchema, diagnosticPage], [quotaUpgradeMutationPageSchema, mutationPage]] as const) {
+      expect(schema.safeParse(value).success).toBeTrue();
+      for (const schemaVersion of [1, 2]) expect(schema.safeParse({ ...value, schemaVersion }).success).toBeFalse();
     }
+  });
+
+  test("legacy live-tail debt receives its own counts, policy and replay protection", async () => {
+    const { state, dependencies } = world("legacy_live_tail");
+    const status = await manageQuotaUpgrade({ action: "status", sourceCommit, target,
+      deployEvidencePath: options.deployEvidencePath, previousDeployEvidencePath: options.previousDeployEvidencePath }, dependencies);
+    expect(status).toMatchObject({ state: "debt", legacy: 0, legacyEmptyLiveTail: 1, incompleteEmptyMemory: 0 });
+    const result = await manageQuotaUpgrade(options, dependencies);
+    expect(result).toMatchObject({ schemaVersion: 3, state: "complete", changed: 1, upgraded: 0,
+      upgradedLiveTail: 1, repairedMemory: 0, marked: 1, verificationPasses: 2, activationAuthorized: false });
+    expect(state.intent).toMatchObject({ schemaVersion: 3, repairPolicy: "empty-live-tail-memory-authority-v1", quotaSchemaVersion: 2 });
+    expect(state.receipt).toMatchObject({ schemaVersion: 3, repairPolicy: "empty-live-tail-memory-authority-v1", quotaSchemaVersion: 2 });
+    await manageQuotaUpgrade(options, dependencies);
+    expect(state.mutations).toBe(1); expect(state.receipts).toBe(1);
+    state.current = false;
+    await expect(manageQuotaUpgrade(options, dependencies)).rejects.toMatchObject({ code: "evidence_invalid" });
+    expect(state.mutations).toBe(1);
+  });
+
+  test("legacy live-tail committed response loss is reconciled without a second mutation", async () => {
+    const { state, dependencies } = world("legacy_live_tail");
+    await expect(manageQuotaUpgrade(options, { ...dependencies, invoke: async (name, args) => {
+      const result = await dependencies.invoke(name, args);
+      if (name === "quota:upgradeUserQuotaPage") throw new Error("response lost");
+      return result;
+    } })).rejects.toThrow("response lost");
+    expect(state.intent).toBeDefined(); expect(state.receipt).toBeUndefined();
+    expect(await manageQuotaUpgrade(options, dependencies)).toMatchObject({ state: "complete", upgradedLiveTail: 0, changed: 0 });
+    expect(state.mutations).toBe(1); expect(state.receipts).toBe(1);
   });
 
   test("completed empty-memory repair cannot reopen from later debt", async () => {
@@ -394,15 +445,15 @@ describe("quota upgrade operator", () => {
       const { state, dependencies } = world(); let calls = 0;
       await expect(manageQuotaUpgrade(options, { ...dependencies, invoke: async () => {
         calls += 1;
-        return { schemaVersion: 2, continueCursor: "same", isDone: false, scanned, legacy: scanned, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
+        return { schemaVersion: 3, continueCursor: "same", isDone: false, scanned, legacy: scanned, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
       } })).rejects.toMatchObject({ code: "pagination_invalid" });
       expect(calls).toBeLessThanOrEqual(2); expect(state.mutations).toBe(0);
     }
   });
 
   test("rejects malformed provider frames without a completion receipt", async () => {
-    for (const value of [null, {}, { schemaVersion: 2, continueCursor: "", isDone: true, scanned: 1,
-      legacy: 1, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 1, corrupt: 0 }]) {
+    for (const value of [null, {}, { schemaVersion: 3, continueCursor: "", isDone: true, scanned: 1,
+      legacy: 1, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 1, corrupt: 0 }]) {
       const { state, dependencies } = world();
       await expect(manageQuotaUpgrade(options, { ...dependencies, invoke: async () => value })).rejects.toMatchObject({ code: "provider_result_invalid" });
       expect(state.intent).toBeUndefined(); expect(state.receipts).toBe(0);
@@ -414,7 +465,7 @@ describe("quota upgrade operator", () => {
     await expect(manageQuotaUpgrade(options, { ...dependencies, invoke: async (name, args) => {
       const value = await dependencies.invoke(name, args);
       if (name === "quota:auditUserQuotaUpgradePage" && state.audits === 3) {
-        return { schemaVersion: 2, continueCursor: "", isDone: true, scanned: 1, legacy: 1, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
+        return { schemaVersion: 3, continueCursor: "", isDone: true, scanned: 1, legacy: 1, legacyEmptyLiveTail: 0, unmarkedCurrent: 0, incompleteEmptyMemory: 0, current: 0, corrupt: 0 };
       }
       return value;
     } })).rejects.toMatchObject({ code: "quota_upgrade_debt_remaining" });
@@ -422,31 +473,31 @@ describe("quota upgrade operator", () => {
   });
 
   test("all valid bounded audit partitions conserve the scanned count", () => {
-    fc.assert(fc.property(fc.array(fc.integer({ min: 0, max: 4 }), { maxLength: 8 }), (kinds) => {
-      const bins = [0, 0, 0, 0, 0];
+    fc.assert(fc.property(fc.array(fc.integer({ min: 0, max: 5 }), { maxLength: 8 }), (kinds) => {
+      const bins = [0, 0, 0, 0, 0, 0];
       for (const kind of kinds) bins[kind] = (bins[kind] ?? 0) + 1;
-      const frame = { schemaVersion: 2, continueCursor: "", isDone: true, scanned: kinds.length,
-        legacy: bins[0], unmarkedCurrent: bins[1], incompleteEmptyMemory: bins[2], current: bins[3], corrupt: bins[4] };
+      const frame = { schemaVersion: 3, continueCursor: "", isDone: true, scanned: kinds.length,
+        legacy: bins[0], legacyEmptyLiveTail: bins[5], unmarkedCurrent: bins[1], incompleteEmptyMemory: bins[2], current: bins[3], corrupt: bins[4] };
       expect(quotaUpgradeAuditPageSchema.safeParse(frame).success).toBeTrue();
       expect(quotaUpgradeAuditPageSchema.safeParse({ ...frame, scanned: kinds.length + 1 }).success).toBeFalse();
       expect(quotaUpgradeAuditPageSchema.safeParse({ ...frame, extra: "untrusted" }).success).toBeFalse();
     }));
   });
 
-  test("v2 mutation partitions and detail counts describe every combination of changed shapes", () => {
-    fc.assert(fc.property(fc.array(fc.integer({ min: 0, max: 4 }), { maxLength: 8 }), (kinds) => {
-      // current, legacy, complete unmarked, incomplete marked, incomplete unmarked
-      const bins = [0, 0, 0, 0, 0];
+  test("v3 mutation partitions and detail counts describe every combination of changed shapes", () => {
+    fc.assert(fc.property(fc.array(fc.integer({ min: 0, max: 5 }), { maxLength: 8 }), (kinds) => {
+      // current, legacy, complete unmarked, incomplete marked, incomplete unmarked, legacy live tail
+      const bins = [0, 0, 0, 0, 0, 0];
       for (const kind of kinds) bins[kind] = (bins[kind] ?? 0) + 1;
-      const current = bins[0] ?? 0; const upgraded = bins[1] ?? 0;
+      const current = bins[0] ?? 0; const upgraded = bins[1] ?? 0; const upgradedLiveTail = bins[5] ?? 0;
       const markerOnly = bins[2] ?? 0; const incompleteMarked = bins[3] ?? 0; const incompleteUnmarked = bins[4] ?? 0;
-      const frame = { schemaVersion: 2, continueCursor: "", isDone: true, scanned: kinds.length,
-        current, changed: kinds.length - current, upgraded, marked: upgraded + markerOnly + incompleteUnmarked,
+      const frame = { schemaVersion: 3, continueCursor: "", isDone: true, scanned: kinds.length,
+        current, changed: kinds.length - current, upgraded, upgradedLiveTail, marked: upgraded + upgradedLiveTail + markerOnly + incompleteUnmarked,
         repairedMemory: incompleteMarked + incompleteUnmarked };
       expect(quotaUpgradeMutationPageSchema.safeParse(frame).success).toBeTrue();
       for (const bad of [{ ...frame, schemaVersion: 1 }, { ...frame, changed: frame.changed + 1 },
         { ...frame, marked: frame.changed + 1 }, { ...frame, upgraded: frame.changed + 1 },
-        { ...frame, repairedMemory: frame.changed + 1 }, { ...frame, current: frame.current + 1 }]) {
+        { ...frame, upgradedLiveTail: frame.changed + 1 }, { ...frame, repairedMemory: frame.changed + 1 }, { ...frame, current: frame.current + 1 }]) {
         expect(quotaUpgradeMutationPageSchema.safeParse(bad).success).toBeFalse();
       }
       if (frame.changed > frame.repairedMemory) {
