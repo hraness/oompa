@@ -53,9 +53,7 @@ export async function launchMenubar(json: boolean, output: Output): Promise<numb
     Bun.sleep(STARTUP_SETTLE_MS).then(() => null),
   ]);
   if (settled !== null && settled !== 0) {
-    const stderr = child.stderr === null || typeof child.stderr === "number"
-      ? ""
-      : await new Response(child.stderr).text();
+    const stderr = await new Response(child.stderr).text();
     return renderFailure({
       code: "INTERNAL",
       message: `The Oompa menu bar exited during startup (status ${settled}).${stderr.trim().length > 0 ? ` ${safeDiagnostic(stderr.trim())}` : ""}`,
