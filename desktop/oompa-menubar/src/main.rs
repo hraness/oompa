@@ -15,6 +15,7 @@ use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use std::time::Duration;
 
+use desktop_foundation::outputs::OutputsSection;
 use desktop_foundation::{Host, MenuModel, MenuNode, Options};
 use daemon::{CallError, Daemon};
 
@@ -22,6 +23,7 @@ const SESSION_LIMIT: u32 = 8;
 
 struct OompaHost {
     daemon: Daemon,
+    outputs: OutputsSection,
 }
 
 impl OompaHost {
@@ -78,6 +80,8 @@ impl Host for OompaHost {
             }
         }
         nodes.push(MenuNode::Separator);
+        nodes.extend(self.outputs.nodes());
+        nodes.push(MenuNode::Separator);
         nodes.push(MenuNode::quit("Quit Oompa"));
         MenuModel {
             title: Some("Oompa".to_owned()),
@@ -88,6 +92,9 @@ impl Host for OompaHost {
     }
 
     fn dispatch(&self, id: &str) {
+        if self.outputs.dispatch(id) {
+            return;
+        }
         if id == "daemon.start" {
             // The CLI owns daemon startup. Spawn it detached and scrub nothing:
             // exact argv, inherited environment, no shell.
@@ -156,7 +163,10 @@ fn main() {
         Some(lock) => lock,
         None => return,
     };
-    let host = Arc::new(OompaHost { daemon });
+    let outputs = OutputsSection::new(
+        daemon.socket.parent().and_then(|r| r.parent()).unwrap().join("outputs"),
+    );
+    let host = Arc::new(OompaHost { daemon, outputs });
     let options = Options { refresh: Duration::from_secs(5), companion_window: false };
     if let Err(error) = desktop_foundation::run(tauri::generate_context!(), host, options, |b| b) {
         eprintln!("oompa-menubar: {error}");
