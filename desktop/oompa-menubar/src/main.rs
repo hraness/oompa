@@ -15,9 +15,9 @@ use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use std::time::Duration;
 
-use desktop_foundation::outputs::OutputsSection;
-use desktop_foundation::{Host, MenuModel, MenuNode, Options};
 use daemon::{CallError, Daemon};
+use desktop_foundation::outputs::OutputsSection;
+use desktop_foundation::{AccessibilityMetadata, Host, MenuItem, MenuModel, MenuNode, Options};
 
 const SESSION_LIMIT: u32 = 8;
 
@@ -71,7 +71,15 @@ impl Host for OompaHost {
             }
             Err(CallError::Unavailable(_)) => {
                 nodes.push(MenuNode::disabled("Daemon not running"));
-                nodes.push(MenuNode::item("daemon.start", "Start daemon"));
+                nodes.push(MenuNode::interactive(
+                    MenuItem::action("daemon.start", "Start daemon")
+                        .with_shortcut("CmdOrCtrl+S")
+                        .with_accessibility(AccessibilityMetadata {
+                            label: Some("Start Oompa daemon".to_owned()),
+                            value: None,
+                            hint: Some("Launches the local Oompa daemon".to_owned()),
+                        }),
+                ));
                 tooltip = "Oompa — daemon not running".to_owned();
             }
             Err(error) => {
@@ -82,7 +90,15 @@ impl Host for OompaHost {
         nodes.push(MenuNode::Separator);
         nodes.extend(self.outputs.nodes());
         nodes.push(MenuNode::Separator);
-        nodes.push(MenuNode::quit("Quit Oompa"));
+        nodes.push(MenuNode::interactive(
+            MenuItem::action(desktop_foundation::QUIT_ACTION_ID, "Quit Oompa")
+                .with_shortcut("CmdOrCtrl+Q")
+                .with_accessibility(AccessibilityMetadata {
+                    label: Some("Quit Oompa".to_owned()),
+                    value: None,
+                    hint: Some("Exit the Oompa menu bar companion".to_owned()),
+                }),
+        ));
         MenuModel {
             title: Some("Oompa".to_owned()),
             tooltip: Some(tooltip),
@@ -112,10 +128,7 @@ impl Host for OompaHost {
 /// One status item per user. A second instance exits quietly rather than
 /// double-registering an `NSStatusItem`.
 fn acquire_instance_lock() -> Option<File> {
-    let runtime = Daemon::for_current_user()?
-        .socket
-        .parent()?
-        .to_path_buf();
+    let runtime = Daemon::for_current_user()?.socket.parent()?.to_path_buf();
     std::fs::create_dir_all(&runtime).ok()?;
     let file = OpenOptions::new()
         .create(true)
@@ -126,7 +139,11 @@ fn acquire_instance_lock() -> Option<File> {
     // flock on the runtime lock file — the file is advisory; the process
     // holding it is the only live status item.
     let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-    if result == 0 { Some(file) } else { None }
+    if result == 0 {
+        Some(file)
+    } else {
+        None
+    }
 }
 
 fn main() {
@@ -139,7 +156,10 @@ fn main() {
     if std::env::args().nth(1).as_deref() == Some("--probe") {
         match daemon.status() {
             Ok(status) => {
-                println!("daemon running: {}", status.get("pid").and_then(|v| v.as_u64()).unwrap_or(0));
+                println!(
+                    "daemon running: {}",
+                    status.get("pid").and_then(|v| v.as_u64()).unwrap_or(0)
+                );
                 match daemon.session_list(SESSION_LIMIT) {
                     Ok(data) => {
                         let count = data
@@ -164,10 +184,18 @@ fn main() {
         None => return,
     };
     let outputs = OutputsSection::new(
-        daemon.socket.parent().and_then(|r| r.parent()).unwrap().join("outputs"),
+        daemon
+            .socket
+            .parent()
+            .and_then(|r| r.parent())
+            .unwrap()
+            .join("outputs"),
     );
     let host = Arc::new(OompaHost { daemon, outputs });
-    let options = Options { refresh: Duration::from_secs(5), companion_window: false };
+    let options = Options {
+        refresh: Duration::from_secs(5),
+        companion_window: false,
+    };
     if let Err(error) = desktop_foundation::run(tauri::generate_context!(), host, options, |b| b) {
         eprintln!("oompa-menubar: {error}");
         std::process::exit(1);

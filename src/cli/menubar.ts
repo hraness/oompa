@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { renderFailure, safeDiagnostic, safeJson, type Output } from "./render";
@@ -21,9 +21,19 @@ export function resolveMenubarBinary(env: NodeJS.ProcessEnv = process.env): stri
     resolve(import.meta.dir, "../../desktop/target/debug/oompa-menubar"),
   ];
   for (const candidate of candidates) {
-    if (candidate !== undefined && candidate.length > 0 && existsSync(candidate)) return candidate;
+    if (candidate !== undefined && candidate.length > 0 && qualifiedBinary(candidate)) return candidate;
   }
   return null;
+}
+
+/** Require a regular executable without group/other write bits; reject symlinks. */
+function qualifiedBinary(path: string): boolean {
+  try {
+    const info = lstatSync(path);
+    return info.isFile() && (info.mode & 0o111) !== 0 && (info.mode & 0o022) === 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function launchMenubar(json: boolean, output: Output): Promise<number> {
@@ -39,7 +49,9 @@ export async function launchMenubar(json: boolean, output: Output): Promise<numb
     child = Bun.spawn([binary], {
       stdin: "ignore",
       stdout: "ignore",
-      stderr: "pipe",
+      // Drain no child pipe: detached companions own their diagnostics, and
+      // an unread stderr pipe can block a long-running process.
+      stderr: "ignore",
     });
   } catch (error: unknown) {
     return renderFailure({
@@ -53,10 +65,9 @@ export async function launchMenubar(json: boolean, output: Output): Promise<numb
     Bun.sleep(STARTUP_SETTLE_MS).then(() => null),
   ]);
   if (settled !== null && settled !== 0) {
-    const stderr = typeof child.stderr === "number" ? "" : await new Response(child.stderr).text();
     return renderFailure({
       code: "INTERNAL",
-      message: `The Oompa menu bar exited during startup (status ${settled}).${stderr.trim().length > 0 ? ` ${safeDiagnostic(stderr.trim())}` : ""}`,
+      message: `The Oompa menu bar exited during startup (status ${settled}).`,
     }, json, output);
   }
   const alreadyRunning = settled === 0;
