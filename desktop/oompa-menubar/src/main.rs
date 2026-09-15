@@ -112,16 +112,74 @@ impl Host for OompaHost {
             return;
         }
         if id == "daemon.start" {
-            // The CLI owns daemon startup. Spawn it detached and scrub nothing:
-            // exact argv, inherited environment, no shell.
+            // The CLI owns daemon startup. Keep its exact argv and inherited
+            // environment; a worker waits for it without blocking menu dispatch.
             let cli = std::env::var("OOMPA_MENUBAR_CLI").unwrap_or_else(|_| "oompa".to_owned());
-            let _ = std::process::Command::new(cli)
+            let mut command = std::process::Command::new(cli);
+            command
                 .args(["daemon", "start"])
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn();
+                .stderr(std::process::Stdio::null());
+            let _ = run_cli_in_background(command);
         }
+    }
+}
+
+fn run_cli_in_background(
+    mut command: std::process::Command,
+) -> std::io::Result<std::thread::JoinHandle<std::io::Result<std::process::ExitStatus>>> {
+    // Create the worker before the child so a thread-creation failure cannot
+    // orphan a spawned process. status() waits for and reaps the exact child.
+    std::thread::Builder::new()
+        .name("oompa-menubar-cli".to_owned())
+        .spawn(move || command.status())
+}
+
+#[cfg(test)]
+mod process_tests {
+    use super::run_cli_in_background;
+    use std::io::Read;
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+
+    #[test]
+    fn background_cli_reaps_its_exact_child() {
+        let (mut output, child_output) = UnixStream::pair().unwrap();
+        output
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut command = Command::new("/bin/sh");
+        command
+            .env_clear()
+            .args(["-c", "printf '%s' \"$$\"; exit 23"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(OwnedFd::from(child_output)))
+            .stderr(Stdio::null());
+
+        let worker = run_cli_in_background(command).unwrap();
+        assert_eq!(worker.thread().name(), Some("oompa-menubar-cli"));
+        assert_eq!(worker.join().unwrap().unwrap().code(), Some(23));
+        let mut pid = String::new();
+        (&mut output).take(32).read_to_string(&mut pid).unwrap();
+        let pid: libc::pid_t = pid.parse().unwrap();
+        let mut status = 0;
+        assert_eq!(
+            unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) },
+            -1
+        );
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ECHILD)
+        );
+    }
+
+    #[test]
+    fn background_cli_returns_spawn_failure() {
+        let worker = run_cli_in_background(Command::new("")).unwrap();
+        assert!(worker.join().unwrap().is_err());
     }
 }
 
