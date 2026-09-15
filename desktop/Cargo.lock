@@ -589,10 +589,11 @@ dependencies = [
 
 [[package]]
 name = "desktop-foundation"
-version = "0.4.0"
-source = "git+https://github.com/hraness/desktop-foundation?tag=v0.4.0#63188978a5b07f989ddc53567106bba0247e28af"
+version = "0.4.1"
+source = "git+https://github.com/hraness/desktop-foundation?tag=v0.4.1#8763e381274f9bbb94b6319c84ed98d23cf26ab7"
 dependencies = [
  "image",
+ "libc",
  "serde_json",
  "tauri",
 ]

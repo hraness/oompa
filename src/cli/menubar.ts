@@ -26,7 +26,7 @@ export function resolveMenubarBinary(env: NodeJS.ProcessEnv = process.env): stri
   return null;
 }
 
-/** A detached menu-bar process must only run a private, prebuilt executable. */
+/** Require a regular executable without group/other write bits; reject symlinks. */
 function qualifiedBinary(path: string): boolean {
   try {
     const info = lstatSync(path);
