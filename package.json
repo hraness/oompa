@@ -115,7 +115,7 @@
     "@hraness/design-kit": "github:hraness/design-kit#v0.8.0",
     "@hraness/direct": "github:hraness/direct#v0.7.0",
     "@hraness/posthog": "github:hraness/posthog#v0.1.2",
-    "@hraness/site-footer": "github:hraness/site-footer#v0.9.2",
+    "@hraness/site-footer": "github:hraness/site-footer#v0.11.1",
     "@hraness/ui": "github:hraness/ui#v0.5.13",
     "@letta-ai/trajectory": "0.3.0",
     "@stylexjs/babel-plugin": "0.19.0",
