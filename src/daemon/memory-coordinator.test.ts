@@ -1060,8 +1060,9 @@ describe("Oompa Oh memory coordinator integration", () => {
       .toBeNull();
   });
 
-  test("preserves sticky hosted conflict diagnostics when sync is unavailable", async () => {
-    for (const [index, state] of (["conflict", "error"] as const).entries()) {
+  test.each((["conflict", "error"] as const).map((state, index) => ({ state, index })))(
+    "preserves sticky hosted $state diagnostics when sync is unavailable",
+    async ({ state, index }) => {
       const value = await createFixture();
       const actor = value.session(value.firstProject, `Hosted ${state} without sync`);
       const memory = page({ key: `architecture/hosted-${state}-without-sync` });
@@ -1113,8 +1114,8 @@ describe("Oompa Oh memory coordinator integration", () => {
       }), "MEMORY_CANONICAL_FROZEN");
       expect(value.runtime.store.readMemorySubmissionByIdempotencyKey(share.idempotencyKey))
         .toBeNull();
-    }
-  });
+    },
+  );
 
   test("replays a terminal share without sync or Oh access while hosted custody is frozen", async () => {
     let syncCalls = 0;
