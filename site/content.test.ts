@@ -1385,6 +1385,7 @@ describe("public content contract", () => {
   test("renders the canonical Hraness network footer on every HTML page", () => {
     const expectedHrefs = [
       HRANESS_HOME_URL,
+      "https://hraness.com/privacy",
       ...hranessSocialLinks.map(({ href }) => href),
     ];
 
