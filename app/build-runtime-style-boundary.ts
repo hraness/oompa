@@ -32,6 +32,8 @@ const reviewedResourceFunctionSha256s = new Set([
   "38c65e36bdaa72af11d634e191f31be3f940b40a55f8f1061fa0205cef460ad2",
   // Converged Astra, automatic effort and usage history: reviewed identifier allocation.
   "5c853b84598085dbe0243144241bbe3067519cf9cffbe89501d2bd04636cdef7",
+  // Devin provider settings: same function, new identifiers.
+  "539c448d7cdebe3da25f0578b8b96413367ee2edffe8ba77754e864253dab27a",
 ]);
 const stylexInjector = /stylex-inject|stylexInject|data-stylex|stylesheet-group/u;
 const unreviewedLiteralCall = /createElement\s*\(\s*["']style["']\s*\)|\.insertRule\s*\(/u;

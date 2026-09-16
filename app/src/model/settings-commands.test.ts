@@ -60,8 +60,8 @@ describe("machine default builders", () => {
     }
     expect(presetLabels.high).toBe("Codex High");
     expect(presetLabels.ultra).toBe("Codex Ultra");
-    expect(presetLabels.astra).toBe("Devin Astra (retired)");
-    expect(presetChoices).not.toContain("astra");
+    expect(presetLabels.astra).toBe("Devin Astra");
+    expect(presetChoices).toContain("astra");
   });
 
   test("session preset changes bind the alias to this build's exact contract", () => {
@@ -124,7 +124,7 @@ describe("machine default builders", () => {
   test("remote Codex labels do not claim a binding registry v1 cannot prove", () => {
     expect(presetLabels).toEqual({
       "fable-max": "Fable Max",
-      astra: "Devin Astra (retired)",
+      astra: "Devin Astra",
       high: "Codex High",
       low: "Luna Max",
       ultra: "Codex Ultra",

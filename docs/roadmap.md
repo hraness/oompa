@@ -4,7 +4,7 @@ This page summarizes the active Oompa plans for readers who want the provider an
 
 ## Direction
 
-Oompa is a control plane for Codex and Claude Code. Codex runs through Oompa's exact packaged pin. Claude runs through a realpath-resolved installed executable whose exact self-reported version must match Oompa's compatibility pin; Oompa does not authenticate those executable bytes against an upstream package digest. Both use user-selected isolated profiles. Oompa owns the provider-neutral conversation and control record while each provider owns authentication, native sessions, execution, tools, approvals, and hidden state. Codex is supported on macOS and Linux; Claude Code is supported on Linux while authenticated isolated-Keychain and detached-read acceptance remains pending on macOS. Humans get a terminal shell and a keyboard-first web surface; agents get the same machine-readable CLI and work protocol.
+Oompa is a control plane for Codex, Claude Code, and Devin. Codex runs through Oompa's exact packaged pin. Claude and Devin run through separately installed, realpath-resolved executables whose exact self-reported versions must match Oompa's compatibility pins; Oompa does not authenticate those executable bytes against an upstream package digest. Both use user-selected isolated profiles. Oompa owns the provider-neutral conversation and control record while each provider owns authentication, native sessions, execution, tools, approvals, and hidden state. Codex is supported on macOS and Linux; Claude Code is supported on Linux while authenticated isolated-Keychain and detached-read acceptance remains pending on macOS. Humans get a terminal shell and a keyboard-first web surface; agents get the same machine-readable CLI and work protocol.
 
 ## Waves
 
@@ -21,5 +21,5 @@ Oompa is a control plane for Codex and Claude Code. Codex runs through Oompa's e
 - Rotate, pool, or fail over between accounts or providers automatically.
 - Hold, read, or forward any provider credential.
 - Route through a learned model router or a cost cascade.
-- Pretend provider-specific features have parity: Codex account, usage, plugin, and native transcript operations remain Codex-specific until an independently reviewed Claude Code contract exists.
+- Pretend provider-specific features have parity: Codex account, usage, plugin, and native transcript operations remain Codex-specific until an independently reviewed Claude Code contract exists. Devin exposes session context and optional cost facts but no machine-readable account allowance or reset operation.
 - Offer Claude login from the web surface. Codex web linking uses its provider-owned device-code flow.

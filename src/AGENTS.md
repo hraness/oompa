@@ -4,6 +4,7 @@
 - `daemon/` owns the local socket, lifecycle, command dispatch, joins, and the opaque facts-memory broker seam.
 - `codex/` owns the pinned app-server process and protocol adapter.
 - `claude/` owns the pinned Claude Code process, its stream-json dialect, and the delta assembler behind the same runtime port.
+- `devin/` owns the pinned Devin CLI, isolated authentication, and bounded ACP v1 client.
 - `domain/` owns identifiers, presets, projections, state transitions, encryption envelopes, and command outcomes.
 - `storage/` owns SQLite migrations, repositories, secret custody, state paths, and facts-memory directory custody.
 - `cloud/` owns the optional Convex client, sync projections, device enrollment, execution leases, and remote commands.

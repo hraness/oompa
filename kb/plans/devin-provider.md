@@ -31,7 +31,10 @@ instant, not an ACU balance.
 
 ### Phase 2. Provider runtime and ACP adapter on the current architecture
 
-- **Status:** Not started.
+- **Status:** Implemented on `codex/devin-provider-20260915` by reverting the
+  removal commit (`5c6d397c`) so the original ACP v1 client, process custody,
+  fact reduction and foreground login return on the current seams, sharing the
+  Phase 1 pin.
 - **Scope:** restore the ACP v1 client, process custody, fact reduction and
   foreground login from PR #115 onto the Effect-based provider seams that
   replaced the 2026-09-06 adapters, using the same pinned CLI as Phase 1.
@@ -41,7 +44,11 @@ instant, not an ACU balance.
 
 ### Phase 3. Lifting refusals with append-only migrations
 
-- **Status:** Not started.
+- **Status:** Devin readmission implemented on `codex/devin-provider-20260915`
+  (the same revert restores parser, storage, service, cloud-payload and browser
+  admission under ordinary authority guards, with schema 61 retaining
+  historical rows byte-for-byte). The `devin_usage_panel` snapshot source is
+  not wired and remains open.
 - **Scope:** parser, storage admission guards, service, cloud payloads and
   browser selectors admit Devin again; usage snapshots gain a `devin_usage_panel`
   source recorded with the exact CLI version line and the `unknown` reason when

@@ -187,7 +187,7 @@ for (const variant of variants) test(`canonical39 migration retains opaque ${var
     expect(selected.find((row) => row.sessionId === sibling.session.id)?.kind).toBe("parsed");
     expect(snapshot(database)).toEqual(corrupted);
     const beforeReadonly = hash(await readFile(paths.database));
-    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:39:60");
+    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:39:61");
     expect(snapshot(database)).toEqual(corrupted);
     expect(hash(await readFile(paths.database))).toBe(beforeReadonly);
 
@@ -209,7 +209,7 @@ for (const variant of variants) test(`canonical39 migration retains opaque ${var
     const upgraded = new StateStore(paths, { now: () => migratedAt, resolveMachineTimeZone: () => "UTC" });
     try { assertOpaque(upgraded); } finally { upgraded.close(); }
     const joined = snapshot(database);
-    expect(joined.version).toEqual({ user_version: 60 });
+    expect(joined.version).toEqual({ user_version: 61 });
     expect(joined.foreignKeys).toEqual([]);
     for (const readonly of [false, true]) {
       const beforeBytes = hash(await readFile(paths.database));

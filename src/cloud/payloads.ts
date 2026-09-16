@@ -86,11 +86,6 @@ function isInteractionId(value: unknown): value is string {
 const isProvider = (value: unknown): value is Provider =>
   providerSchema.safeParse(value).success;
 
-const isSupportedProvider = (value: unknown): value is SupportedProvider =>
-  supportedProviderSchema.safeParse(value).success;
-const isSupportedPreset = (value: unknown): value is SupportedPreset =>
-  supportedPresetSchema.safeParse(value).success;
-
 function isRemoteInteractionAnswerMap(
   value: unknown,
 ): value is Readonly<Record<string, Readonly<{ answers: readonly string[] }>>> {
@@ -286,10 +281,16 @@ export function activeRemoteDerivedCodexSelection(): ActiveRemoteDerivedCodexSel
   return { presetContract: sharedActiveCodexPresetContract(), provider: "codex" };
 }
 
+const isSupportedProviderValue = (candidate: unknown): candidate is SupportedProvider =>
+  supportedProviderSchema.safeParse(candidate).success;
+
+const isSupportedPresetValue = (candidate: unknown): candidate is SupportedPreset =>
+  supportedPresetSchema.safeParse(candidate).success;
+
 function parseActiveRemotePresetSelection(
   value: Readonly<Record<string, unknown>>,
 ): ActiveRemotePresetSelection | null {
-  if (!isSupportedPreset(value.preset)) return null;
+  if (!isSupportedPresetValue(value.preset)) return null;
   const selection = activeRemotePresetSelection(value.preset);
   return "presetContract" in selection
     && value.presetContract !== selection.presetContract
@@ -436,7 +437,7 @@ export function parseDeviceCommandPayload(value: unknown): DeviceCommandPayload 
     ])
     && isOpaqueIdentifier(value.accountPublicId)
     && isOpaqueIdentifier(value.projectPublicId)
-    && isSupportedProvider(value.provider)
+    && isSupportedProviderValue(value.provider)
     && presetProviders[presetSelection.preset] === value.provider
     && typeof value.prompt === "string"
     && value.prompt.length >= 1
@@ -579,7 +580,6 @@ export function parseDeviceCommandResultPayload(
 
 export type SessionMetadataPayload = Readonly<{
   archived?: boolean;
-  retiredProvider?: "devin";
   name: string | null;
   note: string | null;
 }>;
@@ -803,7 +803,7 @@ function parseRemoteCommandPayloadUnchecked(value: unknown): RemoteCommandPayloa
   ) return { kind: value.kind, ...presetSelection };
   if (
     value.kind === "set_provider"
-    && isSupportedProvider(value.provider)
+    && isSupportedProviderValue(value.provider)
   ) {
     if (
       presetSelection !== null
@@ -953,11 +953,9 @@ export function parseSessionMetadataPayload(value: unknown): SessionMetadataPayl
   // `archived` is an additive optional key: a payload written before session
   // archive existed still parses, and an absent key means "not archived".
   const archived = Object.hasOwn(value, "archived");
-  const retiredProvider = Object.hasOwn(value, "retiredProvider");
   if (
-    !hasExactKeys(value, ["name", "note", ...(archived ? ["archived"] : []), ...(retiredProvider ? ["retiredProvider"] : [])])
+    !hasExactKeys(value, archived ? ["archived", "name", "note"] : ["name", "note"])
     || (archived && typeof value.archived !== "boolean")
-    || (retiredProvider && value.retiredProvider !== "devin")
   ) return null;
   if (
     value.name !== null
@@ -976,7 +974,6 @@ export function parseSessionMetadataPayload(value: unknown): SessionMetadataPayl
   ) return null;
   return {
     ...(archived ? { archived: value.archived as boolean } : {}),
-    ...(retiredProvider ? { retiredProvider: "devin" as const } : {}),
     name: value.name,
     note: value.note,
   };

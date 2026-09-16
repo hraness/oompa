@@ -12,6 +12,10 @@ import {
 import { ClaudeError, IndeterminateClaudeEffectError } from "../claude/errors";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- `claude/pin.ts` is the zero-import pin module; the daemon names the exact release an operator must install.
 import { CLAUDE_PIN } from "../claude/pin";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- the daemon maps this provider's closed failure codes onto command outcomes; no protocol payload crosses the adapter.
+import { DevinError } from "../devin/errors";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- `devin/pin.ts` is the zero-import pin module; the daemon names the exact release an operator must install.
+import { DEVIN_PIN } from "../devin/pin";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- D4 extracts the provider port; until then the daemon composes the pinned Codex runtime directly.
 import {
   CodexError,
@@ -255,6 +259,7 @@ import {
   CodexSessionObservationError,
   ProviderRuntimeUnavailableError,
   UnavailableClaudeRuntime,
+  UnavailableDevinRuntime,
   type ClaudeRuntimePort,
   type ClaudeProcessIdentity,
   type CloudControlPort,
@@ -263,6 +268,7 @@ import {
   type CodexRuntimePort,
   type CodexSessionObservation,
   type CodexSessionProjection,
+  type DevinRuntimePort,
   type ProfileAuthority,
   type RuntimeStartReviewOf,
   type SessionRuntimePort,
@@ -475,8 +481,8 @@ const cloudProjectionRecoveryAction = (
  * interaction lane reasons about provider outcomes (invalid input, expired
  * deadline, unproven effect) rather than about which provider produced them.
  */
-const providerFailure = (error: unknown): CodexError | ClaudeError | null =>
-  error instanceof CodexError || error instanceof ClaudeError
+const providerFailure = (error: unknown): CodexError | ClaudeError | DevinError | null =>
+  error instanceof CodexError || error instanceof ClaudeError || error instanceof DevinError
     ? error
     : null;
 
@@ -484,12 +490,6 @@ const providerFailureCode = (error: unknown): string | null => providerFailure(e
 
 const isIndeterminateProviderEffect = (error: unknown): boolean =>
   error instanceof IndeterminateCodexEffectError || error instanceof IndeterminateClaudeEffectError;
-
-const retiredProviderFailure = (): CommandFailure => new CommandFailure(
-  "UNAVAILABLE",
-  "Devin support has been removed. Existing sessions are read-only; no Devin process will be launched.",
-  { provider: "devin", reason: "provider_retired", retryable: false },
-);
 
 /** The provider's own bounded, credential-free message, or a neutral one. */
 const providerFailureMessage = (error: unknown): string =>
@@ -546,6 +546,42 @@ const claudeCommandFailure = (error: ClaudeError): CommandFailure => {
   }
 };
 
+const devinCommandFailure = (error: DevinError): CommandFailure => {
+  switch (error.code) {
+    case "AUTHORITY_STALE":
+      return new CommandFailure(
+        "UNAVAILABLE",
+        "The exact Devin process authority changed before the operation finished. Inspect daemon status before starting a fresh attempt.",
+        { reason: "devin_authority_stale", nextCommand: "hra daemon status --json" },
+      );
+    case "DEADLINE_EXPIRED":
+      return new CommandFailure(
+        "CONFLICT",
+        "The Devin interaction deadline expired before HRA could apply the response. Refresh pending interactions instead of replaying the expired response.",
+        { reason: "devin_interaction_deadline_expired", nextCommand: "hra interaction list --pending --json" },
+      );
+    case "INVALID_INPUT":
+    case "UNSUPPORTED_CAPABILITY":
+      return new CommandFailure("INVALID_INPUT", error.message, { reason: "devin_unsupported" });
+    case "NOT_AUTHENTICATED":
+      return new CommandFailure(
+        "INTERACTION_REQUIRED",
+        `Devin CLI ${DEVIN_PIN} is installed but this account's isolated Devin profile is not signed in. Sign in inside that profile, then retry.`,
+        { reason: "devin_not_authenticated" },
+      );
+    case "RUNTIME_MISMATCH":
+      return new CommandFailure("UNAVAILABLE", error.message, { reason: "devin_runtime_unavailable" });
+    case "PROCESS_EXITED":
+    case "PROTOCOL_ERROR":
+    case "PROTOCOL_LIMIT":
+    case "TIMEOUT":
+      return new CommandFailure(
+        "UNAVAILABLE",
+        `The pinned Devin CLI ${DEVIN_PIN} ACP connection ended before the operation finished. Start a fresh attempt.`,
+        { reason: "devin_runtime_fault" },
+      );
+  }
+};
 
 const codexCommandFailure = (error: CodexError): CommandFailure => {
   switch (error.code) {
@@ -972,6 +1008,9 @@ const claudeLoginTerminalReceiptSchema = z.object({
     }).strict(),
   ]),
 }).strict();
+// Both foreground CLI providers settle the same provider-neutral child
+// outcome. Their mutation kind and authority remain distinct in storage.
+const devinLoginTerminalReceiptSchema = claudeLoginTerminalReceiptSchema;
 const sessionStartReceiptSchema = z.object({
   sessionId: sessionIdSchema,
   sourceId: z.string().min(1).max(200).optional(),
@@ -1547,6 +1586,7 @@ export class OompaService {
   #attachmentBlobs: AttachmentBlobStore | undefined;
   readonly #codex: CodexRuntimePort;
   readonly #claude: ClaudeRuntimePort;
+  readonly #devin: DevinRuntimePort;
   readonly #personalCodex: CodexRuntimePort | undefined;
   readonly #personalClaude: ClaudeRuntimePort | undefined;
   readonly #personalCodexHome: string | undefined;
@@ -1672,6 +1712,8 @@ export class OompaService {
     codex: CodexRuntimePort;
     /** Omitted on a machine with no admitted `claude` binary. */
     claude?: ClaudeRuntimePort;
+    /** Omitted on a machine with no admitted `devin` binary. */
+    devin?: DevinRuntimePort;
     /** Dedicated runtimes for sessions claimed from the OS user's provider homes. */
     personalCodex?: CodexRuntimePort;
     personalClaude?: ClaudeRuntimePort;
@@ -1704,6 +1746,7 @@ export class OompaService {
     this.#paths = input.paths;
     this.#codex = input.codex;
     this.#claude = input.claude ?? new UnavailableClaudeRuntime(CLAUDE_PIN);
+    this.#devin = input.devin ?? new UnavailableDevinRuntime(DEVIN_PIN);
     this.#personalCodex = input.personalCodex;
     this.#personalClaude = input.personalClaude;
     this.#personalCodexHome = input.personalCodexHome;
@@ -1780,8 +1823,19 @@ export class OompaService {
               providerThreadId: binding.providerThreadId,
             }) === true;
           }
-          // Retired Devin sessions remain readable history, never execution authority.
-          case "devin": return false;
+          // Devin's ACP child owns the session only inside the runtime that
+          // admitted it; a stored binding is never live across a restart.
+          case "devin": {
+            const session = this.#store.requireSession(binding.sessionId);
+            if (session.profileId !== binding.profileId || session.provider !== binding.provider
+              || session.providerThreadId !== binding.providerThreadId) return false;
+            const authority = this.#sessionAuthority(session);
+            if (authority.generation !== binding.processGeneration) return false;
+            return this.#devin.hasLiveSession?.({
+              authority,
+              providerThreadId: binding.providerThreadId,
+            }) === true;
+          }
         }
       },
     });
@@ -2135,7 +2189,6 @@ export class OompaService {
     provider: Provider,
     signal: AbortSignal,
   ): Promise<Readonly<{ profile: ProfileRecord; providerAuthority: ProviderAccountAuthority }>> {
-    if (provider === "devin") throw retiredProviderFailure();
     let profile = initialProfile;
     let providerAuthority = this.#providerAuthority(profile, provider);
     // A CLI-owned foreground grant must be recognized before even the initial
@@ -2188,6 +2241,36 @@ export class OompaService {
             provider,
             readiness: observed.readiness,
             ...(observed.readiness === "signed_out" ? { accountState: "signed_out", nextCommand } : {}),
+          },
+        );
+      }
+    }
+    if (provider === "devin") {
+      const before = providerAuthority;
+      const observed = await this.#readDevinAccount(profile, signal);
+      await this.#daemonAuthority.assertCurrent();
+      if (!this.#profileAuthorityIsCurrent(authorityFor(this.#paths, profile, before))) {
+        throw new CommandFailure("CONFLICT", "Devin account authority changed during authentication observation.");
+      }
+      this.#store.observeProviderAccountReadiness({
+        profileId: profile.id,
+        provider,
+        expectedBindingGeneration: before.bindingGeneration,
+        readiness: observed.signedIn ? "signed_in" : "signed_out",
+      });
+      profile = this.#store.requireProfileById(profile.id);
+      providerAuthority = this.#providerAuthority(profile, provider);
+      if (!observed.signedIn) {
+        const nextCommand = `oompa account login ${profile.id} --provider devin`;
+        throw new CommandFailure(
+          "INTERACTION_REQUIRED",
+          `Sign in with \`${nextCommand}\` before using this account's Devin runtime.`,
+          {
+            accountSelector: profile.id,
+            provider,
+            readiness: "signed_out",
+            accountState: "signed_out",
+            nextCommand,
           },
         );
       }
@@ -2266,8 +2349,7 @@ export class OompaService {
       if (terminalCustody?.kind === "terminal") {
         if (command.kind !== "session.abandon") throw new Error("TERMINAL_INPUT_CUSTODY_ROUTE_INVALID");
         return await this.#acknowledgeTerminalInputCustody(terminalCustody, context.signal);
-      }
-      switch (command.kind) {
+      }      switch (command.kind) {
         case "doctor": return await this.#doctor(command.offline, context.signal);
         case "daemon.status": return { running: true, pid: process.pid };
         case "daemon.stop": throw new CommandFailure(
@@ -2277,16 +2359,14 @@ export class OompaService {
         case "account.list": {
           if (command.provider !== undefined) return this.#providerAccountListing(command.provider);
           return { accounts: this.#store.listProfiles().map((profile) => this.#publicProfile(profile)) };
-        }
-        case "account.add": return await this.#addAccount(command.label);
+        }        case "account.add": return await this.#addAccount(command.label);
         case "account.show": {
           const profile = this.#store.requireProfile(command.account);
           return await this.#serialize(`account:${profile.id}`, async () => {
             switch (command.provider ?? "codex") {
               case "codex": return await this.#showAccount(profile.id, context.signal);
               case "claude": return await this.#showClaudeAccount(profile.id, context.signal);
-              case "devin": return this.#showDevinAccount(profile.id);
-            }
+              case "devin": return await this.#showDevinAccount(profile.id, context.signal);            }
           });
         }
         case "account.login": {
@@ -2304,6 +2384,8 @@ export class OompaService {
         case "account.claude-login.prepare": { const profile = this.#store.requireProfile(command.account); return await this.#serialize(`account:${profile.id}`, async () => this.#prepareClaudeLogin(profile.id, command.idempotencyKey, context.signal)); }
         case "account.claude-login.complete": { const profile = this.#store.requireProfile(command.account); return await this.#serialize(`account:${profile.id}`, async () => this.#completeClaudeLogin({ ...command, account: profile.id }, context.signal)); }
         case "account.claude-login.abandon": { const profile = this.#store.requireProfile(command.account); return await this.#serialize(`account:${profile.id}`, async () => this.#abandonClaudeLogin({ ...command, account: profile.id })); }
+        case "account.devin-login.prepare": { const profile = this.#store.requireProfile(command.account); return await this.#serialize(`account:${profile.id}`, async () => this.#prepareDevinLogin(profile.id, command.idempotencyKey, command.manualTokenFlow, context.signal)); }
+        case "account.devin-login.complete": { const profile = this.#store.requireProfile(command.account); return await this.#serialize(`account:${profile.id}`, async () => this.#completeDevinLogin({ ...command, account: profile.id }, context.signal)); }
         case "account.devin-login.abandon": { const profile = this.#store.requireProfile(command.account); return await this.#serialize(`account:${profile.id}`, async () => this.#abandonDevinLogin({ ...command, account: profile.id })); }
         case "account.login-cancel": { const profile = this.#store.requireProfile(command.account); return await this.#serialize(`account:${profile.id}`, async () => this.#cancelLogin(profile.id, command.idempotencyKey, context.signal)); }
         case "account.logout": {
@@ -2451,7 +2533,6 @@ export class OompaService {
         }
         case "session.archive": {
           const session = this.#store.requireSession(command.session);
-          if (session.provider === "devin") throw retiredProviderFailure();
           this.#assertSessionAccountAuthorityIfSignedIn(session);
           const archived = this.#store.setSessionArchived(session.id, command.archived);
           return {
@@ -2581,7 +2662,6 @@ export class OompaService {
             return { version: 1, mode: command.mode, source: "default" };
           }
           const session = this.#store.requireSession(command.session);
-          if (session.provider === "devin") throw retiredProviderFailure();
           this.#assertSessionAccountAuthorityIfSignedIn(session);
           this.#store.setSessionApprovalMode(session.id, command.mode);
           const effective = this.#store.readSessionApprovalMode(session.id);
@@ -2737,8 +2817,7 @@ export class OompaService {
                 return value === null
                   ? { matched: false }
                   : { matched: true, value };
-              },
-            },
+              },            },
           );
         }
         case "session.stop": { const session = this.#store.requireSession(command.session); return await this.#serializeSessionAuthority(session, async () => this.#stop(session.id, command.idempotencyKey, context.signal)); }
@@ -3179,8 +3258,6 @@ export class OompaService {
       if (error instanceof SessionTaskStoreError) {
         const details = { reason: error.code };
         switch (error.code) {
-          case "PROVIDER_RETIRED":
-            throw retiredProviderFailure();
           case "NOT_FOUND":
           case "SESSION_NOT_FOUND":
             throw new CommandFailure("NOT_FOUND", error.message, details);
@@ -3387,9 +3464,7 @@ export class OompaService {
       }
       if (error instanceof CodexError) throw codexCommandFailure(error);
       if (error instanceof ClaudeError) throw claudeCommandFailure(error);
-      if (error instanceof Error && error.message === "PROVIDER_RETIRED:devin") {
-        throw retiredProviderFailure();
-      }
+      if (error instanceof DevinError) throw devinCommandFailure(error);
       // A provider this machine cannot run at all is reported verbatim: the
       // message names the exact release the operator has to install.
       if (error instanceof ProviderRuntimeUnavailableError) {
@@ -3504,7 +3579,6 @@ export class OompaService {
     signal: AbortSignal;
   }>): Promise<Readonly<{ signedIn: boolean | null }>> {
     const captured = providerAccountAuthoritySchema.parse(input.authority);
-    if (captured.provider === "devin") throw retiredProviderFailure();
     const finish = this.#beginOperation();
     try {
       input.signal.throwIfAborted();
@@ -3542,7 +3616,9 @@ export class OompaService {
                 await this.#claude.readAccount({ authority, signal: input.signal }));
               return { signedIn: readiness.readiness === "unverified"
                 ? null : readiness.readiness === "signed_in" };
-            }
+            }            case "devin":
+              return await this.#fencedEffect(async () =>
+                await this.#devin.readAccount({ authority, signal: input.signal }));
           }
         })();
         input.signal.throwIfAborted();
@@ -3781,7 +3857,7 @@ export class OompaService {
         limit: 100,
       });
       for (const session of page.sessions) {
-        if (session.provider === "devin" || session.providerThreadId === undefined) continue;
+        if (session.providerThreadId === undefined) continue;
         const binding = this.#store.readSessionPersonalRuntimeBinding(session.id, true);
         const bindingMatches = binding !== null
           && binding.provider === session.provider
@@ -3817,6 +3893,10 @@ export class OompaService {
                 }
                 break;
               }
+              case "devin":
+                throw new ProviderRuntimeUnavailableError(
+                  "A Devin session cannot carry personal-home detach authority.",
+                );
             }
             this.#store.completePersonalSessionDetach({ sessionId: session.id });
           } catch (error: unknown) {
@@ -4598,23 +4678,10 @@ export class OompaService {
     if (current.sessionId !== null) {
       this.#assertSessionUserMessageEffectsSettled(current.sessionId);
     }
-    if (
-      this.#providerForInteractionAuthority(current.authority) === "devin"
-      || (current.sessionId !== null
-        && this.#store.requireSession(current.sessionId).provider === "devin")
-    ) {
-      if (signal.aborted) return;
-      await this.#daemonAuthority.assertCurrent();
-      const latest = this.#store.requireInteraction(current.publicId);
-      // Only pending rows prove no response began. Prepared/written/unknown
-      // authority remains recovery evidence, even after its provider retires.
-      if (latest.state !== "pending" || latest.revision !== current.revision) return;
-      this.#appendInteractionState(this.#store.expireInteraction({
-        id: latest.publicId,
-        expectedRevision: latest.revision,
-      }));
-      return;
-    }
+    // An interaction whose method names no admitted provider cannot be
+    // expired locally: only a retained pending row preserves the evidence
+    // that no response began.
+    this.#providerForInteractionAuthority(current.authority);
     const profile = this.#store.requireProfileById(current.authority.profileId);
     if (!this.#interactionProfileAuthorityIsUsable(current)) {
       const terminal = this.#store.expireInteraction({
@@ -4893,6 +4960,11 @@ export class OompaService {
     owners.delete(owner);
     if (owners.size === 0) this.#sessionSwitchDeferredFacts.delete(sessionId);
     owner.facts.splice(0);
+  }
+
+  /** Applies one neutral fact emitted by the isolated Devin ACP runtime. */
+  async observeDevinFact(authority: ProfileAuthority, fact: CodexFact): Promise<void> {
+    await this.#observeProviderFact(authority, fact, "devin", "managed");
   }
 
   #discardSessionSwitchFactDeferralsForAttempt(
@@ -5391,7 +5463,7 @@ export class OompaService {
     switch (provider) {
       case "codex": return this.#codex;
       case "claude": return this.#claude;
-      case "devin": throw retiredProviderFailure();
+      case "devin": return this.#devin;
     }
   }
 
@@ -6025,10 +6097,49 @@ export class OompaService {
     signal: AbortSignal,
     force: boolean,
   ): Promise<string | undefined> {
-    if (provider === "devin") throw retiredProviderFailure();
-    return await this.#assertProviderRuntimeAccountAuthority(
-      profile, provider, "managed", signal, force,
-    );
+    if (provider !== "devin") {
+      return await this.#assertProviderRuntimeAccountAuthority(
+        profile,
+        provider,
+        "managed",
+        signal,
+        force,
+      );
+    }
+
+    signal.throwIfAborted();
+    await this.#daemonAuthority.assertCurrent();
+    const before = this.#store.requireProfileById(profile.id);
+    if (
+      before.processGeneration !== profile.processGeneration
+      || this.#profileAuthorityRevocationIsPending(
+        before.id,
+        before.processGeneration,
+      )
+    ) {
+      throw new CommandFailure(
+        "RECOVERY_REQUIRED",
+        "The managed Devin profile authority changed before provider verification.",
+      );
+    }
+    await this.#assertProviderSignedIn(before, "devin", signal);
+    signal.throwIfAborted();
+    await this.#daemonAuthority.assertCurrent();
+    const after = this.#store.requireProfileById(profile.id);
+    if (
+      after.processGeneration !== profile.processGeneration
+      || (after.state !== "signed_in" && after.state !== "signed_out")
+      || this.#profileAuthorityRevocationIsPending(
+        after.id,
+        after.processGeneration,
+      )
+    ) {
+      throw new CommandFailure(
+        "RECOVERY_REQUIRED",
+        "The managed Devin profile authority changed during provider verification.",
+      );
+    }
+    return undefined;
   }
 
   async #assertPersonalProviderAccountAuthority(
@@ -6052,7 +6163,38 @@ export class OompaService {
     signal: AbortSignal,
     force = true,
   ): Promise<void> {
-    if (session.provider === "devin") throw retiredProviderFailure();
+    if (session.provider === "devin") {
+      signal.throwIfAborted();
+      await this.#daemonAuthority.assertCurrent();
+      if (this.#sessionHasActivePersonalBinding(session)) {
+        this.#quarantineSession(session.id);
+        throw new CommandFailure(
+          "RECOVERY_REQUIRED",
+          "A Devin session cannot use personal-home runtime authority.",
+          { sessionId: session.id },
+        );
+      }
+      const exact = this.#store.requireSession(session.id);
+      const exactProfile = this.#store.requireProfileById(profile.id);
+      if (
+        exact.profileId !== profile.id
+        || exact.provider !== "devin"
+        || exact.providerThreadId !== session.providerThreadId
+        || exactProfile.processGeneration !== profile.processGeneration
+        || this.#profileAuthorityRevocationIsPending(
+          exactProfile.id,
+          exactProfile.processGeneration,
+        )
+      ) {
+        throw new CommandFailure(
+          "RECOVERY_REQUIRED",
+          "The session's managed Devin authority changed during verification.",
+          { sessionId: session.id },
+        );
+      }
+      this.#assertEstablishedSessionAccount(exactProfile, exact);
+      return;
+    }
     const runtimeScope: RuntimeAccountScope = this.#sessionHasActivePersonalBinding(session)
       ? "personal"
       : "managed";
@@ -6494,7 +6636,6 @@ export class OompaService {
       authority: ProviderInteractionAuthority;
     }>,
   ): SessionRuntimePort<ReviewedRuntimeProfile> {
-    if (record.authority.provider === "devin") throw retiredProviderFailure();
     this.#interactionAuthority(record);
     if (record.sessionId !== null) {
       const session = this.#store.requireSession(record.sessionId);
@@ -6517,8 +6658,6 @@ export class OompaService {
         methodProvider = "claude";
         break;
       case "devin/session/request_permission":
-        // Classify retained authority for local no-RPC deadline cleanup only.
-        // The runtime boundary still refuses activation of the retired provider.
         methodProvider = "devin";
         break;
       case "item/commandExecution/requestApproval":
@@ -6578,7 +6717,7 @@ export class OompaService {
     provider: Provider,
     source: ProviderFactSource,
   ): boolean {
-    if (provider === "devin" || session.provider !== provider) return false;
+    if (session.provider !== provider) return false;
     if (provider === "codex"
       && this.#profileAuthorityRevocationIsPending(session.profileId)) return false;
     const binding = this.#store.readSessionPersonalRuntimeBinding(session.id, true);
@@ -6590,7 +6729,8 @@ export class OompaService {
       : "managed";
     const profile = this.#store.requireProfileById(session.profileId);
     if (
-      this.#providerRuntimeAccountRevocationIsPending(
+      provider !== "devin"
+      && this.#providerRuntimeAccountRevocationIsPending(
         profile.id,
         profile.processGeneration,
         provider,
@@ -6631,7 +6771,6 @@ export class OompaService {
     session: SessionRecord,
     connectionId: string,
   ): void {
-    if (session.provider === "devin") throw retiredProviderFailure();
     z.string().uuid().parse(connectionId);
     if (session.providerThreadId === undefined) {
       throw new Error("SESSION_FACT_AUTHORITY_THREAD_MISSING");
@@ -6651,19 +6790,24 @@ export class OompaService {
     const runtimeScope: RuntimeAccountScope = this.#sessionHasActivePersonalBinding(session)
       ? "personal"
       : "managed";
-    const recorded = this.#store.readSessionProviderAccountAuthority(session.id);
-    const attested = this.#personalAccountAttestations.get(
-      this.#personalAccountAttestationKey(session.provider, profile.id, runtimeScope),
-    );
-    if (
-      recorded === null
-      || recorded.provider !== session.provider
-      || recorded.runtimeScope !== runtimeScope
-      || attested?.generation !== profile.processGeneration
-      || !sameProviderUsageAuthority(attested.authority, this.#providerAccountAuthority(authority))
-      || attested.accountKey !== recorded.accountKey
-    ) throw new Error("SESSION_FACT_AUTHORITY_ACCOUNT_UNATTESTED");
-    const accountKey = recorded.accountKey;
+    let accountKey: string | null = null;
+    if (session.provider !== "devin") {
+      const recorded = this.#store.readSessionProviderAccountAuthority(session.id);
+      const attested = this.#personalAccountAttestations.get(
+        this.#personalAccountAttestationKey(session.provider, profile.id, runtimeScope),
+      );
+      if (
+        recorded === null
+        || recorded.provider !== session.provider
+        || recorded.runtimeScope !== runtimeScope
+        || attested?.generation !== profile.processGeneration
+        || !sameProviderUsageAuthority(attested.authority, this.#providerAccountAuthority(authority))
+        || attested.accountKey !== recorded.accountKey
+      ) throw new Error("SESSION_FACT_AUTHORITY_ACCOUNT_UNATTESTED");
+      accountKey = recorded.accountKey;
+    } else if (runtimeScope !== "managed") {
+      throw new Error("SESSION_FACT_AUTHORITY_DEVIN_SCOPE_STALE");
+    }
     const binding = this.#store.readSessionPersonalRuntimeBinding(session.id, true);
     const personalBindingRevision = runtimeScope === "personal"
       && binding !== null
@@ -6717,7 +6861,7 @@ export class OompaService {
     options: Readonly<{ allowRecoveryRequired?: boolean }> = {},
   ): boolean {
     const capability = this.#sessionFactAuthorities.get(sessionId);
-    if (provider === "devin" || capability === undefined || capability.provider === "devin") return false;
+    if (capability === undefined) return false;
     try {
       if (
         capability.profileId !== authority.id
@@ -6733,7 +6877,8 @@ export class OompaService {
           capability.profileGeneration,
         ))
         || (
-          this.#providerRuntimeAccountRevocationIsPending(
+          capability.provider !== "devin"
+          && this.#providerRuntimeAccountRevocationIsPending(
             capability.profileId,
             this.#store.requireProfileById(capability.profileId).processGeneration,
             capability.provider,
@@ -6743,7 +6888,9 @@ export class OompaService {
       ) throw new Error("SESSION_FACT_AUTHORITY_STALE");
       const profile = this.#store.requireProfileById(capability.profileId);
       const session = this.#store.requireSession(sessionId);
-      const recorded = this.#store.readSessionProviderAccountAuthority(sessionId);
+      const recorded = capability.provider === "devin"
+        ? null
+        : this.#store.readSessionProviderAccountAuthority(sessionId);
       if (
         (provider === "codex" && profile.processGeneration !== capability.profileGeneration)
         || !this.#authorityMatchesSession(authority, session)
@@ -6758,10 +6905,12 @@ export class OompaService {
           && !this.#store.sessionAccountAuthorityMatches(session.id, profile.id)
         )
         || (
-          recorded === null
-          || recorded.provider !== capability.provider
-          || recorded.runtimeScope !== capability.runtimeScope
-          || recorded.accountKey !== capability.accountKey
+          capability.provider === "devin"
+            ? capability.runtimeScope !== "managed" || capability.accountKey !== null
+            : recorded === null
+              || recorded.provider !== capability.provider
+              || recorded.runtimeScope !== capability.runtimeScope
+              || recorded.accountKey !== capability.accountKey
         )
       ) throw new Error("SESSION_FACT_AUTHORITY_STALE");
       const binding = this.#store.readSessionPersonalRuntimeBinding(sessionId, true);
@@ -6981,7 +7130,6 @@ export class OompaService {
     operation: () => Promise<T>,
   ): Promise<T> {
     const actor = this.#store.requireSession(actorSessionId);
-    if (actor.provider === "devin") throw retiredProviderFailure();
     if (
       actor.state === "terminal"
       || this.#pendingProviderThreadDeletions.has(actorSessionId)
@@ -8021,8 +8169,7 @@ export class OompaService {
           // still owns it. Independent Claude account counters never rebind.
           if (this.#profileHasControllingCodexAuthority(current)) {
             this.#wakeSessionTaskPump();
-            return;
-          }
+            return;          }
           const retirement = this.#store.advanceProfileGenerationWithWorkRetirement(
             authority.id,
             authority.generation,
@@ -9519,8 +9666,7 @@ export class OompaService {
   }
 
   #prepareCodexProviderRetirements(
-    sourceProviderAuthority: ProviderAccountAuthority,
-  ): readonly Readonly<{
+    sourceProviderAuthority: ProviderAccountAuthority,  ): readonly Readonly<{
     connectionId: string;
     providerAuthority: ProviderAccountAuthority;
     releasedEvents: readonly SessionEventWrite[];
@@ -9896,6 +10042,7 @@ export class OompaService {
       };
       registerRuntime(this.#codex, "codex", "managed");
       registerRuntime(this.#claude, "claude", "managed");
+      registerRuntime(this.#devin, "devin", "managed");
       if (this.#personalCodex !== undefined) {
         registerRuntime(this.#personalCodex, "codex", "personal");
       }
@@ -9934,13 +10081,17 @@ export class OompaService {
     if (runtimeError !== undefined) {
       const quarantineErrors: unknown[] = [];
       for (const profile of this.#store.listProfiles()) {
-        for (const provider of ["codex", "claude"] as const) {
+        for (const provider of ["codex", "claude", "devin"] as const) {
           for (const session of this.#store.listNonterminalProviderSessions(
             profile.id,
             provider,
           )) {
-            const recorded = this.#store.readSessionProviderAccountAuthority(session.id);
-            const runtimeScope: RuntimeAccountScope = recorded !== null && recorded.provider === session.provider
+            const recorded = provider === "devin"
+              ? null
+              : this.#store.readSessionProviderAccountAuthority(session.id);
+            const runtimeScope: RuntimeAccountScope = provider === "devin"
+              ? "managed"
+              : recorded !== null && recorded.provider === session.provider
                 ? recorded.runtimeScope
                 : this.#sessionHasMatchingActivePersonalBinding(session)
                   ? "personal"
@@ -10446,9 +10597,9 @@ export class OompaService {
       idempotencyKey: attempt.idempotencyKey,
       providerGeneration: attempt.authorityGeneration,
       statusCommand: `oompa account show ${accountId} --provider devin`,
+      sameKeyReplayCommand: `oompa account login ${accountId} --provider devin --idempotency-key ${attempt.idempotencyKey}`,
       abandonCommand: `oompa account login-cancel ${accountId} --provider devin --attempt-id ${attempt.id} --provider-generation ${String(attempt.authorityGeneration)} --idempotency-key ${attempt.idempotencyKey} --acknowledge-child-exited`,
-      diagnostic: "Devin support has been removed. This historical launch fence still requires exact local recovery. First confirm the original Devin child exited, then run the acknowledged abandon command. Abandon does not stop a process or read, change, or delete credentials.",
-    };
+      diagnostic: "The foreground Devin login launch was granted once. Its exact completion can settle after a daemon restart. Status may report credential presence but never proves that the child exited or grants another launch. If the original Oompa parent is gone, first confirm its Devin child exited, then run the exact acknowledged local abandon command; abandon does not stop Devin or change or delete credentials.",    };
   }
 
   #publicIsolatedProviderAccount(profile: ProfileRecord): Readonly<{ id: ProfileRecord["id"]; label: string }> {
@@ -10485,19 +10636,6 @@ export class OompaService {
     };
   }
 
-  #retiredProviderObservation(profile: ProfileRecord): PublicProviderObservation {
-    return {
-      basis: "local_state",
-      code: "provider_retired",
-      coverage: "unavailable",
-      freshness: "fresh",
-      observedAt: this.#now(),
-      profileGeneration: profile.processGeneration,
-      source: "codex_app_server",
-      state: "unavailable",
-    };
-  }
-
   async #readClaudeAccount(profile: ProfileRecord, signal: AbortSignal): Promise<Awaited<ReturnType<ClaudeRuntimePort["readAccount"]>>> {
     await this.#daemonAuthority.assertCurrent();
     return await this.#fencedEffect(async () => await this.#claude.readAccount({
@@ -10506,6 +10644,13 @@ export class OompaService {
     }));
   }
 
+  async #readDevinAccount(profile: ProfileRecord, signal: AbortSignal): Promise<CodexAccountProjection> {
+    await this.#daemonAuthority.assertCurrent();
+    return await this.#fencedEffect(async () => await this.#devin.readAccount({
+      authority: authorityFor(this.#paths, profile, this.#providerAuthority(profile, "devin")),
+      signal,
+    }));
+  }
 
   #foregroundLoginObservationAuthority(
     profile: ProfileRecord,
@@ -10549,7 +10694,7 @@ export class OompaService {
         throw new CommandFailure("CONFLICT", "The original login provider authority changed before authentication observation.");
       }
       if (provider === "devin") {
-        throw retiredProviderFailure();
+        return (await this.#devin.readAccount({ authority, signal })).signedIn;
       }
       const observed = await this.#claude.readAccount({ authority, signal });
       if (observed.readiness === "unverified") {
@@ -10601,18 +10746,304 @@ export class OompaService {
     };
   }
 
-  #showDevinAccount(selector: string): unknown {
+  async #showDevinAccount(selector: string, signal: AbortSignal): Promise<unknown> {
     const profile = this.#store.requireProfile(selector);
     const unsettled = this.#unsettledDevinLogin(profile);
+    if (unsettled !== undefined) {
+      return {
+        account: this.#publicIsolatedProviderAccount(profile),
+        authentication: { provider: "devin", signedIn: null },
+        providerGeneration: profile.processGeneration,
+        recovery: this.#devinLoginRecovery(unsettled),
+        usage: {
+          allowance: "unknown",
+          reason: "Devin ACP reports context and optional cumulative session cost, but exposes no account allowance or reset window.",
+          source: "devin_acp",
+        },
+      };
+    }
+    const account = await this.#readDevinAccount(profile, signal);
     return {
       account: this.#publicIsolatedProviderAccount(profile),
-      provider: "devin",
-      status: "retired",
+      authentication: { provider: "devin", signedIn: account.signedIn },
       providerGeneration: profile.processGeneration,
-      credentialAction: "none",
-      diagnostic: "Devin support has been removed. Existing history and provider-owned credentials are preserved; Oompa does not launch Devin or inspect its authentication.",
-      ...(unsettled === undefined ? {} : { recovery: this.#devinLoginRecovery(unsettled) }),
+      usage: {
+        allowance: "unknown",
+        reason: "Devin ACP reports context and optional cumulative session cost, but exposes no account allowance or reset window.",
+        source: "devin_acp",
+      },
+      ...(account.signedIn
+        ? {}
+        : { nextCommand: `oompa account login ${profile.id} --provider devin` }),
     };
+  }
+
+  async #prepareDevinLogin(
+    selector: string,
+    idempotencyKey: string,
+    _manualTokenFlow: boolean,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    const profile = this.#store.requireProfile(selector);
+    if (profile.state === "removed") throw new CommandFailure("NOT_FOUND", "That account is removed.");
+    const providerAuthority = this.#providerAuthority(profile, "devin");
+    const prior = this.#store.readMutation(idempotencyKey);
+    if (prior !== null) {
+      // The manual-token choice is foreground presentation, not daemon
+      // authority. A same-key replay can only recover the already-granted
+      // child fence and can never relaunch with a different choice.
+      this.#store.prepareMutation({
+        kind: "account.devin-login",
+        authorityId: profile.id,
+        authorityGeneration: prior.authorityGeneration,
+        providerAuthorities: this.#store.readMutationProviderAuthorities(prior.id),
+        request: { provider: "devin" },
+        idempotencyKey,
+      });
+      if (prior.state === "effect_started" || prior.state === "ambiguous") {
+        throw new CommandFailure(
+          "RECOVERY_REQUIRED",
+          "This Devin login launch was already granted and will not be granted again.",
+          this.#devinLoginRecovery(prior),
+        );
+      }
+      if (prior.state === "reconciled" && prior.resolution?.kind === "abandoned") {
+        throw new CommandFailure(
+          "CONFLICT",
+          "This Devin login fence was explicitly abandoned. Start a fresh login with a new idempotency key.",
+        );
+      }
+      if (prior.state === "applied" || prior.state === "reconciled") {
+        const receipt = devinLoginTerminalReceiptSchema.safeParse(prior.result);
+        if (
+          !receipt.success
+          || receipt.data.accountId !== profile.id
+          || receipt.data.attemptId !== prior.id
+          || receipt.data.idempotencyKey !== prior.idempotencyKey
+          || receipt.data.providerGeneration !== prior.authorityGeneration
+        ) throw new CommandFailure("INTERNAL", "The Devin login terminal receipt is invalid.");
+        if (!receipt.data.signedIn) {
+          throw new CommandFailure(
+            "INTERACTION_REQUIRED",
+            "This Devin login attempt settled signed out. Start a fresh login with a new idempotency key.",
+          );
+        }
+        return {
+          account: this.#publicIsolatedProviderAccount(profile),
+          authentication: { provider: "devin", signedIn: true },
+          login: { status: "signed_in" },
+        };
+      }
+      if (prior.state === "failed" || prior.state === "cancelled") {
+        throw new CommandFailure(
+          "INTERACTION_REQUIRED",
+          "This Devin login attempt is terminal without sign-in. Start a fresh login with a new idempotency key.",
+        );
+      }
+      if (prior.authorityGeneration !== providerAuthority.processGeneration) {
+        if (!this.#store.transitionMutation(prior.id, "prepared", "cancelled", {
+          provider: "devin",
+          signedIn: false,
+          status: "stale_no_effect",
+        })) throw new CommandFailure("CONFLICT", "The Devin login preparation changed concurrently.");
+        throw new CommandFailure(
+          "CONFLICT",
+          "This no-effect Devin login preparation belongs to an older provider generation. Start a fresh login with a new idempotency key.",
+        );
+      }
+    }
+    const unsettled = this.#unsettledDevinLogin(profile);
+    if (unsettled !== undefined) {
+      throw new CommandFailure(
+        "RECOVERY_REQUIRED",
+        "A Devin login already owns this account, including across provider generations.",
+        this.#devinLoginRecovery(unsettled),
+      );
+    }
+    const providerBlocker = this.#store.providerAuthorityAdvanceBlocker(profile.id, "devin");
+    if (providerBlocker !== null) {
+      throw new CommandFailure(
+        providerBlocker === "active_session" ? "CONFLICT" : "RECOVERY_REQUIRED",
+        `Devin login cannot replace the shared isolated home while Devin session authority is ${providerBlocker.replaceAll("_", " ")}. Inspect \`oompa session list --account ${profile.id}\`, stop active turns, and resolve recovery before retrying.`,
+        { provider: "devin", reason: providerBlocker, retryable: true },
+      );
+    }
+    const releasableSessions = this.#store.listNonterminalProviderSessions(profile.id, "devin");
+    if (releasableSessions.some((session) =>
+      session.state !== "idle"
+      || session.activeTurnId !== undefined
+      || session.providerThreadId === undefined)) {
+      throw new CommandFailure(
+        "CONFLICT",
+        `Devin login can release only idle, fully bound Devin sessions. Inspect \`oompa session list --account ${profile.id}\`, then finish or recover every other session before retrying.`,
+        { provider: "devin", reason: "session_not_idle", retryable: true },
+      );
+    }
+    const observed = await this.#readDevinAccount(profile, signal);
+    if (observed.signedIn) {
+      if (prior?.state === "prepared") {
+        if (!this.#store.transitionMutation(prior.id, "prepared", "cancelled", {
+          provider: "devin",
+          signedIn: true,
+          status: "no_effect",
+        })) throw new CommandFailure("CONFLICT", "The Devin login preparation changed concurrently.");
+      }
+      return {
+        account: this.#publicIsolatedProviderAccount(profile),
+        authentication: { provider: "devin", signedIn: true },
+        login: { status: "signed_in" },
+      };
+    }
+    if (releasableSessions.length > 0) {
+      await this.#assertNoCompactProjectionRecoveryForProfile(profile.id);
+      for (const candidate of releasableSessions) {
+        await this.#serialize(`session:${candidate.id}`, async () => {
+          const current = this.#store.requireSession(candidate.id);
+          const blocker = this.#store.providerAuthorityAdvanceBlocker(profile.id, "devin");
+          if (
+            blocker !== null
+            || current.profileId !== profile.id
+            || current.provider !== "devin"
+            || current.state !== "idle"
+            || current.activeTurnId !== undefined
+            || current.providerThreadId === undefined
+            || !this.#store.canReleaseIdleDevinSessionForAccountLogin({
+              profileId: profile.id,
+              profileGeneration: profile.processGeneration,
+              sessionId: current.id,
+            })
+          ) {
+            throw new CommandFailure(
+              blocker === "recovery_required" || blocker === "unsettled_authority"
+                ? "RECOVERY_REQUIRED"
+                : "CONFLICT",
+              "Devin session authority changed before the idle session could be released for login. Inspect the session and retry after it is quiescent.",
+              { provider: "devin", reason: blocker ?? "session_not_idle", retryable: true },
+            );
+          }
+          const providerConnectionId = this.#sessionProviderConnections.get(current.id) ?? null;
+          await this.#endProviderSession(
+            { ...current, providerThreadId: current.providerThreadId },
+            profile,
+            signal,
+            "Devin account login",
+          );
+          const providerAuthority = this.#store.requireProviderAccountAuthority(profile.id, "devin");
+          const terminal = this.#store.terminalizeIdleDevinSessionForAccountLogin({
+            accountId: profile.id,
+            providerAuthority,
+            providerConnectionId,
+            providerGeneration: providerAuthority.processGeneration,
+            sessionId: current.id,
+          });
+          if (terminal.event !== undefined) this.#eventWaiters.notify(current.id);
+          for (const interaction of terminal.interactions) this.#appendInteractionState(interaction);
+          await this.#cleanupTerminalFactsMemory(terminal.session);
+          await this.#cloud.supersedeCompactProjectionRecoveryForProviderDeletion(current.id);
+          await this.#daemonAuthority.assertCurrent();
+        });
+      }
+    }
+    let attempt: ReturnType<StateStore["prepareMutation"]>;
+    try {
+      attempt = this.#store.prepareMutation({
+        kind: "account.devin-login",
+        authorityId: profile.id,
+        authorityGeneration: providerAuthority.processGeneration,
+        providerAuthorities: [{ role: "primary", authority: providerAuthority, provenance: "account_devin_login" }],
+        request: { provider: "devin" },
+        idempotencyKey,
+      });
+      this.#store.beginDevinLoginMutationEffect({
+        attemptId: attempt.id,
+        profileId: profile.id,
+        profileGeneration: providerAuthority.processGeneration,
+        evidence: { kind: "account.devin-login", provider: "devin", baselineSignedIn: false },
+      });
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === "UNSETTLED_MUTATION_AUTHORITY") {
+        const blocking = this.#unsettledDevinLogin(profile);
+        throw new CommandFailure(
+          "RECOVERY_REQUIRED",
+          "Another mutation already owns this account generation.",
+          blocking === undefined ? undefined : this.#devinLoginRecovery(blocking),
+        );
+      }
+      throw error;
+    }
+    return {
+      account: this.#publicIsolatedProviderAccount(profile),
+      authentication: { provider: "devin", signedIn: false },
+      login: {
+        status: "launch_granted",
+        attemptId: attempt.id,
+        idempotencyKey,
+        providerGeneration: providerAuthority.processGeneration,
+      },
+    };
+  }
+
+  async #completeDevinLogin(
+    command: Extract<LocalCommand, { kind: "account.devin-login.complete" }>,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    const profile = this.#store.requireProfile(command.account);
+    const attempt = this.#store.readMutation(command.idempotencyKey);
+    if (
+      attempt === null
+      || attempt.id !== command.attemptId
+      || attempt.kind !== "account.devin-login"
+      || attempt.authorityId !== profile.id
+      || attempt.authorityGeneration !== command.providerGeneration
+    ) throw new CommandFailure("CONFLICT", "The Devin login completion does not match its exact launch authority.");
+    if (attempt.state === "reconciled" && attempt.resolution?.kind === "abandoned") {
+      throw new CommandFailure(
+        "CONFLICT",
+        "This Devin login fence was explicitly abandoned. Start a fresh login with a new idempotency key.",
+      );
+    }
+    const priorReceipt = attempt.state === "applied"
+      || attempt.state === "failed"
+      || attempt.state === "reconciled"
+      ? devinLoginTerminalReceiptSchema.safeParse(attempt.result)
+      : undefined;
+    let signedIn: boolean;
+    if (priorReceipt?.success === true) {
+      signedIn = priorReceipt.data.signedIn;
+    } else if (command.outcome.state === "not_started") {
+      signedIn = false;
+    } else {
+      signedIn = (await this.#readDevinAccount(profile, signal)).signedIn;
+    }
+    try {
+      this.#store.settleDevinLoginMutation({
+        attemptId: command.attemptId,
+        idempotencyKey: command.idempotencyKey,
+        profileId: profile.id,
+        profileGeneration: command.providerGeneration,
+        signedIn,
+        outcome: command.outcome,
+      });
+    } catch (error: unknown) {
+      if (
+        error instanceof Error
+        && (
+          error.message === "DEVIN_LOGIN_AUTHORITY_MISMATCH"
+          || error.message === "DEVIN_LOGIN_TERMINAL_OUTCOME_CONFLICT"
+          || error.message === "MUTATION_RECOVERY_CAS_CONFLICT"
+        )
+      ) throw new CommandFailure("CONFLICT", "The Devin login completion conflicts with its durable terminal receipt.");
+      throw error;
+    }
+    return {
+      account: this.#publicIsolatedProviderAccount(profile),
+      authentication: { provider: "devin", signedIn },
+      login: {
+        status: signedIn ? "signed_in" : "signed_out",
+        attemptId: command.attemptId,
+        idempotencyKey: command.idempotencyKey,
+        providerGeneration: command.providerGeneration,
+      },    };
   }
 
   #abandonDevinLogin(
@@ -12949,7 +13380,6 @@ export class OompaService {
   ): Promise<PublicProviderObservation> {
     let session = this.#store.requireSession(selector);
     const profile = this.#store.requireProfileById(session.profileId);
-    if (session.provider === "devin") return this.#retiredProviderObservation(profile);
     if (session.providerThreadId === undefined) {
       const providerAuthority = this.#capturedSessionProviderAuthority(session);
       return {
@@ -16411,7 +16841,6 @@ export class OompaService {
         includeArchived,
         limit,
         requireCurrentAccountAuthority: true,
-        includeRetiredHistory: true,
       });
       for (const session of localPage.sessions) {
         traversal.state.emittedSessionIds.add(session.id);
@@ -16462,7 +16891,6 @@ export class OompaService {
         includeArchived,
         limit,
         requireCurrentAccountAuthority: true,
-        includeRetiredHistory: true,
       });
       if (localPage.sessions.length > 0) {
         for (const session of localPage.sessions) {
@@ -16650,16 +17078,6 @@ export class OompaService {
 
   async #showSession(selector: string, detail: boolean, signal: AbortSignal): Promise<unknown> {
     const session = this.#store.requireSession(selector);
-    if (session.provider === "devin") {
-      return {
-        session,
-        retiredProvider: "devin",
-        effectiveRuntimeProfile: publicRuntimeProfile(this.#store.latestSessionRuntimeProfile(session.id)?.profile),
-        providerObservation: this.#retiredProviderObservation(
-          this.#store.requireProfileById(session.profileId),
-        ),
-      };
-    }
     if (session.state === "terminal") {
       const providerObservation = await this.#ensureSessionObservedLocked(session.id, signal);
       return {
@@ -16812,6 +17230,7 @@ export class OompaService {
         command.preset,
         authoredPresetContract,
       );
+      if (historicalRequirement === undefined) return false;
       return evidence.runtimeProfile.model === historicalRequirement.model
         && evidence.runtimeProfile.reasoningEffort === historicalRequirement.effort;
     })();
@@ -17093,6 +17512,12 @@ export class OompaService {
           true,
         );
         if (reviewedAccountKey !== providerAccountKey) {
+          if (provider === "devin") {
+            throw new CommandFailure(
+              "RECOVERY_REQUIRED",
+              "The managed Devin authority changed during runtime review.",
+            );
+          }
           throw new ProviderAccountAuthorityMismatchError(provider, profile);
         }
         const local = this.#store.beginSessionStartEffect({
@@ -17681,8 +18106,7 @@ export class OompaService {
           || binding.provider !== captured.provider
           || binding.providerThreadId !== record.sourceProviderThreadId) {
           throw new CommandFailure("RECOVERY_REQUIRED", "The switch's captured personal binding changed.");
-        }
-      }
+        }      }
       return profile;
     };
     const profile = assertExact();
@@ -18385,8 +18809,7 @@ export class OompaService {
                   launchIntent: claudeLaunch, switchAttemptId: record.attemptId,
                   identity, signal,
                 });
-              },
-            }),
+              },            }),
             ...(projectRoot === undefined ? {} : { projectRoot }),
             review: targetReview,
             signal,
@@ -18405,8 +18828,7 @@ export class OompaService {
         if (!targetEffect.invoked && claudeLaunch !== undefined) {
           this.#cancelClaudeProcessLaunchIntent(claudeLaunch);
         }
-        if (error instanceof SessionSwitchSourceFactBeforeTargetEffect) {
-          try {
+        if (error instanceof SessionSwitchSourceFactBeforeTargetEffect) {          try {
             this.#store.failSessionSwitchTargetStartNoEffect({
               ...cas,
               expectedPhase: "target_starting",
@@ -19341,8 +19763,7 @@ export class OompaService {
           // closure. Re-prove callback custody on the provider-call side of
           // that await so an observed or lost callback can never cross into startTurn.
           if (this.#sessionSwitchFactDeferralObserved(rebound.sessionId, deferral)) {
-            throw new SessionSwitchTargetFactBeforeSeedEffect();
-          }
+            throw new SessionSwitchTargetFactBeforeSeedEffect();          }
           return await runtime.startTurn({
             authority: authorityFor(this.#paths, targetProfile, providerAuthority),
             providerThreadId: session.providerThreadId as string,
@@ -19411,8 +19832,7 @@ export class OompaService {
               this.#store.markSessionSwitchReconciliationRequired({
                 ...cas,
                 expectedPhase: "seed_dispatching",
-                diagnosticCode: this.#sessionSwitchDiagnostic("SEED_RECEIPT", error),
-              });
+                diagnosticCode: this.#sessionSwitchDiagnostic("SEED_RECEIPT", error),              });
             }
           } catch (recoveryError: unknown) {
             if (recoveryError instanceof StateSecurityScrubRequiredError) this.#requestStop();
@@ -20613,8 +21033,6 @@ export class OompaService {
     }
     return await this.#serializeSessionAuthorityAcrossProfiles(selected, this.#sessionRecoveryProfileIds(selected), async () => {
       const current = this.#store.requireSession(selected.id);
-      // Reject retired recovery before any local memory cleanup can escape.
-      this.#assertSessionRecoveryProviderSupported(current);
       if (action === "abandon" && current.state === "recovery_required") {
         await this.#cleanupFactsMemory(current, "abandon");
       }
@@ -20643,7 +21061,6 @@ export class OompaService {
 
   async #resolveSessionRecovery(selector: string, action: "recover" | "abandon", signal: AbortSignal): Promise<unknown> {
     const session = this.#store.requireSession(selector);
-    this.#assertSessionRecoveryProviderSupported(session);
     if (this.#store.hasUnsettledQueueAttachmentQuarantineForSession(session.id)) {
       if (action !== "abandon") {
         throw new CommandFailure(
@@ -20690,8 +21107,7 @@ export class OompaService {
           providerStateDeleted: false,
         },
       };
-    }
-    if (session.state !== "recovery_required") {
+    }    if (session.state !== "recovery_required") {
       throw new CommandFailure("CONFLICT", "The session does not currently require recovery.");
     }
     const unsettled = this.#store.listUnsettledMutations({ sessionId: session.id });
@@ -22290,7 +22706,108 @@ export class OompaService {
     }
   }
 
-
+  /**
+   * A profile's durable state is Codex account state. Claude and Devin
+   * authentication are owned by their runtimes inside the same
+   * provider-neutral profile directory, so admitting a new effect must ask
+   * that provider without mutating the Codex state machine.
+   */
+  async #assertProviderSignedIn(
+    profile: ProfileRecord,
+    provider: Provider,
+    signal: AbortSignal,
+  ): Promise<Readonly<{
+    profileId: ProfileRecord["id"];
+    processGeneration: number;
+    provider: Provider;
+    signedIn: true;
+  }>> {
+    switch (provider) {
+      case "codex": {
+        this.#assertSignedIn(profile);
+        this.#assertIdentifiableAccountAuthority(profile);
+        return {
+          profileId: profile.id,
+          processGeneration: profile.processGeneration,
+          provider,
+          signedIn: true,
+        };
+      }
+      case "claude": {
+        if (profile.state !== "signed_in" && profile.state !== "signed_out") {
+          throw new CommandFailure(
+            "RECOVERY_REQUIRED",
+            "Resolve this profile's unsettled Codex account transition before starting a Claude provider effect.",
+          );
+        }
+        const unsettledLogin = this.#unsettledClaudeLogin(profile);
+        if (unsettledLogin !== undefined) {
+          throw new CommandFailure(
+            "RECOVERY_REQUIRED",
+            "A foreground Claude login still owns this account. Join or explicitly resolve that exact login before starting another Claude provider effect.",
+            this.#claudeLoginRecovery(unsettledLogin),
+          );
+        }
+        this.#assertClaudeIsolationAccepted();
+        const account = await this.#readClaudeAccount(profile, signal);
+        if (account.readiness === "signed_in") {
+          return {
+            profileId: profile.id,
+            processGeneration: profile.processGeneration,
+            provider,
+            signedIn: true,
+          };
+        }
+        const nextCommand = `oompa account login ${profile.id} --provider claude`;
+        throw new CommandFailure(
+          "INTERACTION_REQUIRED",
+          `Sign in with \`${nextCommand}\` before using this account's Claude runtime.`,
+          {
+            accountSelector: profile.id,
+            accountState: "signed_out",
+            nextCommand,
+            provider,
+          },
+        );
+      }
+      case "devin": {
+        if (profile.state !== "signed_in" && profile.state !== "signed_out") {
+          throw new CommandFailure(
+            "RECOVERY_REQUIRED",
+            "Resolve this profile's unsettled Codex account transition before starting a Devin provider effect.",
+          );
+        }
+        const unsettledLogin = this.#unsettledDevinLogin(profile);
+        if (unsettledLogin !== undefined) {
+          throw new CommandFailure(
+            "RECOVERY_REQUIRED",
+            "A foreground Devin login still owns this account. Join or explicitly resolve that exact login before starting another Devin provider effect.",
+            this.#devinLoginRecovery(unsettledLogin),
+          );
+        }
+        const account = await this.#readDevinAccount(profile, signal);
+        if (account.signedIn) {
+          return {
+            profileId: profile.id,
+            processGeneration: profile.processGeneration,
+            provider,
+            signedIn: true,
+          };
+        }
+        const nextCommand = `oompa account login ${profile.id} --provider devin`;
+        throw new CommandFailure(
+          "INTERACTION_REQUIRED",
+          `Sign in with \`${nextCommand}\` before using this account's Devin runtime.`,
+          {
+            accountSelector: profile.id,
+            accountState: "signed_out",
+            nextCommand,
+            provider,
+          },
+        );
+      }
+    }
+  }
   /** Provider-touch admission for an established session. */
   #profileAllowsEstablishedSession(
     profile: ProfileRecord,
@@ -22310,7 +22827,7 @@ export class OompaService {
           providerThreadId: session.providerThreadId,
         });
       }
-      case "devin": return false;
+      case "devin": return profile.state === "signed_in" || profile.state === "signed_out";
     }
   }
 
@@ -22337,8 +22854,15 @@ export class OompaService {
         }
         return;
       }
-      case "devin":
-        throw retiredProviderFailure();
+      case "devin": {
+        if (!this.#profileAllowsEstablishedSession(profile, session)) {
+          throw new CommandFailure(
+            "RECOVERY_REQUIRED",
+            "The Devin session's profile authority is unsettled.",
+          );
+        }
+        return;
+      }
     }
   }
 
@@ -22420,7 +22944,6 @@ export class OompaService {
     const session = this.#store.requireSession(selector);
     return await this.#serializeSessionAuthority(session, async () => {
       const current = this.#store.requireSession(session.id);
-      if (current.provider === "devin") throw retiredProviderFailure();
       const updated = this.#store.updateSessionMetadata({ sessionId: current.id, ...fields(current) });
       if (updated.state !== "terminal" && updated.state !== "recovery_required") {
         await this.#ensureFactsMemory(updated);
@@ -23185,20 +23708,6 @@ export class OompaService {
     void tracked.then(() => this.#background.delete(tracked));
   }
 
-  #assertSessionRecoveryProviderSupported(session: Pick<SessionRecord, "id" | "provider">): void {
-    if (session.provider === "devin") throw retiredProviderFailure();
-    for (const attempt of this.#store.listUnsettledMutations({ sessionId: session.id })) {
-      if (attempt.format !== "legacy") continue;
-      const evidence = attempt.evidence?.evidence;
-      if (evidence?.kind === "session.switch"
-        && (evidence.sourceProvider === "devin" || evidence.targetProvider === "devin")) {
-        // Both sides remain immutable recovery evidence after retirement, even
-        // when the currently bound side still has a supported runtime.
-        throw retiredProviderFailure();
-      }
-    }
-  }
-
   #assertSessionSwitchFactDrain(
     drain: SessionSwitchFactDrain,
     profileId: ProfileRecord["id"],
@@ -23218,7 +23727,6 @@ export class OompaService {
     // Inline drain retains the non-lock guard of normal ordered admission.
     this.#assertSessionAccountAuthorityIfSignedIn(session);
   }
-
   #sessionRecoveryProfileIds(session: Pick<SessionRecord, "id" | "profileId">): readonly ProfileRecord["id"][] {
     const ids = new Set<ProfileRecord["id"]>([session.profileId]);
     for (const attempt of this.#store.listUnsettledMutations({ sessionId: session.id })) {

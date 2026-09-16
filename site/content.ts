@@ -1,5 +1,6 @@
 import packageJson from "../package.json";
 import { CLAUDE_PIN } from "../src/claude/pin";
+import { DEVIN_PIN } from "../src/devin/pin";
 import { buildOompaGlobalInstallCommand } from "../src/install-preflight";
 
 export type EndpointAvailability = "beta-not-yet-live" | "live" | "release-ready";
@@ -217,7 +218,7 @@ const links = {
 
 const privacyBlocks: readonly ContentBlock[] = [
   paragraph(
-    text("Cloud sync is optional. Local provider profiles, Codex credentials, Claude Code configuration and credentials, and local execution continue to work without it. Oompa identity is separate from every provider account."),
+    text("Cloud sync is optional. Local provider profiles, Codex credentials, Claude Code configuration and credentials, Devin configuration and credentials, and local execution continue to work without it. Oompa identity is separate from every provider account."),
   ),
   { kind: "subheading", text: "Encrypted before upload" },
   list(
@@ -235,8 +236,8 @@ const privacyBlocks: readonly ContentBlock[] = [
   ),
   { kind: "subheading", text: "Never uploaded" },
   list(
-    [text("Codex or Claude Code credentials; provider profile or configuration files; plugin credentials; OAuth access or refresh tokens; authorization codes; PKCE verifiers; provider cookies; or the private device code.")],
-    [text("Raw Codex app-server or Claude Code stream requests or responses.")],
+    [text("Codex, Claude Code, or Devin credentials; provider profile or configuration files; plugin credentials; OAuth access or refresh tokens; authorization codes; PKCE verifiers; provider cookies; or the private device code.")],
+    [text("Raw Codex app-server, Claude Code stream, or Devin ACP requests or responses.")],
     [text("Personal-home adoption candidate identities or records, personal-runtime bindings, process identities, schedule-source metadata, provider-home provenance, provider-account authority hashes, or the automation id, firing time, and instructions from an exact Codex Desktop heartbeat envelope. Such an envelope is replaced with generic protected text before session content is projected.")],
     [text("Raw reasoning, hidden chain of thought, or approval secrets.")],
     [text("Provider-internal login and request IDs, permission values, MCP field contracts, protected answers, or response digests.")],
@@ -268,7 +269,7 @@ const privacyBlocks: readonly ContentBlock[] = [
     text("Compact-projection recovery is append-only. It preserves every older encrypted cloud chunk, opens a new stream epoch, and keeps the acknowledged unsynced interval visible as a recovery gap until authenticated account deletion."),
   ),
   paragraph(
-    text("Codex activity remains subject to OpenAI's service and privacy terms. Claude Code activity remains subject to Anthropic's service and privacy terms."),
+    text("Codex activity remains subject to OpenAI's service and privacy terms. Claude Code activity remains subject to Anthropic's service and privacy terms. Devin activity remains subject to Cognition's service and privacy terms."),
   ),
   {
     kind: "notice",
@@ -329,6 +330,7 @@ export const publicPins = {
   bun: packageJson.engines.bun,
   claude: CLAUDE_PIN,
   codex: packageJson.dependencies["@openai/codex"],
+  devin: DEVIN_PIN,
 } as const;
 
 const shieldsLabel = (value: string): string =>
@@ -371,6 +373,11 @@ const badges: readonly Badge[] = [
     alt: `runtime: Claude Code ${publicPins.claude}`,
     href: "https://github.com/hraness/oompa/blob/main/docs/providers/claude.md",
     image: staticBadge("runtime", `Claude Code ${publicPins.claude}`, "6f42c1"),
+  },
+  {
+    alt: `runtime: Devin CLI ${publicPins.devin}`,
+    href: "https://github.com/hraness/oompa/blob/main/docs/providers/devin.md",
+    image: staticBadge("runtime", `Devin CLI ${publicPins.devin}`, "5936b4"),
   },
 ];
 
@@ -462,7 +469,7 @@ export const publicContent: PublicContent = {
       {
         label: "Accounts",
         value: "Isolated profiles",
-        detail: "Codex uses its own CODEX_HOME per profile; Claude Code uses its own CLAUDE_CONFIG_DIR.",
+        detail: "Codex uses its own CODEX_HOME, Claude Code its own CLAUDE_CONFIG_DIR, and Devin its own HOME and XDG roots per profile.",
       },
       {
         label: "Sessions",
@@ -567,7 +574,7 @@ export const publicContent: PublicContent = {
       blocks: [
         { kind: "notice", label: isAdmittedRelease(releaseVersion) ? "Admitted CLI installation" : "Candidate installation unavailable", content: [text(installNotice), text(" Read the "), link(`v${admittedReleaseVersion} installation notes`, links.admittedInstall), text(".")] },
         paragraph(
-          text(`Oompa requires Bun 1.3.14 plus curl with HTTPS and TLS 1.2 support. The CLI and local daemon support macOS and Linux. Codex effects run on both platforms; Claude Code effects run on Linux only. Oompa refuses new Claude Code effects on macOS pending authenticated isolated-Keychain and detached-read acceptance. Native protected-input control loads only when a terminal prompt needs it and supports the standard macOS, glibc, and x64 or arm64 musl library names. ${isAdmittedRelease(releaseVersion) ? "Install the admitted release's reviewed immutable tag, then verify the binary before initialization:" : "Only after immutable GitHub release admission, install the candidate's reviewed immutable tag, then verify the binary before initialization:"}`),
+          text(`Oompa requires Bun 1.3.14 plus curl with HTTPS and TLS 1.2 support. The CLI and local daemon support macOS and Linux. Codex effects run on both platforms. Devin effects also run on both platforms when the separately installed Devin CLI reports exactly ${publicPins.devin}. Claude Code effects run on Linux only. Oompa refuses new Claude Code effects on macOS pending authenticated isolated-Keychain and detached-read acceptance. Native protected-input control loads only when a terminal prompt needs it and supports the standard macOS, glibc, and x64 or arm64 musl library names. ${isAdmittedRelease(releaseVersion) ? "Install the admitted release's reviewed immutable tag, then verify the binary before initialization:" : "Only after immutable GitHub release admission, install the candidate's reviewed immutable tag, then verify the binary before initialization:"}`),
         ),
         {
           kind: "commands",
@@ -758,7 +765,7 @@ export const publicContent: PublicContent = {
             code("$HOME/Library/Application Support/HRA Control Plane v1"),
             text(" on macOS and "),
             code("$HOME/.local/state/hra-control-plane-v1"),
-            text(" on Linux. After every prerequisite above, a human who explicitly accepts permanent loss of all local provider profiles, Codex credential stores, Claude Code configuration directories, sessions, ledgers, encryption keys, device credentials, and recovery evidence may move only the exact platform directory to Trash. Claude Code may also own credentials outside that directory, including provider-managed system credential storage; sign out through Claude Code before deletion. Do not move or remove the state directory's parent. Inspect the trashed directory before emptying Trash."),
+            text(" on Linux. After every prerequisite above, a human who explicitly accepts permanent loss of all local provider profiles, Codex credential stores, Claude Code configuration directories, Devin HOME and XDG directories, sessions, ledgers, encryption keys, device credentials, and recovery evidence may move only the exact platform directory to Trash. Claude Code may also own credentials outside that directory, including provider-managed system credential storage; sign out through Claude Code before deletion. Do not move or remove the state directory's parent. Inspect the trashed directory before emptying Trash."),
           ],
         },
         paragraph(
@@ -795,6 +802,28 @@ export const publicContent: PublicContent = {
           text(" launches a realpath-resolved Claude Code executable only after its exact self-reported version matches Oompa's pin, in the foreground inside that profile's isolated "),
           code("CLAUDE_CONFIG_DIR"),
           text(". Claude owns its prompts and browser handoff. Oompa gives it the terminal, joins the exact child, and reports only whether Claude says it is signed in; Oompa never opens or copies a Claude credential. Claude exposes no Oompa device-code, handoff-file, or web-linking protocol. New Claude effects are refused on macOS pending authenticated isolated-Keychain and detached-read acceptance."),
+        ),
+        paragraph(
+          code("oompa account login personal --provider devin"),
+          text(` requires a foreground terminal and the exact separately installed Devin CLI ${publicPins.devin}. Oompa launches `),
+          code("devin auth login"),
+          text(" with five distinct private profile directories for "),
+          code("HOME"),
+          text(", "),
+          code("XDG_CONFIG_HOME"),
+          text(", "),
+          code("XDG_DATA_HOME"),
+          text(", "),
+          code("XDG_CACHE_HOME"),
+          text(", and "),
+          code("XDG_STATE_HOME"),
+          text(". Add "),
+          code("--manual-token-flow"),
+          text(" to request Devin's own "),
+          code("--force-manual-token-flow"),
+          text(" login path. Devin owns every credential in that boundary. Oompa never opens, parses, copies, or uploads it and reports only whether "),
+          code("devin auth status"),
+          text(" says the isolated profile is signed in. Devin exposes no Oompa device-code, handoff-file, JSON, or web-linking login path."),
         ),
         paragraph(
           text("For a Codex login, JSON and noninteractive callers must create an empty mode-0600 file under a canonical current-user-owned mode-0700 directory, then pass its absolute canonical path:"),
@@ -864,6 +893,15 @@ export const publicContent: PublicContent = {
         ),
         paragraph(
           text("Oompa cloud identity is separate from every Codex or Claude Code account. Use the email-code flow below only after a hosted or self-managed Convex deployment has been configured."),
+          text("Devin ACP session usage reports current context occupancy and capacity, plus cumulative provider cost only when Devin supplies it. Oompa records those facts without interpreting them as an account allowance, remaining balance, billing settlement, or reset window. Devin ACP and "),
+          code("devin auth status"),
+          text(" expose no documented machine-readable account allowance or reset operation, so "),
+          code("oompa account show personal --provider devin"),
+          text(" reports allowance "),
+          code("unknown"),
+          text(" with source "),
+          code("devin_acp"),
+          text(". Oompa never submits Devin's human-facing usage commands as hidden turns and never applies a Codex reset credit to Devin."),
         ),
       ],
     },
@@ -912,16 +950,17 @@ export const publicContent: PublicContent = {
         paragraph(
           text("If the event stream reports a blocking interaction, read its exact ID and revision, inspect the live authority through the protected path, and resolve only the interaction kind you received. Keep following while a separate one-shot invocation handles the approval, question, permission grant, or supported MCP form. The protected interaction commands and input documents are defined below."),
         ),
+        { kind: "subheading", text: "Claude Code, Devin, and provider switching" },
         paragraph(
-          text("Devin support has been removed because its supported CLI integration cannot provide verified remaining account quota and reset times. Existing Devin history is read-only and provider-owned credentials are preserved. "),
-          link("Retired-provider compatibility and local login-fence cleanup", "https://github.com/hraness/oompa/blob/main/docs/providers/devin.md"),
-          text(" remain documented; no new Devin login or session can start."),
+          text("Devin runs through its separately installed pinned CLI inside an isolated per-profile HOME and XDG roots; Oompa observes only provider-neutral session facts and never reads its credentials. "),
+          link("Devin's provider contract and portability limits", "https://github.com/hraness/oompa/blob/main/docs/providers/devin.md"),
+          text(" document the exact boundary, including where Devin's own usage reporting does and does not flow into Oompa."),
         ),
         { kind: "subheading", text: "Claude Code and provider switching" },
         paragraph(
           text("Start directly with Claude Code by selecting its provider and reviewed preset, or move an idle session between providers. A switch seeds a fresh provider-native runtime from the latest retained tail of Oompa's provider-neutral conversation record; it does not move a provider-native thread. From the point the v0.6 daemon begins recording a session, that record covers accepted direct, queued, Work and scheduled automation, autorespond, and provider-switch handoff messages with actor provenance. It does not backfill provider history from before a personal-home session was admitted or user turns from before a v0.5 installation was upgraded, and those origin gaps do not set the current retention-gap field. Attachments are represented only by byte-free manifests containing bounded names, media types, sizes, and digests. Retention is capped at 50,000 events, 64 MiB, and seven days; when pruning has occurred, switch seeds and exports state the retention reason and leave the unavailable older count unknown. A switch refuses an active turn, an unsettled provider effect, an unsigned target profile, or a preset that belongs to another provider. If a Claude controller is no longer available, Oompa can recover the exact conversation with "),
           code("--resume"),
-          text(" only after prior-process exit or an already-completed exact process release is proven. Ambiguous custody stays fenced in recovery without launching another process."),
+          text(" only after prior-process exit or an already-completed exact process release is proven. Ambiguous custody stays fenced in recovery without launching another process. Devin uses exact ACP v1 session loading after restart only when its initialization advertised that capability."),
         ),
         {
           kind: "commands",
@@ -931,6 +970,13 @@ export const publicContent: PublicContent = {
             "oompa session export <session-id> --format json",
           ],
         },
+        paragraph(
+          text("ACP v1 has no in-turn steer method, so "),
+          code("oompa session steer"),
+          text(" refuses an active Devin turn. Use "),
+          code("oompa session queue"),
+          text(" to send the message after the current prompt completes, or stop the turn before sending another message. Oompa never sends concurrent prompts to one Devin session."),
+        ),
         { kind: "subheading", text: "Scheduled work in the same conversation" },
         paragraph(
           text("Attach a recurring whole-minute interval to an existing session with "),
@@ -1108,7 +1154,7 @@ export const publicContent: PublicContent = {
           code("CODEX_HOME"),
           text(". Claude Code receives that profile's isolated "),
           code("CLAUDE_CONFIG_DIR"),
-          text("; Oompa treats the whole directory as Claude's authentication boundary and never reads, copies, or forwards its credentials. Explicitly adopted Codex and Claude Code personal sessions use credentials already owned by the user's personal provider home without copying or parsing them. Provider-managed credential storage remains owned by the provider runtime."),
+          text("; Oompa treats the whole directory as Claude's authentication boundary and never reads, copies, or forwards its credentials. Explicitly adopted Codex and Claude Code personal sessions use credentials already owned by the user's personal provider home without copying or parsing them. Devin receives distinct private HOME and four XDG roots; Oompa passes those paths to the CLI but never opens, copies, or forwards Devin's credential. Provider-managed credential storage remains owned by the provider runtime."),
         ),
         paragraph(
           text("After successful email verification, the daemon automatically registers the current installation before it reads cloud data. The first registered device becomes active and creates the client-side encryption key. A later verified installation is registered as pending and may report presence, but it has no synchronized data, execution, or key authority."),
@@ -1179,7 +1225,7 @@ export const publicContent: PublicContent = {
             code("CODEX_HOME"),
             text(" for Codex and "),
             code("CLAUDE_CONFIG_DIR"),
-            text(" for Claude Code. Each provider owns its authentication state; Oompa never copies or parses provider credentials."),
+            text(" for Claude Code, plus distinct private HOME and XDG roots for Devin. Each provider owns its authentication state; Oompa never copies or parses provider credentials."),
           ],
           [
             text("Codex usage with provenance: account identity, quota, rate-limit, and token snapshots include their provider source time and freshness. A bounded source-ordered 24-hour ledger supports safe human and JSON pagination without returning raw provider payloads."),
@@ -1412,7 +1458,8 @@ export const publicContent: PublicContent = {
           [code("high"), text(": Codex Astra Max, currently "), code("gpt-6-astra"), text(" with "), code("max"), text(" reasoning.")],
           [code("ultra"), text(": Codex Astra Ultra, currently "), code("gpt-6-astra"), text(" with "), code("ultra"), text(" reasoning.")],
           [code("fable-max"), text(": Claude Code Fable, currently "), code("claude-fable-5-1"), text(" with "), code("max"), text(" reasoning.")],
-          [code("fast on|off"), text(": a Codex-only, explicit per-turn Fast or Standard overlay. Claude Code refuses Fast instead of ignoring it. A prior Fast value cannot leak into the next turn.")],
+          [code("astra"), text(": Devin GPT-6 Astra, exactly "), code("gpt-6-astra"), text(" with provider-default reasoning. It is the default preset for Devin.")],
+          [code("fast on|off"), text(": a Codex-only, explicit per-turn Fast or Standard overlay. Claude Code and Devin refuse Fast instead of ignoring it. A prior Fast value cannot leak into the next turn.")],
         ),
         paragraph(
           text("New Oompa-created Codex sessions that use "),
@@ -1435,7 +1482,7 @@ export const publicContent: PublicContent = {
           code("auto_review"),
           text(" path, the exact advertised "),
           code(":workspace"),
-          text(" permission profile, and the selected project as the runtime workspace root. Codex remains authoritative for the profile's effective sandbox, network policy, computer use, plugins, and protected turn inspection. Claude Code runs in its default interactive permission mode under the selected project and maps supported tool-use requests into Oompa interactions; it does not expose Codex's permission-profile, app, plugin, or protected turn-inspection surfaces."),
+          text(" permission profile, and the selected project as the runtime workspace root. Codex remains authoritative for the profile's effective sandbox, network policy, computer use, plugins, and protected turn inspection. Claude Code runs in its default interactive permission mode under the selected project and maps supported tool-use requests into Oompa interactions; Devin runs the exact devin acp --model gpt-6-astra process and maps its offered permission choices into Oompa interactions. Neither provider exposes Codex's permission-profile, app, plugin, or protected turn-inspection surfaces."),
         ),
       ],
     },
@@ -1485,7 +1532,7 @@ export const publicContent: PublicContent = {
             "oompa remote send <cloud-session> <message>",
             "oompa remote queue|steer <cloud-session> <message>",
             "oompa remote stop <cloud-session>",
-            "oompa remote preset <cloud-session> <low|high|ultra|fable-max>",
+            "oompa remote preset <cloud-session> <low|high|ultra|fable-max|astra>",
             "oompa remote provider <cloud-session> <codex|claude> [--preset <low|high|ultra|fable-max>]",
             "oompa remote fast <cloud-session> <on|off>",
             "oompa remote allow|deny <device-commands|account-linking>",
@@ -1564,15 +1611,14 @@ export const publicContent: PublicContent = {
             "oompa device approve <device-id-or-prefix> --fingerprint <value> [--idempotency-key <uuidv7>] [--json]",
             "oompa device revoke <device-id-or-prefix> [--idempotency-key <uuidv7>] [--json]",
             "oompa account add <label>",
-            "oompa account login <profile> [--provider <codex|claude>] [--device-code] [--manual-browser] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]",
+            "oompa account login <profile> [--provider <codex|claude|devin>] [--device-code] [--manual-browser] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]",
             "oompa account login-cancel <profile> [--provider codex]",
             "oompa account login-cancel <profile> --provider claude --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited",
             "oompa account login-cancel <profile> --provider devin --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited",
             "oompa account logout <profile>",
             "oompa account list",
-            "oompa account list [--provider <codex|claude>] [--json]",
-            "oompa account show <profile> [--provider <codex|claude>]",
-            "oompa account show <profile> --provider devin  (retired local history and cleanup only)",
+            "oompa account list [--provider <codex|claude|devin>] [--json]",
+            "oompa account show <profile> [--provider <codex|claude|devin>]",
             "oompa account usage [profile] [--refresh]",
             "oompa account usage-history <profile> [--from <UTC-RFC3339>] [--through <UTC-RFC3339>] [--limit <1..100>] [--cursor <cursor>]",
             "oompa plugin list <account> [--project <project>] [--refresh]",
@@ -1602,7 +1648,7 @@ export const publicContent: PublicContent = {
             "oompa memory hosted attach <project> <hosted-space-id> [--json]",
             "oompa memory hosted detach <project> --generation <n> [--json]",
             "oompa memory hosted sync <project> [--json]",
-            "oompa session start <account> [--project <project>] [--provider <codex|claude>] [--preset <low|high|ultra|fable-max>] [--fast] [--idempotency-key <uuid> [--preset-contract <1|2>]]",
+            "oompa session start <account> [--project <project>] [--provider <codex|claude|devin>] [--preset <low|high|ultra|fable-max|astra>] [--fast] [--idempotency-key <uuid> [--preset-contract <1|2>]]",
             "oompa session send|queue|steer <session> [--attach <path>]... <message>",
             "oompa session stop|recover|abandon <session>",
             "oompa session rename <session> <name>",
@@ -1612,7 +1658,7 @@ export const publicContent: PublicContent = {
             "oompa session state <session> [--json]",
             "oompa session peer-policy get <session> [--json]",
             "oompa session peer-policy set <session> <off|inspect|coordinate> --revision <n> [--json]",
-            "oompa session preset <session> <low|high|ultra|fable-max>",
+            "oompa session preset <session> <low|high|ultra|fable-max|astra>",
             "oompa session switch <session> --provider <codex|claude> [--preset <low|high|ultra|fable-max>] [--account <account>] [--idempotency-key <uuid> [--preset-contract <1|2>]]",
             "oompa session export <session> [--format <trajectory|json>] [--out <path>]",
             "oompa session fast <session> <on|off>",
@@ -1649,7 +1695,7 @@ export const publicContent: PublicContent = {
             "oompa remote send --or-steer <cloud-session> <message>",
             "oompa remote resolve <cloud-session> --interaction <uuid> --revision <n> --decision <decline>",
             "oompa remote stop <cloud-session>",
-            "oompa remote preset <cloud-session> <low|high|ultra|fable-max>",
+            "oompa remote preset <cloud-session> <low|high|ultra|fable-max|astra>",
             "oompa remote provider <cloud-session> <codex|claude> [--preset <low|high|ultra|fable-max>]",
             "oompa remote fast <cloud-session> <on|off>",
             "oompa remote allow|deny <device-commands|account-linking>",

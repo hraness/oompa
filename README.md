@@ -1,6 +1,6 @@
 # Oompa
 
-`@hraness/oompa` supplies the `oompa` command and local daemon. It manages isolated Codex and Claude Code profiles, durable sessions and command records, and optional encrypted sync. Provider tools own authentication and execution; Oompa does not broker model access.
+`@hraness/oompa` supplies the `oompa` command and local daemon. It manages isolated Codex, Claude Code, and Devin profiles, durable sessions and command records, and optional encrypted sync. Provider tools own authentication and execution; Oompa does not broker model access.
 
 Local CLI v0.8.4 passed immutable GitHub and exact-byte npm release admission. Current daemon and hosted command-writer rollout remains blocked on capacity.
 

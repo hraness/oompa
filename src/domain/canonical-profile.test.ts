@@ -131,13 +131,13 @@ describe("canonical historical profile identities", () => {
     }
   });
 
-  test("historical recognition neither selects a fresh route nor admits a retired provider", () => {
+  test("historical recognition decodes devin history without selecting a fresh route", () => {
     const before = JSON.stringify([activePresetBinding("high"), activePresetBinding("ultra")]);
     expect(decodeHistoricalPresetProfile({ provider: "devin", preset: "astra", contract: 2 }))
       .toBe(decodeHistoricalProfileKey("devin:gpt-6-astra:provider-default"));
     expect(decodeHistoricalPresetProfile({ provider: "devin", preset: "astra", contract: 1 })).toBeNull();
-    expect(supportedProviderSchema.safeParse("devin").success).toBe(false);
-    expect(supportedPresetSchema.safeParse("astra").success).toBe(false);
+    expect(supportedProviderSchema.safeParse("devin").success).toBe(true);
+    expect(supportedPresetSchema.safeParse("astra").success).toBe(true);
     expect(decodeHistoricalPresetProfile({ provider: "codex", preset: "ultra", contract: 2 })?.model)
       .toBe("gpt-6-astra");
     expect(activePresetBinding("ultra").requirement).toEqual({ model: "gpt-6-astra", effort: "ultra" });

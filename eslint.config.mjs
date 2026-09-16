@@ -2,7 +2,7 @@ import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 // Source layering. Runtime imports flow one way:
-// domain -> storage -> daemon -> { cli, claude, cloud, codex }.
+// domain -> storage -> daemon -> { cli, claude, cloud, codex, devin }.
 // Ports in src/daemon/ports.ts are implemented by adapters through
 // `import type`, so type-only imports may point upward where noted below.
 // Test files are exempt: they compose the whole tree on purpose.
@@ -172,7 +172,7 @@ export default tseslint.config(
     ignores: ["**/*.test.ts"],
     rules: layerRules([
       forbidSiblings(
-        ["cli"],
+        ["cli", "devin"],
         "src/cloud imports cloud, domain, storage, daemon, and codex. It never imports the CLI or provider-runtime adapters.",
       ),
       forbidCompositionRoots,

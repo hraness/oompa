@@ -1,6 +1,6 @@
 # Third-party notices
 
-Oompa depends on the official OpenAI Codex package, which is licensed under Apache License 2.0, and on Hraness Oh, which is licensed under the MIT License. Oompa pins the immutable public npm release `@hraness/oh@0.4.1`; `bun.lock` binds its exact registry artifact integrity. Oompa also interoperates with the separately installed Claude Code 2.1.260 runtime. Oompa does not redistribute Claude Code, copy or redistribute any provider credential, or vendor Oh.
+Oompa depends on the official OpenAI Codex package and `@agentclientprotocol/sdk` 1.4.0, which are licensed under Apache License 2.0, and on Hraness Oh, which is licensed under the MIT License. Oompa pins the immutable public npm release `@hraness/oh@0.4.1`; `bun.lock` binds its exact registry artifact integrity. Oompa also interoperates with the separately installed Claude Code 2.1.260 and Devin CLI 3000.10.27 runtimes. Oompa does not redistribute Claude Code or Devin CLI, copy or redistribute any provider credential, or vendor Oh.
 
 The Codex provider-session runtime uses Effect 3.22.1, licensed under the MIT License. `bun.lock` binds its runtime dependency graph. Effect supplements Oompa's existing authority and process-custody controls; it does not replace them.
 

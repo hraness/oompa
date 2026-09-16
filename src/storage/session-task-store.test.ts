@@ -349,46 +349,6 @@ const expectStoreCode = (
   }
 };
 
-describe("retired provider schedules", () => {
-  test("retains historical tasks without deadlines, new admission, or queue materialization", async () => {
-    let validations = 0;
-    const value = fixture({ resolveProjectDirectory: async (root) => { validations += 1; return root; } });
-    const key = idempotencyKey();
-    const active = createTask(value, { idempotencyKey: key });
-    const paused = createTask(value, { name: "Paused legacy task", status: "paused" });
-    value.database.query("UPDATE sessions SET provider_v39='devin' WHERE id=?").run(value.sessionId);
-    expect(value.store.nextDueAt()).toBeNull();
-    expect(await value.store.materializeDue({ now: active.nextDueAt! })).toEqual([]);
-    expect(validations).toBe(0);
-    expect(value.store.require(value.sessionId, active.id)).toEqual(active);
-    expect(value.store.listOccurrences(value.sessionId, active.id)).toEqual([]);
-    expect(value.database.query("SELECT * FROM queue_entries").all()).toEqual([]);
-    expectStoreCode(() => createTask(value), "PROVIDER_RETIRED");
-    expectStoreCode(() => createTask(value, { status: "paused" }), "PROVIDER_RETIRED");
-    expectStoreCode(() => value.store.edit({ sessionId: value.sessionId, taskId: paused.id,
-      expectedRevision: paused.revision, patch: { status: "active" }, idempotencyKey: idempotencyKey() }), "PROVIDER_RETIRED");
-    expect(createTask(value, { idempotencyKey: key })).toEqual(active);
-    expect(value.store.edit({ sessionId: value.sessionId, taskId: active.id,
-      expectedRevision: active.revision, patch: { status: "paused" }, idempotencyKey: idempotencyKey() }))
-      .toMatchObject({ status: "paused", nextDueAt: null });
-    expect(value.store.delete({ sessionId: value.sessionId, taskId: paused.id,
-      expectedRevision: paused.revision, idempotencyKey: idempotencyKey() })).toMatchObject({ deleted: true });
-  });
-
-  test("rechecks retirement after asynchronous project validation before writing an occurrence", async () => {
-    const value = fixture({ resolveProjectDirectory: async (root) => {
-      value.database.query("UPDATE sessions SET provider_v39='devin' WHERE id=?").run(value.sessionId);
-      return root;
-    } });
-    const active = createTask(value);
-    expect(await value.store.materializeDue({ now: active.nextDueAt! })).toEqual([]);
-    expect(value.store.nextDueAt()).toBeNull();
-    expect(value.store.require(value.sessionId, active.id)).toEqual(active);
-    expect(value.store.listOccurrences(value.sessionId, active.id)).toEqual([]);
-    expect(value.database.query("SELECT * FROM queue_entries").all()).toEqual([]);
-  });
-});
-
 describe("SessionTaskStore schema authority", () => {
   const databaseWithSchema = (schema: string): Database => {
     const database = new Database(":memory:", { strict: true });
@@ -1022,7 +982,7 @@ describe("SessionTaskStore due materialization", () => {
   });
 
 
-  test("retains an inert managed Devin task while its durable profile is signed out", async () => {
+  test("retains an inert managed Devin task while its durable provider account is signed out", async () => {
     const value = fixture();
     const created = createTask(value, {
       name: "Managed Devin follow-up",
@@ -1030,6 +990,9 @@ describe("SessionTaskStore due materialization", () => {
     });
     value.database.query(
       "UPDATE profiles SET state='signed_out',provider_email=NULL,codex_account_key=NULL WHERE id=?",
+    ).run(value.accountId);
+    value.database.query(
+      "UPDATE provider_accounts SET readiness='signed_out' WHERE profile_id=? AND provider='devin'",
     ).run(value.accountId);
     value.database.query(
       "UPDATE sessions SET provider='codex',provider_v39='devin' WHERE id=?",
@@ -1044,6 +1007,39 @@ describe("SessionTaskStore due materialization", () => {
     expect(value.store.listOccurrences(value.sessionId, created.id)).toEqual([]);
     expect(value.store.require(value.sessionId, created.id)).toEqual(created);
     expect(value.database.query("SELECT * FROM queue_entries").all()).toEqual([]);
+  });
+
+  test("materializes a managed Devin task once while its durable profile is signed out", async () => {
+    const value = fixture({
+      isExecutionAuthorityLive: (authority) => authority.provider === "devin",
+    });
+    value.database.query(
+      "UPDATE profiles SET state='signed_out',provider_email=NULL,codex_account_key=NULL WHERE id=?",
+    ).run(value.accountId);
+    value.database.query(
+      "UPDATE sessions SET provider='codex',provider_v39='devin' WHERE id=?",
+    ).run(value.sessionId);
+    value.database.query(
+      "DELETE FROM session_provider_account_authorities WHERE session_id=?",
+    ).run(value.sessionId);
+    const created = createTask(value, {
+      name: "Managed Devin follow-up",
+      prompt: "Continue the native Devin conversation.",
+    });
+    const dueAt = created.nextDueAt ?? 0;
+
+    expect(value.store.nextDueAt()).toBe(dueAt);
+    expect(await value.store.materializeDue({ now: dueAt })).toMatchObject([{
+      task: { id: created.id, sessionId: value.sessionId },
+      occurrence: { taskId: created.id, sessionId: value.sessionId },
+      queue: {
+        message: "Continue the native Devin conversation.",
+        sessionId: value.sessionId,
+        state: "pending",
+      },
+    }]);
+    expect(await value.store.materializeDue({ now: dueAt })).toEqual([]);
+    expect(value.store.listOccurrences(value.sessionId, created.id)).toHaveLength(1);
   });
 
   test("materializes an adopted personal Claude task while its profile is signed out", async () => {

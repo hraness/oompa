@@ -42,7 +42,7 @@ export function automaticEffortPreference(storage: Readonly<{
 
 export type BrowserStartDecision = Readonly<{
   preset: SupportedPreset;
-  reason: "automatic_max" | "automatic_ultra" | "disabled" | "unsupported_binding" | "claude_default";
+  reason: "automatic_max" | "automatic_ultra" | "disabled" | "unsupported_binding" | "claude_default" | "devin_default";
   matchedRule: ModelTaskShapeRule | null;
 }>;
 
@@ -55,12 +55,13 @@ type CodexBinding = Readonly<{
  * the ordinary command builder still fences them against the target daemon. */
 export function selectBrowserStartEffort(input: Readonly<{
   automatic: boolean;
-  provider: "codex" | "claude";
+  provider: "codex" | "claude" | "devin";
   prompt: string;
   high: CodexBinding;
   ultra: CodexBinding;
 }>): BrowserStartDecision {
   if (input.provider === "claude") return { preset: "fable-max", reason: "claude_default", matchedRule: null };
+  if (input.provider === "devin") return { preset: "astra", reason: "devin_default", matchedRule: null };
   if (!input.automatic) return { preset: "ultra", reason: "disabled", matchedRule: null };
   if (input.high.contract !== 2 || input.ultra.contract !== 2
     || input.high.requirement.model !== "gpt-6-astra" || input.ultra.requirement.model !== "gpt-6-astra"
@@ -83,7 +84,7 @@ export function selectBrowserStartEffort(input: Readonly<{
 
 export function browserStartDecision(input: Readonly<{
   automatic: boolean;
-  provider: "codex" | "claude";
+  provider: "codex" | "claude" | "devin";
   prompt: string;
 }>): BrowserStartDecision {
   return selectBrowserStartEffort({ ...input, high: activePresetBinding("high"), ultra: activePresetBinding("ultra") });
@@ -96,5 +97,6 @@ export function browserStartEffortHint(decision: BrowserStartDecision): string {
     case "disabled": return "Automatic effort is off: Ultra.";
     case "unsupported_binding": return "Ultra. Automatic effort requires the Astra update.";
     case "claude_default": return "Claude uses Fable Max.";
+    case "devin_default": return "Devin uses Astra.";
   }
 }

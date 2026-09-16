@@ -381,8 +381,33 @@ export const localCommandSchema = z.discriminatedUnion("kind", [
     providerGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     acknowledgeChildExited: z.literal(true),
   }).strict(),
-  // Cleanup-only authority for a historical foreground grant. No launch or
-  // authentication completion is admitted for the retired provider.
+  z.object({
+    kind: z.literal("account.devin-login.prepare"),
+    account: selectorSchema,
+    idempotencyKey: requiredIdempotencyKeySchema,
+    manualTokenFlow: z.boolean(),
+  }).strict(),
+  z.object({
+    kind: z.literal("account.devin-login.complete"),
+    account: selectorSchema,
+    attemptId: attemptIdSchema,
+    idempotencyKey: requiredIdempotencyKeySchema,
+    providerGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    outcome: z.union([
+      z.object({
+        state: z.literal("joined"),
+        exitCode: z.number().int().nonnegative().max(255),
+        interruptedBy: z.enum(["SIGINT", "SIGTERM"]).nullable(),
+      }).strict(),
+      z.object({ state: z.literal("not_started"), reason: z.literal("spawn_failed") }).strict(),
+      z.object({ state: z.literal("not_started"), reason: z.literal("preflight_stale") }).strict(),
+      z.object({
+        state: z.literal("not_started"),
+        reason: z.literal("interrupted_before_spawn"),
+        interruptedBy: z.enum(["SIGINT", "SIGTERM"]),
+      }).strict(),
+    ]),
+  }).strict(),
   z.object({
     kind: z.literal("account.devin-login.abandon"),
     account: selectorSchema,

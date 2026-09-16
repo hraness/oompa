@@ -37,6 +37,7 @@ import type {
   CodexRuntimePort,
   CodexSessionProjection,
   CloudControlPort,
+  DevinRuntimePort,
   ProfileAuthority,
 } from "../daemon/ports";
 import { initializeStatePaths, resolveStatePaths, type StatePaths } from "../storage/paths";
@@ -681,6 +682,66 @@ class FakeClaude implements ClaudeRuntimePort {
   async close(): Promise<void> {}
 }
 
+/** The same projection-only seam for a Devin ACP session. */
+class FakeDevin implements DevinRuntimePort {
+  readonly provider = "devin" as const;
+  discardRuntimeReview(): void {}
+  readSessionCalls = 0;
+  readAccountCalls = 0;
+  readonly accountProjection: CodexAccountProjection | Error;
+  projection: CodexSessionProjection = {
+    messages: [
+      { role: "user", text: "Implement the bounded change", turnId: "turn_devin_1" },
+      { role: "assistant", text: "The focused tests pass", turnId: "turn_devin_1" },
+    ],
+    providerThreadId: "thread_devin_0001",
+    providerUpdatedAt: 1_000,
+    status: "idle",
+    title: "Devin title",
+    turnSummaries: [{
+      actions: ["bun test"],
+      files: ["src/index.ts"],
+      id: "turn_devin_1",
+      omittedActions: 0,
+      omittedFiles: 0,
+      runtimeMs: 1_876,
+      status: "completed",
+    }],
+  };
+
+  constructor(accountProjection: CodexAccountProjection | Error = new Error("unused")) {
+    this.accountProjection = accountProjection;
+  }
+
+  async readSession(): Promise<CodexSessionProjection> {
+    this.readSessionCalls += 1;
+    return this.projection;
+  }
+  endSession(): Promise<void> { return Promise.resolve(); }
+  #unused(): never { throw new Error("unused"); }
+  pinnedVersion(): string { return this.#unused(); }
+  rebindProfileAuthority(): void {}
+  interactionAuthority(): never { return this.#unused(); }
+  readAccount(): Promise<CodexAccountProjection> {
+    this.readAccountCalls += 1;
+    return this.accountProjection instanceof Error
+      ? Promise.reject(this.accountProjection)
+      : Promise.resolve(this.accountProjection);
+  }
+  reviewSessionStart(): Promise<never> { return Promise.reject(this.#unused()); }
+  startSession(): Promise<never> { return Promise.reject(this.#unused()); }
+  observeSession(): ReturnType<DevinRuntimePort["observeSession"]> { return Promise.reject(this.#unused()); }
+  reviewTurnStart(): Promise<never> { return Promise.reject(this.#unused()); }
+  startTurn(): Promise<never> { return Promise.reject(this.#unused()); }
+  steer(): Promise<void> { return Promise.reject(this.#unused()); }
+  interrupt(): Promise<void> { return Promise.reject(this.#unused()); }
+  inspectInteractionAuthority(): ReturnType<DevinRuntimePort["inspectInteractionAuthority"]> { return Promise.reject(this.#unused()); }
+  validateInteractionResolution(): Promise<{ responseDigest: string }> { return Promise.reject(this.#unused()); }
+  resolveInteraction(): Promise<{ responseWritten: true }> { return Promise.reject(this.#unused()); }
+  validateInteractionTimeout(): Promise<{ responseDigest: string }> { return Promise.reject(this.#unused()); }
+  timeoutInteraction(): Promise<{ responseWritten: true }> { return Promise.reject(this.#unused()); }
+  async close(): Promise<void> {}
+}
 
 async function readFixtureProviderSession(
   value: Awaited<ReturnType<typeof fixture>>,
@@ -1037,81 +1098,145 @@ describe("state-backed cloud daemon adapter", () => {
     }
   });
 
-  test("preserves cached retired Devin history without any provider or command effects", () => ownedCloudAdapterCase(async (
-    value, { createAdapter, request, signal },
-  ) => {
-    const captured = canonical39DevinFixture.cases[0];
-    expect(value.store.requireSession(value.sessionId)).toEqual(captured.session);
-    expect(value.store.latestSessionRuntimeProfile(captured.session.id)).toEqual(captured.runtime);
-    expect(value.store.readMutation(captured.idempotencyKey)).toMatchObject(captured.mutation);
-    const commands: LocalCommand[] = [];
-    const initial = createAdapter();
-    await request(() => initial.close());
-    // The source database is the unchanged archived v39 producer image before
-    // real migration/boot. It contains no compact transcript. Seed only this
-    // separate synthetic cache input, not historical provider output or any
-    // session, runtime, login, or execution-authority row in the source store.
-    const body = { kind: "assistant_message", text: "Synthetic retained offline cache.", turnId: "turn_retired_cache_0001" } as const;
-    const events = [{ ...body, sequence: 1 }];
-    const cache = new Database(join(value.paths.root, "cloud-projection.sqlite"), { create: false, strict: true });
-    try {
-      cache.transaction(() => {
-        cache.query("INSERT INTO projection_sessions(session_id,next_sequence) VALUES (?,?)").run(value.sessionId, 2);
-        cache.query("INSERT INTO projection_turns(session_id,turn_id,start_sequence,event_count,digest,events_json) VALUES (?,?,?,?,?,?)")
-          .run(value.sessionId, body.turnId, 1, 1, sha256(JSON.stringify([body])), JSON.stringify(events));
-      })();
-    } finally { cache.close(false); }
-    const adapter = createAdapter((command) => { commands.push(command); return Promise.resolve({}); });
-    const database = new Database(value.paths.database, { create: false, strict: true });
-    database.exec("PRAGMA query_only=ON");
-    const originalRows = () => ({
-      session: database.query("SELECT * FROM sessions WHERE id=?").get(captured.session.id),
-      runtime: database.query("SELECT * FROM session_runtime_profiles WHERE session_id=? ORDER BY revision").all(captured.session.id),
-      login: database.query("SELECT * FROM mutation_attempts WHERE id=?").get(captured.mutation.id),
-      effect: database.query("SELECT * FROM mutation_effect_evidence WHERE attempt_id=?").get(captured.mutation.id),
-      authority: database.query("SELECT * FROM session_provider_account_authorities WHERE session_id=?").get(captured.session.id),
+  test("projects an established Devin Astra session through the Devin port on Darwin", async () => {
+    const value = await fixture();
+    const profile = value.store.requireProfileById(
+      value.store.requireSession(value.sessionId).profileId,
+    );
+    expect(value.store.setProfileState(
+      profile.id,
+      profile.processGeneration,
+      "signed_out",
+    )).toBe(true);
+    const devinAccount = value.store.requireProviderAccountForProfile(
+      profile.id,
+      "devin",
+    );
+    value.store.observeProviderAccountReadiness({
+      expectedBindingGeneration: devinAccount.bindingGeneration,
+      profileId: profile.id,
+      provider: "devin",
+      readiness: "signed_in",
+    });
+    const starting = value.store.createSession({
+      fastEnabled: false,
+      preset: "astra",
+      profileId: profile.id,
+      provider: "devin",
+      title: "Devin work",
+    });
+    const bound = value.store.bindSession({
+      expectedRevision: starting.revision,
+      providerThreadId: "thread_devin_0001",
+      sessionId: starting.id,
+      state: "idle",
+      providerUpdatedAt: 1_000,
+    });
+    const devinAuthority = value.store.requireProviderAccountAuthority(profile.id, "devin");
+    const devinProfile = {
+      devinVersion: "3000.10.27" as const,
+      isolatedHome: true as const,
+      model: "gpt-6-astra",
+      observedAt: 2_100,
+      preset: "astra" as const,
+      processGeneration: devinAuthority.processGeneration,
+      profileId: profile.id,
+      protocolVersion: 1 as const,
+      reasoningEffort: "provider-default" as const,
+    };
+    const queued = value.store.enqueue(bound.id, "Implement the bounded change");
+    const evidence = value.store.beginQueueEffect({
+      evidence: {
+        baseline: { activeTurnId: null, providerUpdatedAt: 1_000, status: "idle" },
+        clientMessageId: queued.id,
+        kind: "queue.dispatch",
+        messageDigest: sha256("Implement the bounded change"),
+        profileGeneration: devinAuthority.processGeneration,
+        providerThreadId: "thread_devin_0001",
+        queueId: queued.id,
+        runtimeProfile: devinProfile,
+        sessionId: bound.id,
+      },
+      profileGeneration: devinAuthority.processGeneration,
+      providerAuthority: devinAuthority,
+      providerConnectionId: "10000000-0000-4000-8000-000000000003",
+      queueId: queued.id,
+      sessionId: bound.id,
+    });
+    value.store.completeQueueEffect({
+      accountId: profile.id,
+      applyResponseState: false,
+      expectedEvidenceDigest: evidence.digest,
+      expectedSessionRevision: bound.revision,
+      message: "Implement the bounded change",
+      providerAuthority: devinAuthority,
+      providerConnectionId: null,
+      providerGeneration: devinAuthority.processGeneration,
+      queueId: queued.id,
+      receipt: { turnId: "turn_devin_1" },
+      runtimeProfile: devinProfile,
+      turnId: "turn_devin_1",
+      turnStatus: "completed",
+    });
+
+    const devin = new FakeDevin();
+    const adapter = new StateBackedCloudDaemonAdapter({
+      readSessionProjectionForCloud: async (sessionPublicId, signal) => {
+        signal.throwIfAborted();
+        if (sessionPublicId === bound.id) {
+          devin.readSessionCalls += 1;
+          return devin.projection;
+        }
+        return await value.codex.readSessionProjectionForCloud(sessionPublicId, signal);
+      },
+      executeRemote: () => Promise.resolve({}),
+      paths: value.paths,
+      platform: "darwin",
+      store: value.store,
     });
     try {
-      const retained = originalRows();
-      expect(retained.authority).toBeNull();
-      const calls = value.codex.readSessionCalls;
-      const before = await request(() => adapter.readCompactEvents({
-        afterSequence: 0, limit: 128, sessionPublicId: value.sessionId, signal,
-      }));
-      expect(before.events.length).toBeGreaterThan(0);
-      expect(before.events).toEqual(events);
-      const projected = await request(() => adapter.listSessions({ limit: 25, signal }));
-      expect(projected.sessions.find((session) => session.publicId === value.sessionId))
-        .toMatchObject({ metadata: { retiredProvider: "devin" }, state: "terminal" });
-      expect(value.codex.readSessionCalls).toBe(calls);
-      expect(await request(() => adapter.resolveCommandAuthority({ sessionPublicId: value.sessionId, signal }))).toBeNull();
-      expect((await request(() => adapter.readCompactEvents({
-        afterSequence: 0, limit: 128, sessionPublicId: value.sessionId, signal,
-      }))).events).toEqual(before.events);
-      // An already-decoded, untrusted command is not retained Devin authority.
-      // No modern provider tuple was issued or inserted for this historical row.
-      const authority: CloudLocalCommandAuthority = {
-        bindingGeneration: 1, localSessionId: captured.session.id, processGeneration: captured.generation,
-        profileId: captured.profile.id, provider: "codex", providerAccountId: "acct_ffffffffffffffffffffffffffffffff",
-        providerThreadId: captured.session.providerThreadId,
-      };
-      expect(await request(() => adapter.execute({
-        authority,
-        idempotencyKey: "00000000-0000-7000-8000-0000000000a4",
-        leaseAuthority: { bootGeneration: value.daemonGeneration, bootId: value.daemonBootId, fence: 1 },
-        payload: { kind: "send", message: "must not run" },
-        sessionPublicId: value.sessionId,
+      const signal = new AbortController().signal;
+      const projected = await adapter.listSessions({ limit: 25, signal });
+      expect(projected.sessions.map((session) => session.publicId)).toContain(bound.id);
+      expect(devin.readSessionCalls).toBe(1);
+      expect(value.codex.readSessionCalls).toBe(0);
+      const commandAuthority = await adapter.resolveCommandAuthority({
+        sessionPublicId: bound.id,
         signal,
-      }))).toEqual({ code: "PROVIDER_RETIRED", state: "failed" });
-      expect(commands).toEqual([]);
-      expect(value.codex.readSessionCalls).toBe(calls);
-      expect(calls).toBe(0);
-      expect(value.codex.usageCalls).toBe(0);
-      expect(originalRows()).toEqual(retained);
+      });
+      expect(commandAuthority).toMatchObject({
+        bindingGeneration: devinAuthority.bindingGeneration,
+        localSessionId: bound.id,
+        processGeneration: devinAuthority.processGeneration,
+        profileId: profile.id,
+        provider: "devin",
+        providerAccountId: devinAuthority.providerAccountId,
+        providerThreadId: "thread_devin_0001",
+      });
+      expect(commandAuthority).not.toHaveProperty("profileGeneration");
+      const events = await adapter.readCompactEvents({
+        afterSequence: 0,
+        limit: 128,
+        sessionPublicId: bound.id,
+        signal,
+      });
+      expect(events.events.map((event) => event.kind)).toEqual([
+        "user_message",
+        "assistant_message",
+        "turn_summary",
+      ]);
+      expect(events.events[2]).toMatchObject({
+        fast: false,
+        filesTouched: ["src/index.ts"],
+        kind: "turn_summary",
+        model: "astra",
+        runtimeMs: 1_876,
+      });
     } finally {
-      database.close(false);
+      await adapter.close();
+      value.store.close();
     }
-  }, "canonical39-devin"));
+  });
 
   test("projects and authorizes an actively bound personal Claude session on Darwin", async () => {
     const value = await fixture();
@@ -4070,11 +4195,17 @@ describe("state-backed cloud daemon adapter", () => {
         authority: authority as CloudLocalCommandAuthority,
         idempotencyKey: "00000000-0000-7000-8000-0000000000a3",
         leaseAuthority: { bootGeneration: 1, bootId: "boot_00000001", fence: 1 },
-        payload: { kind: "set_provider", preset: "astra", provider: "devin" } as unknown as Parameters<StateBackedCloudDaemonAdapter["execute"]>[0]["payload"],
+        payload: { kind: "set_provider", preset: "astra", provider: "devin" },
         sessionPublicId: value.sessionId,
         signal,
-      })).toEqual({ code: "COMMAND_PAYLOAD_INVALID", state: "failed" });
-      expect(commands).toHaveLength(2);
+      })).toEqual({ code: "APPLIED", state: "applied" });
+      expect(commands[2]).toEqual({
+        idempotencyKey: "00000000-0000-7000-8000-0000000000a3",
+        kind: "session.switch",
+        preset: "astra",
+        provider: "devin",
+        session: value.sessionId,
+      });
     } finally {
       await adapter.close();
       value.store.close();
@@ -5918,6 +6049,7 @@ describe("settings commands and the device registry", () => {
  */
 async function deviceCommandFixture(options: Readonly<{
   claude?: ClaudeRuntimePort;
+  devin?: DevinRuntimePort;
   now?: () => number;
 }> = {}) {
   const value = await fixture();
@@ -5931,7 +6063,7 @@ async function deviceCommandFixture(options: Readonly<{
   const notices: string[] = [];
   const adapter = new StateBackedCloudDaemonAdapter({
     readSessionProjectionForCloud: value.codex.readSessionProjectionForCloud,
-    ...(options.claude === undefined ? {} : {
+    ...(options.claude === undefined && options.devin === undefined ? {} : {
       readProviderAccountProjectionForCloud: async (input: Parameters<CloudProviderAccountProjectionReader>[0]) => {
         const authority = input.authority;
         const request = {
@@ -5950,6 +6082,10 @@ async function deviceCommandFixture(options: Readonly<{
           const projection = await options.claude.readAccount(request);
           return { signedIn: projection.readiness === "signed_in" ? true
             : projection.readiness === "signed_out" ? false : null };
+        }
+        if (authority.provider === "devin" && options.devin !== undefined) {
+          const projection = await options.devin.readAccount(request);
+          return { signedIn: projection.signedIn };
         }
         throw new Error("runtime unavailable");
       },
@@ -6090,27 +6226,41 @@ describe("device command execution", () => {
     }
   });
 
-  test("rejects retired starts and login requests without probing or dispatching", async () => {
+  test("refuses unobserved Devin starts and non-Codex login requests without probing or dispatching", async () => {
     const claude = new FakeClaude({ observedAt: 1_050, readiness: "signed_in" });
     const world = await deviceCommandFixture({ claude });
     try {
       world.value.store.setAccountLinkingAllowed(true);
       const accountPublicId = `devin_${world.account.id}`;
-      expect(deviceRegistryAccountAddress({ kind: "local", profileId: world.account.id, provider: "devin" })).toBeNull();
+      expect(deviceRegistryAccountAddress({ kind: "local", profileId: world.account.id, provider: "devin" }))
+        .toMatchObject({ profileId: world.account.id, provider: "devin", publicId: accountPublicId });
       expect(deviceRegistryAccountAddress({ kind: "public", publicId: accountPublicId }))
         .toMatchObject({ profileId: world.account.id, provider: "devin" });
-      const stalePayloads: unknown[] = [
-        { ...world.sessionStart, accountPublicId, provider: "devin", preset: "astra" },
-        { accountPublicId, kind: "account_login_start", handoffVersion: 2 },
-        { accountPublicId, kind: "account_login_status" },
+      const refusedPayloads: ReadonlyArray<Readonly<{ code: string; payload: unknown }>> = [
+        // The Devin account exists but is unobserved, so an Astra start is
+        // refused as unknown rather than dispatched to a runtime.
+        {
+          code: "DEVICE_COMMAND_ACCOUNT_UNKNOWN",
+          payload: {
+            accountPublicId,
+            kind: "session_start",
+            preset: "astra",
+            projectPublicId: world.project.id,
+            prompt: "continue the migration",
+            provider: "devin",
+          },
+        },
+        // Device-command account linking remains Codex-only.
+        { code: "DEVICE_COMMAND_PROVIDER_UNSUPPORTED", payload: { accountPublicId, kind: "account_login_start", handoffVersion: 2 } },
+        { code: "DEVICE_COMMAND_PROVIDER_UNSUPPORTED", payload: { accountPublicId, kind: "account_login_status" } },
       ];
-      for (const payload of stalePayloads) {
+      for (const { code, payload } of refusedPayloads) {
         expect(await world.adapter.executeDeviceCommand({
           idempotencyKey: "018bcfe5-6800-7000-8000-000000000113",
           payload: payload as Parameters<StateBackedCloudDaemonAdapter["executeDeviceCommand"]>[0]["payload"],
           requestingDevicePublicId: "device_browser1",
           signal: new AbortController().signal,
-        })).toEqual({ code: "DEVICE_COMMAND_PROVIDER_UNSUPPORTED", state: "failed" });
+        })).toEqual({ code, state: "failed" });
       }
       expect(world.executed).toEqual([]);
       expect(world.notices).toEqual([]);
@@ -6154,17 +6304,49 @@ describe("device command execution", () => {
     }
   });
 
+  test("expires optional auth observations and invalidates changed or removed profiles", async () => {
+    let now = 1_760_000_000_000;
+    const devin = new FakeDevin({ signedIn: true });
+    const world = await deviceCommandFixture({ devin, now: () => now });
+    try {
+      expect((await observeFixtureRegistry(world)).accounts.filter((account) => account.provider === "devin"))
+        .toHaveLength(2);
+      world.value.store.removeProfile(world.loginAccount.id);
+      world.value.store.nextProfileGeneration(world.account.id);
+      const changed = await world.adapter.readDeviceRegistry({ signal: new AbortController().signal });
+      expect(changed.accounts.some((account) => account.publicId.endsWith(world.loginAccount.id)))
+        .toBe(false);
+      expect(changed.accounts.some((account) => account.provider === "devin")).toBe(true);
+      const devinAccount = world.value.store.requireProviderAccountForProfile(world.account.id, "devin");
+      world.value.store.advanceProviderAccountProcessGeneration({
+        expectedProcessGeneration: devinAccount.processGeneration,
+        profileId: world.account.id,
+        provider: "devin",
+      });
+      const ownChanged = await world.adapter.readDeviceRegistry({ signal: new AbortController().signal });
+      expect(ownChanged.accounts.some((account) => account.provider === "devin")).toBe(false);
+      expect((await observeFixtureRegistry(world)).accounts.some((account) => account.provider === "devin"))
+        .toBe(true);
+      now += 60_001;
+      const expired = await world.adapter.readDeviceRegistry({ signal: new AbortController().signal });
+      expect(expired.accounts.some((account) => account.provider === "devin")).toBe(false);
+    } finally {
+      await world.adapter.close();
+      world.value.store.close();
+    }
+  });
+
   test("provider discovery rotates through later profiles and backs off failed probes", async () => {
     let now = 1_760_000_000_000;
-    const claude = new FakeClaude(new Error("runtime unavailable"));
+    const devin = new FakeDevin(new Error("runtime unavailable"));
     const observedProfiles: string[] = [];
-    Object.defineProperty(claude, "readAccount", {
-      value: (input: Parameters<ClaudeRuntimePort["readAccount"]>[0]) => {
+    Object.defineProperty(devin, "readAccount", {
+      value: (input: Parameters<DevinRuntimePort["readAccount"]>[0]) => {
         observedProfiles.push(input.authority.id);
         return Promise.reject(new Error("runtime unavailable"));
       },
     });
-    const world = await deviceCommandFixture({ claude, now: () => now });
+    const world = await deviceCommandFixture({ devin, now: () => now });
     world.value.store.createProfile("Third provider profile");
     try {
       for (let index = 0; index < 3; index += 1) {
@@ -6184,12 +6366,12 @@ describe("device command execution", () => {
   });
 
   test("joins canceled background auth cleanup and shares the close outcome", async () => {
-    const claude = new FakeClaude();
+    const devin = new FakeDevin();
     let releaseJoin!: () => void;
     const joined = new Promise<void>((resolve) => { releaseJoin = resolve; });
     let probeSignal: AbortSignal | undefined;
-    Object.defineProperty(claude, "readAccount", {
-      value: async (input: Parameters<ClaudeRuntimePort["readAccount"]>[0]) => {
+    Object.defineProperty(devin, "readAccount", {
+      value: async (input: Parameters<DevinRuntimePort["readAccount"]>[0]) => {
         probeSignal = input.signal;
         await new Promise<void>((resolve) => {
           input.signal.addEventListener("abort", () => resolve(), { once: true });
@@ -6198,7 +6380,7 @@ describe("device command execution", () => {
         throw new Error("Provider observation canceled after cleanup");
       },
     });
-    const world = await deviceCommandFixture({ claude });
+    const world = await deviceCommandFixture({ devin });
     try {
       await world.adapter.readDeviceRegistry({ signal: new AbortController().signal });
       const closing = world.adapter.close();
@@ -6219,13 +6401,13 @@ describe("device command execution", () => {
   });
 
   test("fences future observations and fails close when provider child cleanup is unproven", async () => {
-    const cleanupFailure = new Error("Claude authentication output could not be drained");
-    const claude = new FakeClaude(new Error("runtime admission failed", { cause: cleanupFailure }));
-    const world = await deviceCommandFixture({ claude });
+    const cleanupFailure = new Error("Devin authentication output could not be drained");
+    const devin = new FakeDevin(new Error("runtime admission failed", { cause: cleanupFailure }));
+    const world = await deviceCommandFixture({ devin });
     try {
       await observeFixtureRegistry(world);
       await observeFixtureRegistry(world);
-      expect(claude.readAccountCalls).toBe(1);
+      expect(devin.readAccountCalls).toBe(1);
       await expect(world.adapter.close()).rejects.toThrow("cleanup could not be proven");
     } finally {
       await world.adapter.close().catch(() => undefined);
@@ -6233,19 +6415,19 @@ describe("device command execution", () => {
     }
   });
 
-  test("a held Claude auth probe cannot block registry, Codex, or settings commands", async () => {
-    const claude = new FakeClaude();
+  test("a held Devin auth probe cannot block registry, Codex, or settings commands", async () => {
+    const devin = new FakeDevin();
     const probeSignals: AbortSignal[] = [];
-    Object.defineProperty(claude, "readAccount", {
-      value: (input: Parameters<ClaudeRuntimePort["readAccount"]>[0]) => {
-        claude.readAccountCalls += 1;
+    Object.defineProperty(devin, "readAccount", {
+      value: (input: Parameters<DevinRuntimePort["readAccount"]>[0]) => {
+        devin.readAccountCalls += 1;
         probeSignals.push(input.signal);
         return new Promise<ClaudeAccountReadinessProjection>((_resolve, reject) => {
           input.signal.addEventListener("abort", () => reject(input.signal.reason), { once: true });
         });
       },
     });
-    const world = await deviceCommandFixture({ claude });
+    const world = await deviceCommandFixture({ devin });
     const controller = new AbortController();
     const promptly = async <T>(promise: Promise<T>): Promise<T | "blocked"> => {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -6265,9 +6447,9 @@ describe("device command execution", () => {
       expect(await promptly(registry)).not.toBe("blocked");
       for (let index = 0; index < 3; index += 1) {
         const projection = await world.adapter.readDeviceRegistry({ signal: controller.signal });
-        expect(projection.accounts.some((account) => account.provider === "claude")).toBe(false);
+        expect(projection.accounts.some((account) => account.provider === "devin")).toBe(false);
       }
-      expect(claude.readAccountCalls).toBe(1);
+      expect(devin.readAccountCalls).toBe(1);
       expect(await promptly(world.adapter.executeDeviceCommand({
         idempotencyKey: "018bcfe5-6800-7000-8000-000000000111",
         payload: world.sessionStart,
@@ -6287,7 +6469,7 @@ describe("device command execution", () => {
         requestingDevicePublicId: "device_browser1",
         signal: controller.signal,
       }))).toEqual({ code: "APPLIED", state: "applied" });
-      expect(claude.readAccountCalls).toBe(1);
+      expect(devin.readAccountCalls).toBe(1);
       controller.abort(new Error("registry caller canceled"));
       expect(probeSignals.every((signal) => signal.aborted)).toBe(true);
       await world.adapter.close();
@@ -6303,19 +6485,21 @@ describe("device command execution", () => {
   test("derives reversible provider-qualified account ids without cross-provider collisions", async () => {
     const world = await deviceCommandFixture({
       claude: new FakeClaude({ observedAt: 1_050, readiness: "signed_in" }),
+      devin: new FakeDevin({ signedIn: true }),
     });
     try {
-      const addresses = (["codex", "claude"] as const).map((provider) =>
+      const addresses = (["codex", "claude", "devin"] as const).map((provider) =>
         deviceRegistryAccountAddress({
           kind: "local",
           profileId: world.account.id,
           provider,
         }));
       expect(addresses.every((address) => address !== null)).toBe(true);
-      expect(new Set(addresses.map((address) => address?.publicId)).size).toBe(2);
+      expect(new Set(addresses.map((address) => address?.publicId)).size).toBe(3);
       expect(addresses.map((address) => address?.publicId)).toEqual([
         world.account.id,
         `claude_${world.account.id}`,
+        `devin_${world.account.id}`,
       ]);
       for (const address of addresses) {
         if (address === null) throw new Error("expected account address");
@@ -6328,7 +6512,7 @@ describe("device command execution", () => {
       })).toBeNull();
       expect(deviceRegistryAccountAddress({
         kind: "public",
-        publicId: "claude_".padEnd(97, "a"),
+        publicId: "devin_".padEnd(97, "a"),
       })).toBeNull();
 
       const registry = await observeFixtureRegistry(world);
@@ -6345,6 +6529,7 @@ describe("device command execution", () => {
         .toEqual([
           ["codex", "signed_in"],
           ["claude", "signed_in"],
+          ["devin", "signed_in"],
         ]);
     } finally {
       await world.adapter.close();
@@ -6355,13 +6540,14 @@ describe("device command execution", () => {
   test("caps the registry only at complete provider-qualified profile groups", async () => {
     const world = await deviceCommandFixture({
       claude: new FakeClaude({ observedAt: 1_050, readiness: "signed_in" }),
+      devin: new FakeDevin({ signedIn: true }),
     });
     try {
-      for (let index = 0; index < 49; index += 1) {
+      for (let index = 0; index < 32; index += 1) {
         world.value.store.createProfile(`Provider group ${index.toString().padStart(2, "0")}`);
       }
       const registry = await observeFixtureRegistry(world);
-      expect(registry.accounts).toHaveLength(100);
+      expect(registry.accounts).toHaveLength(99);
       const providersByProfile = new Map<string, string[]>();
       for (const account of registry.accounts) {
         const address = deviceRegistryAccountAddress({
@@ -6373,9 +6559,9 @@ describe("device command execution", () => {
         providers.push(address.provider);
         providersByProfile.set(address.profileId, providers);
       }
-      expect(providersByProfile.size).toBe(50);
+      expect(providersByProfile.size).toBe(33);
       for (const providers of providersByProfile.values()) {
-        expect(providers).toEqual(["codex", "claude"]);
+        expect(providers).toEqual(["codex", "claude", "devin"]);
       }
     } finally {
       await world.adapter.close();
@@ -6427,6 +6613,49 @@ describe("device command execution", () => {
     }
   });
 
+  test("discovers a signed-in Devin account and translates its public id before local start", async () => {
+    const devin = new FakeDevin({ signedIn: true });
+    const world = await deviceCommandFixture({ devin });
+    try {
+      const signal = new AbortController().signal;
+      const registry = await observeFixtureRegistry(world);
+      const account = registry.accounts.find((entry) =>
+        entry.provider === "devin" && entry.publicId.endsWith(world.account.id));
+      expect(account).toEqual({
+        label: "Personal `[local-path]`",
+        provider: "devin",
+        publicId: `devin_${world.account.id}`,
+        status: "signed_in",
+      });
+      if (account === undefined) throw new Error("expected Devin registry account");
+
+      const outcome = await world.adapter.executeDeviceCommand({
+        idempotencyKey: "018bcfe5-6800-7000-8000-000000000101",
+        payload: {
+          accountPublicId: account.publicId,
+          kind: world.sessionStart.kind,
+          preset: "astra",
+          projectPublicId: world.sessionStart.projectPublicId,
+          prompt: world.sessionStart.prompt,
+          provider: "devin",
+        },
+        requestingDevicePublicId: "device_browser1",
+        signal,
+      });
+      expect(outcome).toMatchObject({ code: "APPLIED", state: "applied" });
+      expect(world.executed[0]).toMatchObject({
+        account: world.account.id,
+        kind: "session.start",
+        preset: "astra",
+        provider: "devin",
+      });
+      expect(devin.readAccountCalls).toBe(2);
+    } finally {
+      await world.adapter.close();
+      world.value.store.close();
+    }
+  });
+
   test("publishes known signed-out Claude state and refuses it before local execution", async () => {
     const world = await deviceCommandFixture({ claude: new FakeClaude({ observedAt: 1_050, readiness: "signed_out" }) });
     try {
@@ -6462,15 +6691,50 @@ describe("device command execution", () => {
     }
   });
 
+  test("publishes known signed-out Devin state and refuses it before local execution", async () => {
+    const world = await deviceCommandFixture({ devin: new FakeDevin({ signedIn: false }) });
+    try {
+      const signal = new AbortController().signal;
+      const address = deviceRegistryAccountAddress({
+        kind: "local",
+        profileId: world.account.id,
+        provider: "devin",
+      });
+      if (address === null) throw new Error("expected Devin account address");
+      expect((await observeFixtureRegistry(world)).accounts.some((account) =>
+        account.provider === "devin"
+        && account.publicId === address.publicId
+        && account.status === "signed_out"))
+        .toBe(true);
+      expect(await world.adapter.executeDeviceCommand({
+        idempotencyKey: "018bcfe5-6800-7000-8000-000000000102",
+        payload: {
+          accountPublicId: address.publicId,
+          kind: world.sessionStart.kind,
+          preset: "astra",
+          projectPublicId: world.sessionStart.projectPublicId,
+          prompt: world.sessionStart.prompt,
+          provider: "devin",
+        },
+        requestingDevicePublicId: "device_browser1",
+        signal,
+      })).toEqual({ code: "DEVICE_COMMAND_ACCOUNT_SIGNED_OUT", state: "failed" });
+      expect(world.executed).toEqual([]);
+    } finally {
+      await world.adapter.close();
+      world.value.store.close();
+    }
+  });
+
   test("refuses a provider mismatch against the provider-qualified account row", async () => {
     const world = await deviceCommandFixture({ claude: new FakeClaude({ observedAt: 1_050, readiness: "signed_in" }) });
     try {
       const address = deviceRegistryAccountAddress({
         kind: "local",
         profileId: world.account.id,
-        provider: "claude",
+        provider: "devin",
       });
-      if (address === null) throw new Error("expected Claude account address");
+      if (address === null) throw new Error("expected Devin account address");
       expect(await world.adapter.executeDeviceCommand({
         idempotencyKey: "018bcfe5-6800-7000-8000-000000000103",
         payload: { ...world.sessionStart, accountPublicId: address.publicId },
@@ -6484,20 +6748,20 @@ describe("device command execution", () => {
     }
   });
 
-  test("omits a Claude row when its runtime cannot prove authentication", async () => {
-    const claude = new FakeClaude(new Error("runtime unavailable"));
-    const world = await deviceCommandFixture({ claude });
+  test("omits a Devin row when its runtime cannot prove authentication", async () => {
+    const devin = new FakeDevin(new Error("runtime unavailable"));
+    const world = await deviceCommandFixture({ devin });
     try {
       const registry = await world.adapter.readDeviceRegistry({
         signal: new AbortController().signal,
       });
-      expect(registry.accounts.some((account) => account.provider === "claude")).toBe(false);
+      expect(registry.accounts.some((account) => account.provider === "devin")).toBe(false);
       expect(registry.accounts.some((account) =>
         account.provider === "codex"
         && account.publicId === world.account.id
         && account.status === "signed_in"))
         .toBe(true);
-      expect(claude.readAccountCalls).toBe(1);
+      expect(devin.readAccountCalls).toBe(1);
     } finally {
       await world.adapter.close();
       world.value.store.close();
@@ -6523,16 +6787,16 @@ describe("device command execution", () => {
         state: "applied",
       });
 
-      const claudeAddress = deviceRegistryAccountAddress({
+      const devinAddress = deviceRegistryAccountAddress({
         kind: "local",
         profileId: world.loginAccount.id,
-        provider: "claude",
+        provider: "devin",
       });
-      if (claudeAddress === null) throw new Error("expected Claude account address");
+      if (devinAddress === null) throw new Error("expected Devin account address");
       expect(await world.adapter.executeDeviceCommand({
         idempotencyKey: "018bcfe5-6800-7000-8000-000000000105",
         payload: {
-          accountPublicId: claudeAddress.publicId,
+          accountPublicId: devinAddress.publicId,
           kind: "account_login_status",
         },
         requestingDevicePublicId: "device_browser1",

@@ -23,7 +23,7 @@ export function joinedQueueTranscriptGuardSql(predecessor: string): string {
       JOIN provider_accounts account ON account.id=captured.provider_account_id
       JOIN profiles profile ON profile.id=captured.profile_id
       WHERE captured.queue_id=NEW.id AND NEW.session_id=OLD.session_id
-        AND captured.provider IN ('codex','claude')
+        AND captured.provider IN ('codex','claude','devin')
         AND s.profile_id=captured.profile_id AND s.provider_v39=captured.provider
         AND current.provider_account_id=captured.provider_account_id
         AND current.profile_id=captured.profile_id AND current.provider=captured.provider

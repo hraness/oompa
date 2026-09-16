@@ -24,6 +24,8 @@ import {
   accountLoginReplayCommand,
   claudeAccountLoginAbandonCommand,
   claudeAccountLoginCommand,
+  devinAccountLoginAbandonCommand,
+  devinAccountLoginCommand,
   completeProtectedAuthLogin,
   completeProtectedInteraction,
   deviceMutationReplayCommand,
@@ -123,6 +125,17 @@ import {
   type ResolvePinnedClaudeRuntimeOptions,
 } from "./claude/index";
 import type { OompaHostToolCall } from "./codex/protocol";
+import {
+  createDevinLoginSignalCustody,
+  resolvePinnedDevinRuntime,
+  runDevinForegroundLogin,
+  type DevinDirectories,
+  type DevinForegroundLoginResult,
+  type DevinLoginSignalCustody,
+  type DevinLoginSignalSource,
+  type PinnedDevinRuntime,
+  type ResolvePinnedDevinRuntimeOptions,
+} from "./devin/index";
 import { localCommandSchema, type CommandResponse, type LocalCommand } from "./domain/contracts";
 import { adoptableProviderSchema, type Provider } from "./domain/presets";
 import {
@@ -189,6 +202,7 @@ import {
 import { PinnedClaudeRuntimeManager, type ClaudeProcessFactory } from "./daemon/claude-runtime-adapter";
 import { observeClaudeProcess, type ClaudeProcessObservation } from "./claude/process-observation";
 import { PinnedCodexRuntimeManager } from "./daemon/codex-runtime-adapter";
+import { PinnedDevinRuntimeManager } from "./daemon/devin-runtime-adapter";
 import {
   BoundedPersonalSessionDiscovery,
   createLocalClaudeProcessLivenessProbe,
@@ -1295,6 +1309,18 @@ export type CliMainInput = Readonly<{
   /** Test seam for grant-bound terminal-signal custody. */
   claudeLoginSignalSource?: ClaudeLoginSignalSource;
   resolveClaudeRuntime?: (options: ResolvePinnedClaudeRuntimeOptions) => Promise<PinnedClaudeRuntime>;
+  /** Narrow test seam around Devin's foreground-only authentication command. */
+  runDevinForegroundLogin?: (input: Readonly<{
+    directories: DevinDirectories;
+    manualTokenFlow?: boolean;
+    signal: AbortSignal;
+    signalCustody: DevinLoginSignalCustody;
+    stdio: Readonly<{ stderr: number; stdin: number; stdout: number }>;
+    runtime: PinnedDevinRuntime;
+  }>) => Promise<DevinForegroundLoginResult>;
+  /** Test seam for Devin's grant-bound terminal-signal custody. */
+  devinLoginSignalSource?: DevinLoginSignalSource;
+  resolveDevinRuntime?: (options: ResolvePinnedDevinRuntimeOptions) => Promise<PinnedDevinRuntime>;
   onHumanSessionObserverBootstrap?: (bootstrap: Readonly<{
     interactions: readonly Readonly<{
       id: string;
@@ -3407,6 +3433,7 @@ async function runDaemonLifecycle(
   let claudeHostToolAuthority: ClaudeHostToolBindingAuthority | undefined;
   let claudeHostToolServer: ClaudeHostToolCallbackServer | undefined;
   let service: OompaService | undefined;
+  let devin: PinnedDevinRuntimeManager | undefined;
   let server: LocalDaemonServer | undefined;
   let cloudAdapter: StateBackedCloudDaemonAdapter | undefined;
   let cloudLifecycle: CloudDaemonLifecycle | undefined;
@@ -3540,7 +3567,6 @@ async function runDaemonLifecycle(
         },
       },
     });
-    const activeClaudeHostToolServer = claudeHostToolServer;
     codex = new PinnedCodexRuntimeManager({
       allowSameGenerationRelaunchAfterProviderDisconnect: true,
       ...(installation.kind === "live_acceptance"
@@ -3791,9 +3817,39 @@ async function runDaemonLifecycle(
       },
       ...personalClaudeDiscovery,
     });
-    if (activeClaudeHostToolServer.path !== claudeHostToolCallbackSocketPath(paths)) {
-      throw new Error("Claude host-tool callback transport path changed during daemon startup.");
-    }
+    // Devin owns its credentials and native sessions. Oompa gives the pinned ACP
+    // process a per-account HOME plus all four XDG roots and observes only the
+    // provider-neutral facts emitted by the manager.
+    devin = new PinnedDevinRuntimeManager({
+      directoriesFor: async (authority) => {
+        const owned = await initializeProfilePaths(paths, authority.id);
+        return {
+          home: owned.devinHome,
+          configHome: owned.devinConfigDir,
+          dataHome: owned.devinDataDir,
+          cacheHome: owned.devinCacheDir,
+          stateHome: owned.devinStateDir,
+        };
+      },
+      isCurrent: (authority) => {
+        try {
+          const profile = activeStore.requireProfile(authority.id);
+          return profile.processGeneration === authority.generation && profile.state !== "removed";
+        } catch {
+          return false;
+        }
+      },
+      observer: {
+        fact: async (authority, fact) => {
+          await serviceReference.current?.observeDevinFact(authority, fact);
+        },
+      },
+      projectRootFor: ({ authority, providerThreadId }) => {
+        const session = activeStore.findSessionByProviderThread(authority.id, providerThreadId);
+        if (session?.provider !== "devin" || session.projectId === undefined) return undefined;
+        return activeStore.requireProject(session.projectId).rootPath;
+      },
+    });
     const cloudEnvironment = installation.cloudEnvironment;
     const cloudStartup = await resolveDaemonCloudStartup({
       environment: cloudEnvironment,
@@ -4024,6 +4080,7 @@ async function runDaemonLifecycle(
       paths,
       codex,
       claude,
+      devin,
       personalCodex,
       personalClaude,
       personalCodexHome: personalHomes.codexHome,
@@ -4179,7 +4236,7 @@ async function runDaemonLifecycle(
         else {
           const runtimes: Readonly<{
             close: () => Promise<void>;
-            provider: "codex" | "claude" | "personal_codex" | "personal_claude";
+            provider: "codex" | "claude" | "devin" | "personal_codex" | "personal_claude";
           }>[] = [];
           if (codex !== undefined) {
             const runtime = codex;
@@ -4188,6 +4245,10 @@ async function runDaemonLifecycle(
           if (claude !== undefined) {
             const runtime = claude;
             runtimes.push({ close: async () => await runtime.close(), provider: "claude" });
+          }
+          if (devin !== undefined) {
+            const runtime = devin;
+            runtimes.push({ close: async () => await runtime.close(), provider: "devin" });
           }
           if (personalCodex !== undefined) {
             const runtime = personalCodex;
@@ -5184,6 +5245,100 @@ const claudeLoginCompleteResponseSchema = z.object({
   }
 });
 
+const devinAuthenticationSchema = z.object({
+  provider: z.literal("devin"),
+  signedIn: z.boolean(),
+}).strict();
+const devinStatusAuthenticationSchema = z.object({
+  provider: z.literal("devin"),
+  signedIn: z.boolean().nullable(),
+}).strict();
+const devinUsageStatusSchema = z.object({
+  allowance: z.literal("unknown"),
+  reason: z.string().min(1).max(512),
+  source: z.literal("devin_acp"),
+}).strict();
+const devinAccountStatusResponseSchema = z.object({
+  account: claudeLoginAccountSchema,
+  authentication: devinStatusAuthenticationSchema,
+  providerGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  nextCommand: z.string().optional(),
+  recovery: claudeLoginRecoverySchema.optional(),
+  usage: devinUsageStatusSchema,
+}).strict().superRefine((value, context) => {
+  if (
+    value.nextCommand !== undefined
+    && value.nextCommand !== devinAccountLoginCommand(value.account.id, false)
+  ) context.addIssue({ code: "custom", path: ["nextCommand"], message: "Devin login next command is not exact." });
+  if (value.authentication.signedIn === null && value.recovery === undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["authentication", "signedIn"],
+      message: "An unknown Devin authentication status requires exact recovery authority.",
+    });
+  }
+  if (value.recovery === undefined) return;
+  if (value.recovery.statusCommand !== `hra account show ${value.account.id} --provider devin`) {
+    context.addIssue({ code: "custom", path: ["recovery", "statusCommand"], message: "Devin recovery status command is not exact." });
+  }
+  if (value.recovery.sameKeyReplayCommand !== devinAccountLoginCommand(
+    value.account.id,
+    false,
+    value.recovery.idempotencyKey,
+  )) {
+    context.addIssue({ code: "custom", path: ["recovery", "sameKeyReplayCommand"], message: "Devin recovery replay command is not exact." });
+  }
+  if (value.recovery.abandonCommand !== devinAccountLoginAbandonCommand(
+    value.account.id,
+    value.recovery.attemptId,
+    value.recovery.idempotencyKey,
+    value.recovery.providerGeneration,
+  )) {
+    context.addIssue({ code: "custom", path: ["recovery", "abandonCommand"], message: "Devin recovery abandon command is not exact." });
+  }
+});
+const devinLoginPrepareResponseSchema = z.object({
+  account: claudeLoginAccountSchema,
+  authentication: devinAuthenticationSchema,
+  login: z.discriminatedUnion("status", [
+    z.object({ status: z.literal("signed_in") }).strict(),
+    z.object({
+      status: z.literal("launch_granted"),
+      attemptId: attemptIdSchema,
+      idempotencyKey: z.string().uuid(),
+      providerGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    }).strict(),
+  ]),
+}).strict().superRefine((value, context) => {
+  const expectedSignedIn = value.login.status === "signed_in";
+  if (value.authentication.signedIn !== expectedSignedIn) {
+    context.addIssue({
+      code: "custom",
+      path: ["authentication", "signedIn"],
+      message: "Devin authentication state does not match the login preparation status.",
+    });
+  }
+});
+const devinLoginCompleteResponseSchema = z.object({
+  account: claudeLoginAccountSchema,
+  authentication: devinAuthenticationSchema,
+  login: z.object({
+    status: z.enum(["signed_in", "signed_out"]),
+    attemptId: attemptIdSchema,
+    idempotencyKey: z.string().uuid(),
+    providerGeneration: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  }).strict(),
+}).strict().superRefine((value, context) => {
+  const expectedSignedIn = value.login.status === "signed_in";
+  if (value.authentication.signedIn !== expectedSignedIn) {
+    context.addIssue({
+      code: "custom",
+      path: ["authentication", "signedIn"],
+      message: "Devin authentication state does not match the login completion status.",
+    });
+  }
+});
+
 const renderClaudeLoginResult = (
   data: z.infer<typeof claudeLoginPrepareResponseSchema> | z.infer<typeof claudeLoginCompleteResponseSchema>,
   json: boolean,
@@ -5196,6 +5351,20 @@ const renderClaudeLoginResult = (
   output.writeStdout(data.authentication.signedIn
     ? `Claude Code is signed in for ${terminalSafe(data.account.label)}.\n`
     : `Claude Code is signed out for ${terminalSafe(data.account.label)}.\nNext: ${claudeAccountLoginCommand(data.account.id)}\n`);
+};
+
+const renderDevinLoginResult = (
+  data: z.infer<typeof devinLoginPrepareResponseSchema> | z.infer<typeof devinLoginCompleteResponseSchema>,
+  json: boolean,
+  output: Output,
+): void => {
+  if (json) {
+    output.writeStdout(`${safeJson({ command: "account.login", data, ok: true, version: 1 })}\n`);
+    return;
+  }
+  output.writeStdout(data.authentication.signedIn
+    ? `Devin is signed in for ${terminalSafe(data.account.label)}.\n`
+    : `Devin is signed out for ${terminalSafe(data.account.label)}.\nNext: ${devinAccountLoginCommand(data.account.id, false)}\n`);
 };
 
 const claudeLoginRecovery = (
@@ -5235,6 +5404,45 @@ const claudeLoginRecovery = (
     ),
   },
   message: "Claude login may have started, but Oompa could not prove its terminal result. The same-key command identifies this attempt and will never relaunch Claude. If its Oompa parent is gone, confirm the Claude child exited before using the exact acknowledged local abandon command; abandon does not stop Claude or change or delete credentials.",
+}, json, output);
+
+const devinLoginRecovery = (
+  input: Readonly<{
+    accountId?: string;
+    attemptId?: string;
+    idempotencyKey: string;
+    providerGeneration?: number;
+    replayCommand: string;
+  }>,
+  json: boolean,
+  output: Output,
+): number => renderFailure({
+  code: "RECOVERY_REQUIRED",
+  details: {
+    ...(input.accountId === undefined ? {} : {
+      accountSelector: input.accountId,
+      statusCommand: `hra account show ${input.accountId} --provider devin`,
+    }),
+    ...(input.attemptId === undefined ? {} : { attemptId: input.attemptId }),
+    idempotencyKey: input.idempotencyKey,
+    ...(input.providerGeneration === undefined ? {} : { providerGeneration: input.providerGeneration }),
+    sameKeyReplayCommand: input.replayCommand,
+    ...(
+      input.accountId === undefined
+      || input.attemptId === undefined
+      || input.providerGeneration === undefined
+        ? {}
+        : {
+            abandonCommand: devinAccountLoginAbandonCommand(
+              input.accountId,
+              input.attemptId,
+              input.idempotencyKey,
+              input.providerGeneration,
+            ),
+          }
+    ),
+  },
+  message: "Devin login may have started, but HRA could not prove its terminal result. The same-key command identifies this attempt and will never relaunch Devin. If its HRA parent is gone, confirm the Devin child exited before using the exact acknowledged local abandon command; abandon does not stop Devin or change or delete credentials.",
 }, json, output);
 
 async function executeClaudeAccountAuthentication(
@@ -5508,6 +5716,276 @@ async function executeClaudeAccountAuthentication(
       }, invocation.json, output);
     }
     renderClaudeLoginResult(completed.data, invocation.json, output);
+    return 0;
+  } finally {
+    signalCustody.close();
+  }
+}
+
+async function executeDevinAccountAuthentication(
+  invocation: Extract<CliInvocation, { kind: "account.devin-login" }>,
+  output: Output,
+  input: CliMainInput,
+): Promise<number> {
+  const isTerminalDescriptor = input.isTerminalDescriptor ?? isatty;
+  if (
+    invocation.json
+    || input.interactive !== true
+    || !isTerminalDescriptor(0)
+    || !isTerminalDescriptor(1)
+    || !isTerminalDescriptor(2)
+  ) {
+    return renderFailure({
+      code: "INTERACTION_REQUIRED",
+      details: { nextCommand: invocation.replayCommand },
+      message: "Devin owns this login interaction. Run it in a foreground terminal without --json so its browser or manual-token handoff stays between you and Devin.",
+    }, invocation.json, output);
+  }
+
+  const callDaemon = commandCaller(input);
+  let statusResponse: CommandResponse;
+  try {
+    statusResponse = await callDaemon({
+      kind: "account.show",
+      account: invocation.command.account,
+      provider: "devin",
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof LocalDaemonIndeterminateError)) throw error;
+    return renderFailure({
+      code: "UNAVAILABLE",
+      message: "HRA could not preflight the exact Devin account. No login launch was granted.",
+    }, invocation.json, output);
+  }
+  if (!statusResponse.ok) return renderFailure(statusResponse.error, invocation.json, output);
+  const status = devinAccountStatusResponseSchema.safeParse(statusResponse.data);
+  if (!status.success) {
+    return renderFailure({
+      code: "INTERNAL",
+      message: "The daemon returned an invalid Devin account preflight. No login launch was granted.",
+    }, invocation.json, output);
+  }
+  if (status.data.recovery !== undefined) {
+    return renderFailure({
+      code: "RECOVERY_REQUIRED",
+      details: status.data.recovery,
+      message: status.data.recovery.diagnostic,
+    }, invocation.json, output);
+  }
+
+  const controller = new AbortController();
+  const installation = input.installation ?? createProductionInstallation();
+  await initializeStatePaths(installation.paths);
+  const owned = await initializeProfilePaths(installation.paths, status.data.account.id);
+  const directories: DevinDirectories = {
+    home: owned.devinHome,
+    configHome: owned.devinConfigDir,
+    dataHome: owned.devinDataDir,
+    cacheHome: owned.devinCacheDir,
+    stateHome: owned.devinStateDir,
+  };
+  const resolveDevinRuntime = input.resolveDevinRuntime ?? resolvePinnedDevinRuntime;
+  const runtime = await resolveDevinRuntime({
+    directories,
+    signal: controller.signal,
+  });
+  const preflight: { directories: DevinDirectories; runtime: PinnedDevinRuntime } = {
+    directories,
+    runtime,
+  };
+  const signalCustody = createDevinLoginSignalCustody({
+    signal: controller.signal,
+    ...(input.devinLoginSignalSource === undefined
+      ? {}
+      : { signalSource: input.devinLoginSignalSource }),
+  });
+  try {
+    let preparedResponse: CommandResponse;
+    try {
+      preparedResponse = await callDaemon(invocation.command);
+    } catch (error: unknown) {
+      if (!(error instanceof LocalDaemonIndeterminateError)) throw error;
+      return devinLoginRecovery({
+        idempotencyKey: invocation.command.idempotencyKey,
+        replayCommand: invocation.replayCommand,
+      }, invocation.json, output);
+    }
+    if (!preparedResponse.ok) return renderFailure(preparedResponse.error, invocation.json, output);
+    const prepared = devinLoginPrepareResponseSchema.safeParse(preparedResponse.data);
+    if (
+      !prepared.success
+      || prepared.data.account.id !== status.data.account.id
+      || (
+        prepared.data.login.status === "launch_granted"
+        && prepared.data.login.idempotencyKey !== invocation.command.idempotencyKey
+      )
+    ) {
+      return devinLoginRecovery({
+        idempotencyKey: invocation.command.idempotencyKey,
+        replayCommand: invocation.replayCommand,
+      }, invocation.json, output);
+    }
+    if (prepared.data.login.status === "signed_in") {
+      renderDevinLoginResult(prepared.data, invocation.json, output);
+      return signalCustody.interruptedBy === "SIGINT"
+        ? 130
+        : signalCustody.interruptedBy === "SIGTERM"
+          ? 143
+          : 0;
+    }
+    const grant = prepared.data.login;
+    const exactReplayCommand = devinAccountLoginCommand(
+      prepared.data.account.id,
+      invocation.command.manualTokenFlow,
+      grant.idempotencyKey,
+    );
+    let foreground: DevinForegroundLoginResult | undefined = signalCustody.interruptedBy === null
+      ? undefined
+      : {
+          state: "not_started",
+          reason: "interrupted_before_spawn",
+          interruptedBy: signalCustody.interruptedBy,
+        };
+    try {
+      if (foreground === undefined) {
+        await ensurePrivateDirectory(preflight.directories.home);
+        await ensurePrivateDirectory(preflight.directories.configHome);
+        await ensurePrivateDirectory(preflight.directories.dataHome);
+        await ensurePrivateDirectory(preflight.directories.cacheHome);
+        await ensurePrivateDirectory(preflight.directories.stateHome);
+      }
+    } catch {
+      foreground = signalCustody.interruptedBy === null
+        ? { state: "not_started", reason: "preflight_stale" }
+        : {
+            state: "not_started",
+            reason: "interrupted_before_spawn",
+            interruptedBy: signalCustody.interruptedBy,
+          };
+    }
+    if (foreground === undefined) {
+      try {
+        const revalidated = await resolveDevinRuntime({
+          directories: preflight.directories,
+          executablePath: preflight.runtime.executablePath,
+          signal: controller.signal,
+        });
+        if (
+          revalidated.executablePath !== preflight.runtime.executablePath
+          || JSON.stringify(revalidated.argv) !== JSON.stringify(preflight.runtime.argv)
+        ) throw new Error("Devin runtime identity changed after launch grant.");
+        preflight.runtime = revalidated;
+      } catch {
+        foreground = signalCustody.interruptedBy === null
+          ? { state: "not_started", reason: "preflight_stale" }
+          : {
+              state: "not_started",
+              reason: "interrupted_before_spawn",
+              interruptedBy: signalCustody.interruptedBy,
+            };
+      }
+    }
+    if (foreground === undefined && signalCustody.interruptedBy !== null) {
+      foreground = {
+        state: "not_started",
+        reason: "interrupted_before_spawn",
+        interruptedBy: signalCustody.interruptedBy,
+      };
+    }
+    if (foreground === undefined) {
+      try {
+        foreground = await (input.runDevinForegroundLogin ?? runDevinForegroundLogin)({
+          directories: preflight.directories,
+          ...(invocation.command.manualTokenFlow ? { manualTokenFlow: true } : {}),
+          runtime: preflight.runtime,
+          signal: controller.signal,
+          signalCustody,
+          stdio: { stderr: 2, stdin: 0, stdout: 1 },
+        });
+      } catch {
+        return devinLoginRecovery({
+          accountId: prepared.data.account.id,
+          attemptId: grant.attemptId,
+          idempotencyKey: grant.idempotencyKey,
+          providerGeneration: grant.providerGeneration,
+          replayCommand: exactReplayCommand,
+        }, invocation.json, output);
+      }
+    }
+    const complete = localCommandSchema.parse({
+      kind: "account.devin-login.complete",
+      account: prepared.data.account.id,
+      attemptId: grant.attemptId,
+      idempotencyKey: grant.idempotencyKey,
+      providerGeneration: grant.providerGeneration,
+      outcome: foreground,
+    });
+    let completedResponse: CommandResponse;
+    try {
+      completedResponse = await callDaemon(complete);
+    } catch (error: unknown) {
+      if (!(error instanceof LocalDaemonIndeterminateError)) throw error;
+      return devinLoginRecovery({
+        accountId: prepared.data.account.id,
+        attemptId: grant.attemptId,
+        idempotencyKey: grant.idempotencyKey,
+        providerGeneration: grant.providerGeneration,
+        replayCommand: exactReplayCommand,
+      }, invocation.json, output);
+    }
+    if (!completedResponse.ok) {
+      return devinLoginRecovery({
+        accountId: prepared.data.account.id,
+        attemptId: grant.attemptId,
+        idempotencyKey: grant.idempotencyKey,
+        providerGeneration: grant.providerGeneration,
+        replayCommand: exactReplayCommand,
+      }, invocation.json, output);
+    }
+    const completed = devinLoginCompleteResponseSchema.safeParse(completedResponse.data);
+    if (
+      !completed.success
+      || completed.data.account.id !== prepared.data.account.id
+      || completed.data.login.attemptId !== grant.attemptId
+      || completed.data.login.idempotencyKey !== grant.idempotencyKey
+      || completed.data.login.providerGeneration !== grant.providerGeneration
+    ) {
+      return devinLoginRecovery({
+        accountId: prepared.data.account.id,
+        attemptId: grant.attemptId,
+        idempotencyKey: grant.idempotencyKey,
+        providerGeneration: grant.providerGeneration,
+        replayCommand: exactReplayCommand,
+      }, invocation.json, output);
+    }
+    const interruptedBy = (foreground.state === "joined"
+      ? foreground.interruptedBy
+      : foreground.reason === "interrupted_before_spawn"
+        ? foreground.interruptedBy
+        : null) ?? signalCustody.interruptedBy;
+    if (interruptedBy !== null) {
+      output.writeStderr(completed.data.authentication.signedIn
+        ? "hra: Devin login was interrupted after authentication completed.\n"
+        : "hra: Devin login was canceled; the isolated profile remains signed out.\n");
+      return interruptedBy === "SIGINT" ? 130 : 143;
+    }
+    if (!completed.data.authentication.signedIn) {
+      const nextCommand = devinAccountLoginCommand(
+        completed.data.account.id,
+        invocation.command.manualTokenFlow,
+      );
+      return renderFailure({
+        code: "INTERACTION_REQUIRED",
+        details: {
+          accountSelector: completed.data.account.id,
+          accountState: "signed_out",
+          nextCommand,
+          provider: "devin",
+        },
+        message: "Devin finished without an authenticated session in this account's isolated profile.",
+      }, invocation.json, output);
+    }
+    renderDevinLoginResult(completed.data, invocation.json, output);
     return 0;
   } finally {
     signalCustody.close();
@@ -6449,6 +6927,9 @@ async function executeInvocation(
   }
   if (invocation.kind === "account.claude-login") {
     return await executeClaudeAccountAuthentication(invocation, output, { ...input, installation });
+  }
+  if (invocation.kind === "account.devin-login") {
+    return await executeDevinAccountAuthentication(invocation, output, { ...input, installation });
   }
   if (invocation.kind === "auth.login-protected") {
     return await executeProtectedAuthLogin(invocation, output, input);

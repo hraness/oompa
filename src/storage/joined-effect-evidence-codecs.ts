@@ -19,7 +19,6 @@ export const joinedMutationEffectEvidenceSchema = z.discriminatedUnion("kind", [
   switched.extend({ runtimeProfile: reviewedRuntimeProfileV1Schema }),
   login,
   claudeLogin,
-  // Read shape only. Retired provider effect admission stays independently shut.
   devinLogin,
   logout,
   loginCancel,

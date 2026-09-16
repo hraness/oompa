@@ -1,6 +1,6 @@
 # Contents
 
-- `src/` contains the Bun CLI, daemon, local authority, Codex and Claude Code adapters, and cloud client.
+- `src/` contains the Bun CLI, daemon, local authority, Codex, Claude Code, and Devin adapters, and cloud client.
 - `convex/` contains the optional encrypted sync and verified-email device authority.
 - `site/` contains the public product website and task-oriented documentation. Its content is not an input to the npm package README or description.
 - `scripts/` contains deterministic checks, builds, and release helpers.
