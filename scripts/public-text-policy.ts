@@ -36,6 +36,7 @@ const allowedPublicScopedPackages = new Set([
   "@hraness/oompa",
   "@hraness/posthog",
   "@hraness/site-footer",
+  "@hraness/support-foundation",
   "@hraness/slopcamera",
   "@hraness/ui",
   "@stylexjs/babel-plugin",
@@ -151,6 +152,8 @@ const marketingDeclaration = `${marketingDirectory}/check.d.mts`;
 const materialDirectory = "site/vendor/lantern-material";
 const materialDeclaration = `${materialDirectory}/check.d.mts`;
 const marketingFont = "fonts/instrument-serif/instrument-serif-latin-400.woff2";
+const supportRuntimePath = /^(?:package\/)?src\/support-runtime\.js$/u;
+const supportRuntimeSha256 = "6510a8046a611d4e47d1e220869bce4ae308ac59587944d3fdf10883eb3fd63e";
 
 /** One additional declaration path; all snapshot text still receives the public scan. */
 async function assertMaterialPublicSource(root: string, label: string): Promise<void> {
@@ -231,6 +234,12 @@ async function scanPublicTree(root: string, skipCheckoutTmp: boolean): Promise<v
         await assertDesktopIconPng(child, label);
       } else if (entry.isFile() && label === `${marketingDirectory}/${marketingFont}`) {
         await assertMarketingPublicSource(root, label);
+      } else if (entry.isFile() && supportRuntimePath.test(label)) {
+        const bytes = await readFile(child);
+        if (createHash("sha256").update(bytes).digest("hex") !== supportRuntimeSha256) {
+          throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
+        }
+        assertPublicText(bytes.toString("utf8"), label);
       } else if (entry.isFile() && (textFile.test(child) || label === releasedStateSql || label === marketingDeclaration || label === materialDeclaration)) {
         if (label === marketingDeclaration) await assertMarketingPublicSource(root, label);
         if (label === materialDeclaration) await assertMaterialPublicSource(root, label);

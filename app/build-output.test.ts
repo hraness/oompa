@@ -313,7 +313,7 @@ describe("built shell", () => {
     const marker = artifacts.find((artifact) =>
       artifact.name === ".well-known/oompa-app.json");
 
-    expect(packageManifest.version).toBe("0.8.2");
+    expect(packageManifest.version).toBe("0.8.3");
     expect(buildSourceCommit).toMatch(/^[0-9a-f]{40}$/u);
     expect(marker?.text).toBe(`${JSON.stringify(expected, null, 2)}\n`);
     expect(JSON.parse(marker?.text ?? "null")).toEqual(expected);

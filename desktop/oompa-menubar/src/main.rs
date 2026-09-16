@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use daemon::{CallError, Daemon};
+use desktop_foundation::browser::{BrowserOpener, BrowserStatus};
 use desktop_foundation::outputs::OutputsSection;
 use desktop_foundation::{
     AccessibilityMetadata, DispatchOutcome, Host, MenuItem, MenuModel, MenuNode, Options,
@@ -23,10 +24,13 @@ use desktop_foundation::{
 };
 
 const SESSION_LIMIT: u32 = 8;
+const UPDATES_URL: &str = "https://account.hraness.com/support?product=hra&source=desktop#updates";
+const SUPPORT_URL: &str = "https://account.hraness.com/support?product=hra&source=desktop#support";
 
 struct OompaHost {
     daemon: Daemon,
     outputs: OutputsSection,
+    browser: BrowserOpener,
 }
 
 impl OompaHost {
@@ -93,6 +97,12 @@ impl Host for OompaHost {
         nodes.push(MenuNode::Separator);
         nodes.extend(self.outputs.nodes());
         nodes.push(MenuNode::Separator);
+        nodes.push(MenuNode::item("product.updates", "Get Oompa updates (free)…"));
+        nodes.push(MenuNode::item("product.support", "Support Oompa development (optional paid)…"));
+        if matches!(self.browser.status(), BrowserStatus::Failed(_)) {
+            nodes.push(MenuNode::disabled("Browser unavailable — use account.hraness.com"));
+        }
+        nodes.push(MenuNode::Separator);
         nodes.push(MenuNode::interactive(
             MenuItem::action(desktop_foundation::QUIT_ACTION_ID, "Quit Oompa")
                 .with_shortcut("CmdOrCtrl+Q")
@@ -111,6 +121,14 @@ impl Host for OompaHost {
     }
 
     fn dispatch_result(&self, id: &str) -> DispatchOutcome {
+        let address = match id {
+            "product.updates" => Some(UPDATES_URL),
+            "product.support" => Some(SUPPORT_URL),
+            _ => None,
+        };
+        if let Some(address) = address {
+            return if self.browser.open(address).is_ok() { DispatchOutcome::Accepted } else { DispatchOutcome::Rejected };
+        }
         if self.outputs.dispatch(id) {
             return DispatchOutcome::Accepted;
         }
@@ -258,7 +276,7 @@ fn main() {
             .unwrap()
             .join("outputs"),
     );
-    let host = Arc::new(OompaHost { daemon, outputs });
+    let host = Arc::new(OompaHost { daemon, outputs, browser: BrowserOpener::new() });
     let options = Options {
         refresh: Duration::from_secs(5),
         companion_window: false,
@@ -266,5 +284,23 @@ fn main() {
     if let Err(error) = desktop_foundation::run(tauri::generate_context!(), host, options, |b| b) {
         eprintln!("oompa-menubar: {error}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod invitation_tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_product_still_offers_explicit_browser_actions_without_launching() {
+        let host = OompaHost { daemon: Daemon { socket: "/dev/null/absent.sock".into(), capability: "/dev/null/absent.capability".into() }, outputs: OutputsSection::new("/dev/null/absent-outputs"), browser: BrowserOpener::new() };
+        let model = host.snapshot();
+        for expected in ["product.updates", "product.support"] {
+            assert!(model.nodes.iter().any(|node| matches!(node,
+                MenuNode::Item { id: Some(id), enabled: true, .. } if id == expected)));
+        }
+        assert_eq!(host.browser.status(), BrowserStatus::Idle);
+        assert!(matches!(host.dispatch_result("unknown.action"), DispatchOutcome::Rejected));
+        assert_eq!(host.browser.status(), BrowserStatus::Idle);
     }
 }

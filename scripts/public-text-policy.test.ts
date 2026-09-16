@@ -110,6 +110,10 @@ describe("public text policy", () => {
       .not.toThrow();
     expect(() => assertPublicText("@hraness/site-footer", "public dependency"))
       .not.toThrow();
+    expect(() => assertPublicText("@hraness/support-foundation", "public dependency"))
+      .not.toThrow();
+    expect(() => assertPublicText(["@hraness/support-foundation", "unreviewed"].join("-"), "unreviewed dependency"))
+      .toThrow(PublicTextPolicyError);
     expect(() => assertPublicText("@hraness/ui", "public dependency"))
       .not.toThrow();
     const privatePackage = `@${["hraness", "private-package"].join("/")}`;
@@ -414,6 +418,24 @@ describe("public text policy", () => {
       }
     } finally {
       await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  test("admits only the exact reviewed support bundle at its source or archive path", async () => {
+    const reviewed = await readFile(join(import.meta.dir, "../src/support-runtime.js"));
+    for (const prefix of ["", "package/"]) {
+      const root = await realpath(await mkdtemp(join(tmpdir(), "oompa-public-support-")));
+      const path = join(root, prefix, "src/support-runtime.js");
+      try {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, reviewed);
+        await expect(assertPublicTree(root)).resolves.toBeUndefined();
+        await writeFile(path, Buffer.concat([reviewed, Buffer.from("\n")]));
+        await expect(assertPublicTree(root)).rejects.toMatchObject({ code: "UNREVIEWED_FILE_TYPE" });
+        await unlink(path);
+        await writeFile(join(dirname(path), "other.js"), reviewed);
+        await expect(assertPublicTree(root)).rejects.toMatchObject({ code: "UNREVIEWED_FILE_TYPE" });
+      } finally { await rm(root, { recursive: true, force: true }); }
     }
   });
 

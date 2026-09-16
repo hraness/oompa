@@ -61,7 +61,7 @@ const packageSchema = z.object({
     url: z.literal("git+https://github.com/hraness/oompa.git"),
   }).strict(),
   scripts: z.record(z.string(), z.string()),
-  version: z.literal("0.8.2"),
+  version: z.literal("0.8.3"),
 }).passthrough();
 
 type ProcessResult = Readonly<{
@@ -1166,6 +1166,8 @@ try {
   );
   const isolatedEnvironment: NodeJS.ProcessEnv = {
     ...process.env,
+    HRANESS_SUPPORT_AUDIENCE: "off",
+    HRANESS_SUPPORT_EMAIL: "off",
     BUN_INSTALL: globalInstallRoot,
     BUN_INSTALL_BIN: join(globalInstallRoot, "bin"),
     BUN_INSTALL_CACHE_DIR: dependencyCacheRoot,

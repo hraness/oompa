@@ -6,6 +6,7 @@
       "name": "hra",
       "dependencies": {
         "@hraness/oh": "0.4.1",
+        "@hraness/support-foundation": "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed",
         "@openai/codex": "0.153.2",
         "convex": "1.45.0",
         "effect": "3.22.1",
@@ -19,7 +20,7 @@
         "@hraness/design-kit": "github:hraness/design-kit#v0.8.0",
         "@hraness/direct": "github:hraness/direct#v0.7.0",
         "@hraness/posthog": "github:hraness/posthog#v0.1.2",
-        "@hraness/site-footer": "github:hraness/site-footer#v0.11.2",
+        "@hraness/site-footer": "github:hraness/site-footer#v0.12.1",
         "@hraness/ui": "github:hraness/ui#v0.5.13",
         "@letta-ai/trajectory": "0.3.0",
         "@stylexjs/babel-plugin": "0.19.0",
@@ -179,7 +180,9 @@
 
     "@hraness/posthog": ["@hraness/posthog@github:hraness/posthog#792e958", { "dependencies": { "@posthog/nextjs-config": "1.9.68", "posthog-js": "1.412.1", "posthog-node": "5.47.11" }, "peerDependencies": { "next": ">=16.2.0 <17.0.0", "react": ">=19.2.0 <20.0.0" }, "optionalPeers": ["next", "react"] }, "hraness-posthog-792e958", "sha512-0Do23IlpZjnbvHa2RLYqGJ9BskXg/d4Rt8+H6FWMxLfkQj5+O9pzJsF6yELfytDycbLEJg8YbieXl7I2WDoo0Q=="],
 
-    "@hraness/site-footer": ["@hraness/site-footer@github:hraness/site-footer#f2ac787", { "peerDependencies": { "react": ">=18 <20" }, "optionalPeers": ["react"] }, "hraness-site-footer-f2ac787", "sha512-u+gy2E6C4rlYJBnuPchH5F6iimPoeVktr+Ca/r78U6KTWzblumNo7wtbFBeXfYbGZoadQi0HPcCe8uOAX8rhtw=="],
+    "@hraness/site-footer": ["@hraness/site-footer@github:hraness/site-footer#5812fb6", { "peerDependencies": { "react": ">=18 <20" }, "optionalPeers": ["react"] }, "hraness-site-footer-5812fb6", "sha512-B4vD5aeUpIAnHbuNaDrQayrAQemLtEqvTyMQwZ/9P0XcJc9IKxxuyXwp20t4GXMg/Ow2Pdpnj7NroRof/Ot3xQ=="],
+
+    "@hraness/support-foundation": ["@hraness/support-foundation@github:hraness/support-foundation#2d034b3", {}, "hraness-support-foundation-2d034b3", "sha512-ayi8JeDAkaKkJDtQwe705DfNAas0na5fmf70BF+dHhADYdryBNhohahGDtItNZ+DD8rPxmmy7xRGfteixSC+1w=="],
 
     "@hraness/ui": ["@hraness/ui@github:hraness/ui#89946f6", { "dependencies": { "@hugeicons/core-free-icons": "^4.2.2", "@hugeicons/react": "^1.1.9", "@stylexjs/stylex": "0.19.0", "clsx": "^2.1.1", "parse5": "8.0.1", "react-aria": "3.50.0", "react-aria-components": "1.19.0" }, "peerDependencies": { "@babel/core": "7.29.7", "@stylexjs/babel-plugin": "0.19.0", "@types/babel__core": "7.20.5", "@types/bun": "1.3.14", "@types/node": "^20.19.0 || >=22.12.0", "lightningcss": "1.33.0", "next": "16.2.12 || 16.3.3", "react": ">=18 <20", "react-dom": ">=18 <20", "typescript": "6.0.3", "vite": "7.3.6 || 8.2.1" }, "optionalPeers": ["@babel/core", "@stylexjs/babel-plugin", "@types/babel__core", "@types/bun", "@types/node", "lightningcss", "next", "typescript", "vite"] }, "hraness-ui-89946f6", "sha512-U3mbWWSJbULiEZTY8N0cS+Nu7BO9vYI8UbeTkI+UnmSUElk/RJv9lZEEB8/R5873SLVpAXm2oC9puj51mvsBOw=="],
 
