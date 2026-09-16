@@ -236,7 +236,7 @@ describe("public content contract", () => {
     expect(publicContent.badges[4]?.image).toBe("https://img.shields.io/badge/Bun-1.3.14-14151a");
     expect(publicContent.badges[5]?.image).toBe("https://img.shields.io/badge/runtime-Codex%200.153.2-0b5fa5");
     expect(publicContent.badges[6]?.image).toBe("https://img.shields.io/badge/runtime-Claude%20Code%202.1.260-6f42c1");
-    expect(publicContent.badges[7]?.image).toBe("https://img.shields.io/badge/runtime-Devin%20CLI%203000.6.14-5936b4");
+    expect(publicContent.badges[7]?.image).toBe("https://img.shields.io/badge/runtime-Devin%20CLI%203000.10.27-5936b4");
     expect(renderSiteHtml()).not.toContain("img.shields.io");
   });
 
@@ -316,10 +316,10 @@ describe("public content contract", () => {
       "causal cycles, and a ninth hop",
       "120 new peer actions per actor and per project in a rolling hour",
       "25,000-action project cap fails closed",
-      "oompa session start <account> [--project <project>] [--provider <codex|claude>] [--preset <low|high|ultra|fable-max>] [--fast]",
+      "oompa session start <account> [--project <project>] [--provider <codex|claude|devin>] [--preset <low|high|ultra|fable-max|astra>] [--fast] [--idempotency-key <uuid> [--preset-contract <1|2>]]",
       "oompa session peer-policy get <session> [--json]",
       "oompa session peer-policy set <session> <off|inspect|coordinate> --revision <n> [--json]",
-      "oompa session preset <session> <low|high|ultra|fable-max>",
+      "oompa session preset <session> <low|high|ultra|fable-max|astra>",
       "oompa session switch <session> --provider <codex|claude> [--preset <low|high|ultra|fable-max>] [--account <account>]",
       "oompa session export <session> [--format <trajectory|json>] [--out <path>]",
     ];
@@ -648,8 +648,8 @@ describe("public content contract", () => {
   });
 
   test("publishes the exact Devin runtime, login, and usage boundaries", () => {
-    const markdown = renderLlmsText();
-    const html = htmlVisibleText(renderSiteHtml());
+    const markdown = renderDocumentationMarkdown("/docs/start/", "/docs/sessions/", "/docs/status/");
+    const html = htmlVisibleText(renderDocumentationHtml("/docs/start/", "/docs/sessions/", "/docs/status/"));
     const claims = [
       "oompa account login personal --provider devin",
       "--manual-token-flow",
@@ -663,7 +663,8 @@ describe("public content contract", () => {
       "never sends concurrent prompts to one Devin session",
     ];
     for (const claim of claims) {
-      expect(markdown + html).toContain(claim);
+      expect(markdown).toContain(claim);
+      expect(html).toContain(claim);
     }
   });
 
@@ -913,7 +914,7 @@ describe("public content contract", () => {
       expect(surface).toContain("support macOS and Linux");
       expect(surface).toContain("Codex effects run on both platforms");
       expect(surface).toContain("Devin effects also run on both platforms");
-      expect(surface).toContain("Devin CLI reports exactly 3000.6.14");
+      expect(surface).toContain("Devin CLI reports exactly 3000.10.27");
       expect(surface).toContain("Claude Code effects run on Linux only");
       expect(surface).toContain("refuses new Claude Code effects on macOS pending authenticated isolated-Keychain and detached-read acceptance");
       expect(surface).toContain(OOMPA_INSTALL_PREFLIGHT_SOURCE_URL);
