@@ -16,4 +16,4 @@
 - Never accept plaintext session content, provider credentials, raw protocol data, raw reasoning, approval secrets, arbitrary tool output, or environment values.
 - Keep functions strict and bounded. Reject unknown fields, stale revisions, stale leases, and replayed idempotency keys.
 - Close an effect that may already have begun as `ambiguous` under a strictly later authority. Never let a recovery path publish `applied` for an effect it did not observe.
-- Add a table only with an explicit entry in every exhaustive hosted map: lifecycle policy, quota genesis, account deletion, device revocation, and the maintenance categories that sweep it.
+- Add a table only with an explicit entry in every exhaustive hosted map: lifecycle policy, quota genesis, account deletion, device revocation, the maintenance categories that sweep it, and the `costs.json` cost-discipline registry checked by `check:cost-surfaces`.
