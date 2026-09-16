@@ -610,18 +610,20 @@ describe("release workflow", () => {
     expect(changelog).not.toContain("## v0.6.3 candidate (unreleased)");
     expect(changelog).toContain("docs/beta-release.md#immutable-v063-successful-release-record");
     expect(readme).toContain(installCommand);
-    expect(readme).toContain("Local CLI v0.8.3 passed immutable GitHub and exact-byte npm release admission.");
-    expect(readme).toContain("Install and verify the admitted v0.8.3 CLI artifact. This does not start the daemon:");
+    expect(readme).toContain("Local CLI v0.8.4 is a release candidate, not an admitted artifact");
+    expect(readme).toContain("Only after immutable GitHub release admission, install and verify the v0.8.4 candidate CLI artifact. This does not start the daemon:");
+    expect(readme).toContain("The v0.8.4 candidate is not yet admitted");
     expect(readme).not.toContain("The v0.8.3 candidate is not yet admitted");
     expect(readme).toContain("https://github.com/hraness/oompa/actions/runs/35066335703");
     expect(releaseNotes).toContain("## Admitted v0.7.0 predecessor");
     expect(releaseNotes).toContain("## Admitted v0.7.1 predecessor");
     for (const surface of [readme, releaseNotes, availability, gettingStarted]) {
-      expect(surface).not.toContain("This release candidate is not yet admitted");
+      expect(surface).toContain("This release candidate is not yet admitted");
       expect(surface).toContain(surface === releaseNotes ? "#admitted-v083-artifacts" : "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts");
+      expect(surface).toContain("v0.8.4");
       expect(surface).toContain("v0.8.3");
       expect(surface).toContain("npm mirror");
-      const noticePosition = surface.indexOf("passed release admission");
+      const noticePosition = surface.indexOf("This release candidate is not yet admitted");
       const installPosition = surface.indexOf(installCommand);
       expect(noticePosition).toBeGreaterThanOrEqual(0);
       expect(installPosition).toBeGreaterThanOrEqual(0);
@@ -657,7 +659,7 @@ describe("release workflow", () => {
     expect(availability).toContain("their availability does not authorize starting the current daemon or sending new hosted commands");
     for (const document of [readme, availability]) {
       expect(document).toContain("Current daemon and hosted command-writer rollout remains blocked on capacity.");
-      expect(document).toContain("Do not initialize, start, or autostart the v0.8.3 daemon or any older daemon");
+      expect(document).toContain("Do not initialize, start, or autostart the v0.8.4 daemon or any older daemon");
       expect(document).toContain("protected two-pass zero-debt capacity evidence and its exact .activated readback receipt");
       expect(document).toContain("Artifact availability and the live sync service do not clear this gate.");
       expect(document).toContain("daemon and target marker-2 proofs before globally enabling hosted writers");
@@ -684,11 +686,13 @@ describe("release workflow", () => {
     expect(releaseNotes).not.toContain("Cloud enrollment is invitation-only");
     expect(releaseNotes).not.toContain("artifact-identity SPDX");
     expect(releaseNotes).not.toContain("runtime SPDX inventory");
-    expect(releaseNotes).toContain("# Oompa v0.8.3 local CLI release\n");
+    expect(releaseNotes).toContain("# Oompa v0.8.4 local CLI candidate\n");
     expect(thirdPartyNotices).toContain("exact tarball plus `SHA256SUMS`");
     expect(thirdPartyNotices).toContain("The admitted `v0.7.1` predecessor records its own build graph");
-    expect(thirdPartyNotices).not.toContain("This candidate is not yet admitted");
-    expect(thirdPartyNotices).toContain("The admitted `v0.8.3` release records its build graph");
+    expect(thirdPartyNotices).toContain("This candidate is not yet admitted");
+    expect(thirdPartyNotices).toContain("The `v0.8.4` candidate records its build graph");
+    expect(thirdPartyNotices).toContain("The admitted `v0.8.3` release records its own build graph");
+    expect(thirdPartyNotices).not.toContain("The admitted `v0.8.4` release records its build graph");
     expect(thirdPartyNotices).toContain("bound the immutable source tag");
     expect(thirdPartyNotices).toContain("`@hraness/site-footer` v0.9.0");
     expect(thirdPartyNotices).toContain("`@hraness/design-kit` v0.6.2");
@@ -702,6 +706,8 @@ describe("release workflow", () => {
     expect(changelog).not.toContain("## v0.8.3 candidate (unreleased)\n");
     expect(changelog).toContain("## v0.8.0 candidate (unreleased)\n");
     expect(changelog).toContain("## v0.8.3\n");
+    expect(changelog).toContain("## v0.8.4 candidate (unreleased)\n");
+    expect(changelog).not.toContain("## v0.8.4\n");
     expect(changelog).toContain("## v0.7.1\n");
     expect(changelog).toContain("Forward repair for the incomplete `v0.6.0` admission");
     expect(security).toContain("| `v0.8.3` | Fully admitted beta. Supported and receives security fixes. Daemon and hosted command-writer rollout remains capacity-gated. |");
@@ -711,6 +717,7 @@ describe("release workflow", () => {
     expect(security).toContain("Only the latest fully admitted beta receives security fixes");
     expect(security).toContain("| `v0.7.1` | Superseded by `v0.8.3`. Unsupported.");
     expect(security).not.toContain("| `v0.8.3` candidate |");
+    expect(security).toContain("| `v0.8.4` candidate | Not admitted or supported as a public release.");
     expect(security).toContain("| `v0.6.0` | Immutable partial publication. The workflow did not complete final admission; unsupported. |");
     expect(security).toContain("| `v0.5.0` | Superseded by `v0.6.1`. Unsupported. Do not bypass the update runbook to migrate. |");
     expect(releaseNotes).toContain("Current daemon startup and command-writer rollout remain blocked by `authority_reduction_hard_quota`");
@@ -972,7 +979,8 @@ describe("release workflow", () => {
     expect(domainRecord).toContain("unresolved_prior_intent");
     expect(domainRecord).toContain("reasserts only the plan's exact source");
     expect(domainRecord).toContain("unresolved_current_intent");
-    expect(releaseRecord.split("\n")[2]).toContain("Status: `v0.8.3` passed immutable GitHub and exact-byte npm release admission");
+    expect(releaseRecord.split("\n")[2]).toContain("Status: `v0.8.4` is an unreleased upgrade-migration repair candidate");
+    expect(releaseRecord.split("\n")[2]).toContain("`v0.8.3` passed immutable GitHub and exact-byte npm release admission");
     expect(releaseRecord.split("\n")[2]).toContain("`v0.8.1` canonical GitHub predecessor");
     expect(releaseRecord.split("\n")[2]).toContain("its unadmitted npm mirror retain their historical records");
     expect(releaseRecord).toContain("Artifact admission does not clear the blocked hosted command-writer rollout or authorize daemon upgrades");

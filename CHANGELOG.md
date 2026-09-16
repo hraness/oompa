@@ -1,8 +1,9 @@
 # Changelog
 
-## Upgrade migration repair (unreleased)
+## v0.8.4 candidate (unreleased)
 
 - Migrating a state root from a pre-authority release no longer fails with `CODEX_USAGE_UPLOAD_AUTHORITY_INVALID` when retention pruned a Codex usage snapshot before its cloud upload anchor. The schema-41 step retires such an anchor through its prune trigger and keeps every anchor whose snapshot survived. `oompa daemon start` now names the refused invariant in its migration failure message instead of a generic line.
+- This candidate needs its own exact immutable artifact admission. The admitted v0.8.3 GitHub artifact and exact-byte npm mirror remain unchanged.
 
 ## v0.8.3
 

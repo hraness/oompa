@@ -89,7 +89,7 @@ describe("social card", () => {
     // palette change. Pin this literal release's geometry independently of
     // its colors, then compare the actual row against the same coverage.
     const mask = new Canvas(1200, 630, parseHexColor("#000000"));
-    drawText(mask, socialCardFonts().book, "CLI release v0.8.3 · oompa.app", 88, 520, 30, parseHexColor("#ffffff"));
+    drawText(mask, socialCardFonts().book, "CLI candidate v0.8.4 · oompa.app", 88, 520, 30, parseHexColor("#ffffff"));
     const coverage = new Uint8Array((940 - 88) * (525 - 495));
     const background = parseHexColor(paletteColors.catppuccin.dark.background);
     const foreground = parseHexColor(paletteColors.catppuccin.dark.muted);
@@ -109,7 +109,7 @@ describe("social card", () => {
       }
     }
     expect(createHash("sha256").update(coverage).digest("hex"))
-      .toBe("e3b727b5c3e59d424a341dadf02981d8c9a7a6c22073d807ec7e19eda21a661e");
+      .toBe("1b720ca9c6eaa57b7e98e3cffad5eb2c7df0906d0b5710d7efa2b68482d63c0a");
     expect(mismatchedChannels).toBe(0);
     const luminance = (color: readonly [number, number, number]): number => color.reduce((sum, channel, index) => {
       const value = channel / 255;
@@ -123,7 +123,7 @@ describe("social card", () => {
 
   test("keeps every card line inside its row and states the exact positioning text", () => {
     const lines = socialCardLines();
-    expect(lines.tagline).toBe("CLI release v0.8.3 · oompa.app");
+    expect(lines.tagline).toBe("CLI candidate v0.8.4 · oompa.app");
     expect(lines.title).toBe("Oompa");
     expect(lines.comment).toBe("# Daemon rollout blocked on capacity");
     expect(lines.commands).toEqual([

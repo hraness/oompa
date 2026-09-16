@@ -23,15 +23,15 @@ describe("installer pins", () => {
   test("release consistency requires the tagged runtime bytes and matching URLs", async () => {
     const report = await readInstallPins(repositoryRoot);
     const consistent = { ...report, runtime: { publicCommand: report.runtime.actual, actual: report.runtime.actual } };
-    const drift = releasePinDrift(consistent, "v0.8.3", "0.8.3");
+    const drift = releasePinDrift(consistent, "v0.8.4", "0.8.4");
     expect(drift).toEqual([]);
-    expect(releasePinDrift(report, "v0.8.3", "0.8.3").some((line) => line.includes("public command digest") || line.includes("is not the public command digest") || line.length === 0)).toBe(report.runtime.publicCommand !== report.runtime.actual);
-    expect(releasePinDrift(consistent, "v0.1.8", "0.8.3")).toContain("release tag v0.1.8 does not match package.json version 0.8.3");
+    expect(releasePinDrift(report, "v0.8.4", "0.8.4").some((line) => line.includes("public command digest") || line.includes("is not the public command digest") || line.length === 0)).toBe(report.runtime.publicCommand !== report.runtime.actual);
+    expect(releasePinDrift(consistent, "v0.1.8", "0.8.4")).toContain("release tag v0.1.8 does not match package.json version 0.8.4");
     for (const priorTag of ["v0.7.0", "v0.7.1", "v0.8.0"]) {
-      expect(releasePinDrift(consistent, priorTag, "0.8.3"))
-        .toContain(`release tag ${priorTag} does not match package.json version 0.8.3`);
+      expect(releasePinDrift(consistent, priorTag, "0.8.4"))
+        .toContain(`release tag ${priorTag} does not match package.json version 0.8.4`);
     }
-    expect(() => releasePinDrift(consistent, "0.8.3", "0.8.3")).toThrow();
+    expect(() => releasePinDrift(consistent, "0.8.4", "0.8.4")).toThrow();
   });
 
   test("working-tree drift names the file and both digests", () => {
@@ -119,10 +119,10 @@ describe("installer pins", () => {
     expect(await readFile(preflightPath, "utf8")).toBe(ordinaryBefore);
 
     expect(report.runtime.actual).not.toBe(report.runtime.publicCommand);
-    expect(await updateInstallPinsForRelease(fixture, "v0.8.3", {
+    expect(await updateInstallPinsForRelease(fixture, "v0.8.4", {
       readPins: async () => report,
     }))
-      .toEqual(["src/install-preflight.ts: replaced 1 public runtime digest site for v0.8.3"]);
+      .toEqual(["src/install-preflight.ts: replaced 1 public runtime digest site for v0.8.4"]);
     const prepared = await readFile(preflightPath, "utf8");
     expect(prepared).toContain(report.runtime.actual);
     expect(prepared).not.toContain(report.runtime.publicCommand);

@@ -1,7 +1,7 @@
 {
   "name": "@hraness/oompa",
-  "version": "0.8.3",
-  "description": "Bun CLI and local daemon for isolated Codex and Claude Code profiles, durable sessions, and optional encrypted sync. Local CLI v0.8.3 passed GitHub and npm artifact admission; daemon and hosted command-writer rollout remains blocked on capacity.",
+  "version": "0.8.4",
+  "description": "Bun CLI and local daemon for isolated Codex and Claude Code profiles, durable sessions, and optional encrypted sync. Local CLI v0.8.4 is a release candidate; daemon and hosted command-writer rollout remains blocked on capacity.",
   "license": "MIT",
   "publishConfig": {
     "access": "public",
