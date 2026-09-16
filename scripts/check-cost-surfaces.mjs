@@ -17,15 +17,16 @@ import { join, relative } from "node:path";
 
 const root = process.cwd();
 const failures = [];
-const fail = (msg) => failures.push(msg);
+const fail = (msg) => {
+  failures.push(msg);
+};
 
 const KINDS = new Set(["authoritative", "derived", "telemetry", "served"]);
 const RETENTION = /^(ephemeral|ttl:P.+|account|tombstone|persistent)$/;
 
 const registryPath = join(root, "costs.json");
 if (!existsSync(registryPath)) {
-  fail("costs.json is missing at the repository root");
-  console.error(failures.join("\n"));
+  console.error("costs.json is missing at the repository root");
   process.exit(1);
 }
 
@@ -33,8 +34,7 @@ let registry;
 try {
   registry = JSON.parse(readFileSync(registryPath, "utf8"));
 } catch (e) {
-  fail(`costs.json does not parse: ${e.message}`);
-  console.error(failures.join("\n"));
+  console.error(`costs.json does not parse: ${e.message}`);
   process.exit(1);
 }
 
@@ -47,7 +47,7 @@ for (const [id, entry] of Object.entries(surfaces)) {
     continue;
   }
   if (!KINDS.has(entry.kind)) {
-    fail(`${id}: kind must be authoritative|derived|telemetry`);
+    fail(`${id}: kind must be authoritative|derived|telemetry|served`);
   }
   if (typeof entry.retention !== "string" || !RETENTION.test(entry.retention)) {
     fail(`${id}: retention must be ephemeral|ttl:<ISO8601>|account|tombstone|persistent`);
@@ -66,17 +66,24 @@ for (const [id, entry] of Object.entries(surfaces)) {
   if (entry.kind === "telemetry" && typeof entry.maxBytesPerEvent !== "number") {
     fail(`${id}: telemetry surfaces need maxBytesPerEvent`);
   }
-  if (entry.kind === "served" && id.startsWith("route:")) {
-    // per-request compute; dynamic/rate behavior documented in entry.note
-  }
   if (entry.kind === "derived" && typeof entry.source !== "string") {
     fail(`${id}: derived surfaces need a source naming their authoritative origin`);
   }
 }
 
 const SKIP_DIRS = new Set([
-  "node_modules", ".next", "dist", ".git", ".vercel", "out", "coverage",
-  ".turbo", "_generated", ".cache", "public", ".bun",
+  "node_modules",
+  ".next",
+  "dist",
+  ".git",
+  ".vercel",
+  "out",
+  "coverage",
+  ".turbo",
+  "_generated",
+  ".cache",
+  "public",
+  ".bun",
 ]);
 const SCAN_EXT = new Set([".ts", ".tsx", ".js", ".mjs", ".rs"]);
 
@@ -88,7 +95,9 @@ function* walk(dir) {
     return;
   }
   for (const name of entries) {
-    if (SKIP_DIRS.has(name) || name.startsWith(".")) continue;
+    if (SKIP_DIRS.has(name) || name.startsWith(".")) {
+      continue;
+    }
     const p = join(dir, name);
     let st;
     try {
@@ -110,21 +119,31 @@ function* walk(dir) {
 const BACKEND_DIR = "con" + "vex";
 function* backendSchemas() {
   const direct = join(root, BACKEND_DIR, "schema.ts");
-  if (existsSync(direct)) yield direct;
+  if (existsSync(direct)) {
+    yield direct;
+  }
   for (const group of ["projects", "packages", "apps"]) {
     const gdir = join(root, group);
-    if (!existsSync(gdir)) continue;
+    if (!existsSync(gdir)) {
+      continue;
+    }
     for (const child of readdirSync(gdir)) {
-      if (child.startsWith(".") || SKIP_DIRS.has(child)) continue;
+      if (child.startsWith(".") || SKIP_DIRS.has(child)) {
+        continue;
+      }
       const nested = join(gdir, child, BACKEND_DIR, "schema.ts");
-      if (existsSync(nested)) yield nested;
+      if (existsSync(nested)) {
+        yield nested;
+      }
     }
   }
 }
 for (const schemaPath of backendSchemas()) {
   const src = readFileSync(schemaPath, "utf8");
   const tableNames = new Set();
-  for (const m of src.matchAll(/(\w+)\s*:\s*defineTable\s*\(/g)) tableNames.add(m[1]);
+  for (const m of src.matchAll(/(\w+)\s*:\s*defineTable\s*\(/g)) {
+    tableNames.add(m[1]);
+  }
   for (const name of tableNames) {
     const id = `${BACKEND_DIR}:${name}`;
     if (!surfaces[id] && !exempt.has(id)) {
@@ -133,19 +152,24 @@ for (const schemaPath of backendSchemas()) {
   }
 }
 
-// --- PostHog event literals -------------------------------------------------
-const CAPTURE_RE = /(?:posthog\w*|analytics)\.capture\s*\(\s*["'`]([a-zA-Z0-9_:$-]+)["'`]/g;
+// --- PostHog event literals --------------------------------------------------
+const CAPTURE_RE =
+  /(?:posthog\w*|analytics)\.capture\s*\(\s*["'`]([a-zA-Z0-9_:$-]+)["'`]/g;
 const seenEvents = new Set();
 for (const p of walk(root)) {
   const rel = relative(root, p);
-  if (/\.test\.|\.spec\.|__tests__|scripts\/check-cost-surfaces/.test(rel)) continue;
+  if (/\.test\.|\.spec\.|__tests__|scripts\/check-cost-surfaces/.test(rel)) {
+    continue;
+  }
   let src;
   try {
     src = readFileSync(p, "utf8");
   } catch {
     continue;
   }
-  if (!/posthog/i.test(src)) continue;
+  if (!/posthog/i.test(src)) {
+    continue;
+  }
   for (const m of src.matchAll(CAPTURE_RE)) {
     seenEvents.add(`${m[1]}\t${rel}`);
   }
@@ -158,31 +182,42 @@ for (const ev of seenEvents) {
   }
 }
 
-// --- Dynamic / edge routes --------------------------------------------------
+// --- Dynamic / edge routes ---------------------------------------------------
 function* routeDirs() {
   const singles = ["app", "src/app", "pages", "website", "site"];
   for (const d of singles) {
     const p = join(root, d);
-    if (existsSync(p)) yield p;
+    if (existsSync(p)) {
+      yield p;
+    }
   }
   for (const group of ["projects", "apps"]) {
     const gdir = join(root, group);
-    if (!existsSync(gdir)) continue;
+    if (!existsSync(gdir)) {
+      continue;
+    }
     for (const child of readdirSync(gdir)) {
-      if (child.startsWith(".") || SKIP_DIRS.has(child)) continue;
+      if (child.startsWith(".") || SKIP_DIRS.has(child)) {
+        continue;
+      }
       for (const d of ["app", "src/app"]) {
         const p = join(gdir, child, d);
-        if (existsSync(p)) yield p;
+        if (existsSync(p)) {
+          yield p;
+        }
       }
     }
   }
 }
-const FORCE_RE = /export\s+const\s+(?:dynamic|runtime)\s*=\s*["'](force-dynamic|edge|force-cache)["']/;
+const FORCE_RE =
+  /export\s+const\s+(?:dynamic|runtime)\s*=\s*["'](force-dynamic|edge|force-cache)["']/;
 const seenRoutes = new Set();
 for (const base of routeDirs()) {
   for (const p of walk(base)) {
     const rel = relative(root, p);
-    if (!/(route|page)\.(ts|tsx|js|mjs)$/.test(p)) continue;
+    if (!/(route|page)\.(ts|tsx|js|mjs)$/.test(p)) {
+      continue;
+    }
     let src;
     try {
       src = readFileSync(p, "utf8");
@@ -190,8 +225,15 @@ for (const base of routeDirs()) {
       continue;
     }
     const m = src.match(FORCE_RE);
-    if (!m) continue;
-    const seg = rel.replace(/\\/g, "/").replace(/(route|page)\.(ts|tsx|js|mjs)$/, "").replace(/^(?:src\/)?app\//, "/").replace(/^src\//, "").replace(/^pages\//, "/");
+    if (!m) {
+      continue;
+    }
+    const seg = rel
+      .replace(/\\/g, "/")
+      .replace(/(route|page)\.(ts|tsx|js|mjs)$/, "")
+      .replace(/^(?:src\/)?app\//, "/")
+      .replace(/^src\//, "")
+      .replace(/^pages\//, "/");
     const routePath = "/" + seg.replace(/^\/+/, "").replace(/\/$/, "");
     seenRoutes.add(`${routePath || "/"}\t${rel}`);
   }
@@ -206,7 +248,9 @@ for (const r of seenRoutes) {
 
 if (failures.length > 0) {
   console.error(`check-cost-surfaces: ${failures.length} violation(s)`);
-  for (const f of failures) console.error(`  ✗ ${f}`);
+  for (const f of failures) {
+    console.error(`  ✗ ${f}`);
+  }
   process.exit(1);
 }
 console.log(
