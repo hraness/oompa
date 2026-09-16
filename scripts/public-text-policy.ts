@@ -36,6 +36,7 @@ const allowedPublicScopedPackages = new Set([
   "@hraness/oompa",
   "@hraness/posthog",
   "@hraness/site-footer",
+  "@hraness/support-foundation",
   "@hraness/slopcamera",
   "@hraness/ui",
   "@stylexjs/babel-plugin",
