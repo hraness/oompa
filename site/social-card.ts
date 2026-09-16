@@ -10,7 +10,7 @@
 import { nebulaSansSocialFonts } from "@hraness/design-kit/fonts/nebula-sans/social";
 import { paletteColors } from "@hraness/design-kit";
 
-import { publicContent, type PublicContent } from "./content.ts";
+import { isAdmittedRelease, publicContent, type PublicContent } from "./content.ts";
 import { parseOpenTypeOutlineFont, type OutlineFont } from "./social-card-font.ts";
 import {
   Canvas,
@@ -55,7 +55,7 @@ export const socialCardLines = (content: PublicContent = publicContent): SocialC
   return {
     commands: [`$ ${content.doctorCommand}`, "$ oompa status --json"],
     comment: "# Daemon rollout blocked on capacity",
-    tagline: `CLI candidate v${content.releaseVersion} · oompa.app`,
+    tagline: `CLI ${isAdmittedRelease(content.releaseVersion) ? "release" : "candidate"} v${content.releaseVersion} · oompa.app`,
     title: content.productName,
   };
 };

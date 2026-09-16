@@ -204,7 +204,7 @@ const {
 } = hostedSignupCopy(hostedSignup);
 
 const links = {
-  admittedInstall: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact",
+  admittedInstall: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts",
   app: "https://app.oompa.app",
   contributing: "https://github.com/hraness/oompa/blob/main/CONTRIBUTING.md",
   documentation: "https://oompa.app/docs/",
@@ -290,7 +290,7 @@ export const siteDocumentPaths: readonly string[] = [
   "/privacy/",
 ];
 
-export const publicReleaseState: "live" | "release-ready" | "staged" = "staged";
+export const publicReleaseState: "live" | "release-ready" | "staged" = "live";
 
 const betaInstallCommand = buildOompaGlobalInstallCommand(
   "https://github.com/hraness/oompa/releases/download/v0.8.3/hraness-oompa-0.8.3.tgz",
@@ -300,24 +300,27 @@ const productName = "Oompa";
 const tagline = "Workspace for Codex and Claude Code";
 const providerRoadmap = "Codex and Claude Code, side by side.";
 const releaseVersion = "0.8.3";
-export const admittedReleaseVersion = "0.8.1";
-const admittedReleaseRun = "34781400584";
+export const admittedReleaseVersion = "0.8.3";
+const admittedReleaseRun = "35066335703";
 export const isAdmittedRelease = (version: string): boolean => version === admittedReleaseVersion;
-const installNotice = `This release candidate is not yet admitted. The v${releaseVersion} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its verified installation notes for the existing artifact. The v0.8.1 npm mirror is not admitted.`;
-const daemonRolloutNotice = `Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v${admittedReleaseVersion} daemon or the v${releaseVersion} candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.`;
+const installNoticeFor = (version: string): string => isAdmittedRelease(version)
+  ? `The v${version} CLI artifact and its exact-byte npm mirror passed release admission. Use the reviewed immutable GitHub installer below; installation does not authorize daemon startup.`
+  : `This release candidate is not yet admitted. The v${version} install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission. The last admitted release is v${admittedReleaseVersion}; use its verified installation notes for the existing artifact.`;
+const installNotice = installNoticeFor(releaseVersion);
+const daemonRolloutNotice = `Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart the v${releaseVersion} daemon or any older daemon until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.`;
 
 /** The existing exact release evidence also belongs in the new status guide. */
 export const releaseAdmissionNotice: ContentBlock = {
   kind: "notice",
-  label: `Local v${releaseVersion} candidate; hosted sync live as an ${hostedBetaLabel}`,
+  label: `Local v${admittedReleaseVersion} artifacts admitted; hosted sync live as an ${hostedBetaLabel}`,
   content: [
     text("The "),
     link(`v${admittedReleaseVersion} artifacts`, `https://github.com/hraness/oompa/releases/tag/v${admittedReleaseVersion}`),
-    text(" passed immutable GitHub release admission in "),
+    text(" passed immutable GitHub and exact-byte npm release admission in "),
     link(`release run ${admittedReleaseRun}`, `https://github.com/hraness/oompa/actions/runs/${admittedReleaseRun}`),
-    text(`, attempt 1. Its optional npm mirror failed before publication and is not admitted. That evidence does not admit v${releaseVersion}. Use the predecessor's `),
+    text(", attempt 1. Linux and macOS installed-artifact checks and public byte and cryptographic provenance admission passed. Use the "),
     link("verified installation notes", links.admittedInstall),
-    text(". The candidate command below remains unavailable until its own admission. The website and optional hosted sync are live; artifact admission does not authorize current-daemon startup or hosted command writers."),
+    text(". The website and optional hosted sync are live; artifact admission does not authorize current-daemon startup or hosted command writers."),
   ],
 };
 
@@ -377,7 +380,7 @@ export const publicContent: PublicContent = {
   providerRoadmap,
   releaseVersion,
   thesis: `${productName} brings your Codex and Claude Code sessions into one workspace. Follow the work in your browser, direct it from your terminal, and keep execution on your own machines.`,
-  description: `A workspace for Codex and Claude Code, in your browser or terminal. Local CLI v${releaseVersion} is a release candidate; v${admittedReleaseVersion} remains admitted; daemon and hosted command-writer rollout remains blocked on capacity.`,
+  description: `A workspace for Codex and Claude Code, in your browser or terminal. Local CLI v${admittedReleaseVersion} passed GitHub and npm artifact admission; daemon and hosted command-writer rollout remains blocked on capacity.`,
   daemonRolloutNotice,
   statusLine: `Status: public beta. ${isAdmittedRelease(releaseVersion) ? `Local CLI v${releaseVersion} is the fully admitted public artifact.` : `Local CLI v${releaseVersion} is a release candidate, not an admitted artifact; v${admittedReleaseVersion} remains the admitted canonical GitHub artifact.`} Codex runs on macOS and Linux, Claude Code on Linux; hosted sync is live as an ${hostedBetaLabel}. Current daemon and hosted command-writer rollout remains blocked on capacity.`,
   badges,
@@ -386,7 +389,7 @@ export const publicContent: PublicContent = {
     url: links.hraness,
   },
   socialCard: {
-    alt: `${productName} command-line card showing offline diagnostics and read-only status · v${releaseVersion} candidate · daemon rollout blocked on capacity · oompa.app`,
+    alt: `${productName} command-line card showing offline diagnostics and read-only status · v${releaseVersion} ${isAdmittedRelease(releaseVersion) ? "released" : "candidate"} · daemon rollout blocked on capacity · oompa.app`,
     height: 630,
     path: "/social-card.png",
     width: 1200,
@@ -397,7 +400,7 @@ export const publicContent: PublicContent = {
   initCommand: "oompa init --yes",
   doctorCommand: "oompa doctor --offline",
   endpoints: {
-    betaTag: "beta-not-yet-live",
+    betaTag: "live",
     githubRepository: "live",
     hostedSync: "live",
     website: "live",
@@ -409,7 +412,7 @@ export const publicContent: PublicContent = {
     heading: "All your agents.\nOne place to keep up.",
     summary: "See what’s running, follow the conversation, and decide what happens next. Oompa brings your Codex and Claude Code sessions together in a web workspace, with a CLI for you and your agents.",
     example: "Your machines run the work. Oompa keeps you in the conversation.",
-    boundary: `Public beta · Local v${releaseVersion} candidate · v${admittedReleaseVersion} artifacts admitted · current daemon and hosted command-writer rollout blocked on capacity · Codex on macOS and Linux · Claude Code on Linux`,
+    boundary: `Public beta · Local v${admittedReleaseVersion} artifacts admitted · current daemon and hosted command-writer rollout blocked on capacity · Codex on macOS and Linux · Claude Code on Linux`,
     primaryAction: {
       href: links.app,
       label: "Open Oompa",
@@ -562,7 +565,7 @@ export const publicContent: PublicContent = {
       id: "install-and-update",
       heading: "Install and update",
       blocks: [
-        { kind: "notice", label: "Candidate installation unavailable", content: [text(installNotice), text(" Read the "), link(`v${admittedReleaseVersion} installation notes`, links.admittedInstall), text(".")] },
+        { kind: "notice", label: isAdmittedRelease(releaseVersion) ? "Admitted CLI installation" : "Candidate installation unavailable", content: [text(installNotice), text(" Read the "), link(`v${admittedReleaseVersion} installation notes`, links.admittedInstall), text(".")] },
         paragraph(
           text(`Oompa requires Bun 1.3.14 plus curl with HTTPS and TLS 1.2 support. The CLI and local daemon support macOS and Linux. Codex effects run on both platforms; Claude Code effects run on Linux only. Oompa refuses new Claude Code effects on macOS pending authenticated isolated-Keychain and detached-read acceptance. Native protected-input control loads only when a terminal prompt needs it and supports the standard macOS, glibc, and x64 or arm64 musl library names. ${isAdmittedRelease(releaseVersion) ? "Install the admitted release's reviewed immutable tag, then verify the binary before initialization:" : "Only after immutable GitHub release admission, install the candidate's reviewed immutable tag, then verify the binary before initialization:"}`),
         ),
@@ -958,11 +961,11 @@ export const publicContent: PublicContent = {
             text("These commands are part of the "),
             code(`v${admittedReleaseVersion}`),
             ...(isAdmittedRelease(releaseVersion) ? [
-              text(" admitted local CLI release. Its immutable GitHub artifact passed admission; the optional npm mirror is not admitted. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
+              text(" admitted local CLI release. Its immutable GitHub artifact and exact-byte npm mirror passed admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
             ] : [
               text(" admitted local CLI release and are retained in the "),
               code(`v${releaseVersion}`),
-              text(" candidate. The predecessor's immutable GitHub artifact passed admission; its optional npm mirror is not admitted and the candidate requires its own admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
+              text(" candidate. The predecessor's immutable GitHub artifact and exact-byte npm mirror passed admission; the candidate requires its own admission. Hosted sync is not required for this local protocol; the current-daemon rollout prerequisite still applies before startup."),
             ]),
           ],
         },
@@ -1823,10 +1826,8 @@ export const renderLlmsText = (content: PublicContent = publicContent): string =
     content.thesis,
     content.statusLine,
     "",
-    ...(isAdmittedRelease(content.releaseVersion) ? [] : [
-      content.installNotice,
-      `Admitted release installation notes: ${content.links.admittedInstall}`,
-    ]),
+    installNoticeFor(content.releaseVersion),
+    `Admitted release installation notes: ${content.links.admittedInstall}`,
     isAdmittedRelease(content.releaseVersion)
       ? `Install the admitted v${content.releaseVersion} local CLI artifact: ${content.installCommand}`
       : `Only after immutable GitHub release admission, install the v${content.releaseVersion} local CLI artifact: ${content.installCommand}`,

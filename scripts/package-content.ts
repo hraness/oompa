@@ -6,7 +6,7 @@ import { buildOompaGlobalInstallCommand } from "../src/install-preflight";
 
 // Package documentation is authored in root README.md. This admission contract
 // reads no website content and never renders or rewrites the package document.
-export const packageDescription = "Bun CLI and local daemon for isolated Codex and Claude Code profiles, durable sessions, and optional encrypted sync. Local CLI v0.8.3 is a release candidate; daemon and hosted command-writer rollout remains blocked on capacity.";
+export const packageDescription = "Bun CLI and local daemon for isolated Codex and Claude Code profiles, durable sessions, and optional encrypted sync. Local CLI v0.8.3 passed GitHub and npm artifact admission; daemon and hosted command-writer rollout remains blocked on capacity.";
 
 const manifestSchema = z.object({
   description: z.literal(packageDescription),
@@ -18,9 +18,9 @@ export const packageInstallCommand = buildOompaGlobalInstallCommand(
   "https://github.com/hraness/oompa/releases/download/v0.8.3/hraness-oompa-0.8.3.tgz",
 );
 
-export const packageCandidateNotice = "This release candidate is not yet admitted. The v0.8.3 install command is unavailable until its immutable GitHub artifact passes exact release admission. The optional npm mirror has separate admission.";
-export const packageInstallPrerequisite = "Only after immutable GitHub release admission, install and verify the v0.8.3 candidate CLI artifact. This does not start the daemon:";
-export const packageDaemonNotice = "Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart either the admitted v0.8.1 daemon or the v0.8.3 candidate until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.";
+export const packageAdmissionNotice = "The v0.8.3 CLI artifact and its exact-byte npm mirror passed release admission. Use the reviewed immutable GitHub installer below; installation does not authorize daemon startup.";
+export const packageInstallPrerequisite = "Install and verify the admitted v0.8.3 CLI artifact. This does not start the daemon:";
+export const packageDaemonNotice = "Current daemon and hosted command-writer rollout remains blocked on capacity. Do not initialize, start, or autostart the v0.8.3 daemon or any older daemon until the hosted operator records protected two-pass zero-debt capacity evidence and its exact .activated readback receipt. Artifact availability and the live sync service do not clear this gate. After activation, complete the update runbook's daemon and target marker-2 proofs before globally enabling hosted writers.";
 
 const readmeSchema = z.string().min(1).max(64 * 1024)
   .refine((value) => Buffer.byteLength(value, "utf8") <= 64 * 1024);
@@ -30,16 +30,14 @@ export function assertPackageContent(manifest: unknown, readme: unknown): void {
   const text = readmeSchema.parse(readme);
   const required = [
     "# Oompa\n\n`@hraness/oompa` supplies the `oompa` command and local daemon.",
-    "Local CLI v0.8.3 is a release candidate, not an admitted artifact",
-    "The v0.8.3 candidate is not yet admitted.",
-    "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v081-canonical-artifact",
-    "https://github.com/hraness/oompa/releases/tag/v0.8.1",
-    "v0.8.1 remains the admitted canonical GitHub artifact.",
-    "The v0.8.1 npm mirror is not admitted.",
+    "Local CLI v0.8.3 passed immutable GitHub and exact-byte npm release admission.",
+    "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts",
+    "https://github.com/hraness/oompa/releases/tag/v0.8.3",
+    "https://github.com/hraness/oompa/actions/runs/35066335703",
     "Codex execution supports macOS and Linux; Claude Code execution supports Linux.",
     "Bun 1.3.14",
     "## Get started\n",
-    packageCandidateNotice,
+    packageAdmissionNotice,
     packageInstallPrerequisite,
     "```sh\n" + packageInstallCommand + "\n```",
     "```sh\noompa doctor --offline\n```",
@@ -56,7 +54,7 @@ export function assertPackageContent(manifest: unknown, readme: unknown): void {
     throw new Error("Package README is missing its technical identity, commands, or release prerequisites.");
   }
   for (const [before, after] of [
-    [packageCandidateNotice, packageInstallCommand],
+    [packageAdmissionNotice, packageInstallCommand],
     [packageInstallPrerequisite, packageInstallCommand],
     [packageInstallCommand, "\noompa doctor --offline\n"],
     [packageDaemonNotice, "oompa session start personal --provider codex --json"],
@@ -70,9 +68,10 @@ export function assertPackageContent(manifest: unknown, readme: unknown): void {
     "Install and verify the admitted v0.8.1 CLI artifact",
     "v0.8.1 artifacts admitted",
     "v0.8.1 is the fully admitted public artifact",
-    "Install and verify the admitted v0.8.3 CLI artifact",
-    "v0.8.3 artifacts admitted",
-    "v0.8.3 is the fully admitted public artifact",
+    "The v0.8.3 candidate is not yet admitted",
+    "The v0.8.3 npm mirror is not admitted",
+    "Daemon rollout is available",
+    "Hosted command writers are enabled",
     "The v0.7.1 candidate is not yet admitted",
     "\nhra init --yes\n",
     "img.shields.io",
