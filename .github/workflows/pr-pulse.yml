@@ -53,10 +53,10 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          test -f site/pr/data/snapshot.json
-          test -f site/pr/data/history.json
-          git add -- site/pr/data/snapshot.json site/pr/data/history.json
-          if git diff --cached --quiet -- site/pr/data/; then
+          test -f pr/data/snapshot.json
+          test -f pr/data/history.json
+          git add -- pr/data/snapshot.json pr/data/history.json
+          if git diff --cached --quiet -- pr/data/; then
             echo "No snapshot changes to publish."
             exit 0
           fi

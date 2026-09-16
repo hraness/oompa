@@ -1,5 +1,5 @@
-import rawSnapshot from "./pr/data/snapshot.json" with { type: "json" };
-import rawHistory from "./pr/data/history.json" with { type: "json" };
+import rawSnapshot from "../pr/data/snapshot.json" with { type: "json" };
+import rawHistory from "../pr/data/history.json" with { type: "json" };
 
 import {
   PR_CATEGORIES,
@@ -215,18 +215,18 @@ ${renderMarketingHeader(content, "/pr/")}
   <header>
     <p class="${prClasses("eyebrow")}">hraness · situational awareness</p>
     <h1 class="${prClasses("title")}">Puerto Rico pulse</h1>
-    <p class="${prClasses("lede")}">Power, water, weather, seismic, maritime, connectivity, health, and regional signals for the island — refreshed by an automated collector.</p>
+    <p class="${prClasses("lede")}">Power, water, weather, seismic, maritime, connectivity, health, and regional signals for the island, refreshed by an automated collector.</p>
     <p class="${prClasses("ledeEs")}" lang="es">Señales de energía, agua, clima, sismos, transporte marítimo, conectividad y salud para Puerto Rico, actualizadas automáticamente.</p>
     <p class="${prClasses("meta")}">Snapshot <time datetime="${escapeHtml(snapshot.generatedAt)}">${escapeHtml(snapshot.generatedAt.replace("T", " ").slice(0, 19))} UTC</time> · ${snapshot.signals.length.toString()} signals · data refreshed roughly every 15 minutes</p>
   </header>
-  <aside class="${prClasses("disclaimer")}" aria-label="Important notice"><strong>This board is not an official emergency source.</strong> In a life-safety emergency call <strong>911</strong> and follow NMEAD, NWS San Juan, and your municipio's official instructions. Signals are automated summaries from public sources — always open the linked source before acting.</aside>
+  <aside class="${prClasses("disclaimer")}" aria-label="Important notice"><strong>This board is not an official emergency source.</strong> In a life-safety emergency call <strong>911</strong> and follow NMEAD, NWS San Juan, and your municipio's official instructions. Signals are automated summaries from public sources. Always open the linked source before acting.</aside>
   ${snapshot.brief === null ? "" : `<section class="${prClasses("brief")}" aria-label="Situation summary">
     <p class="${prClasses("briefLabel")}">Situation brief · AI-assisted (${escapeHtml(snapshot.brief.provider)} ${escapeHtml(snapshot.brief.model)})</p>
     <p class="${prClasses("briefText")}">${escapeHtml(snapshot.brief.text)}</p>
     ${snapshot.brief.textEs === undefined ? "" : `<p class="${prClasses("briefTextEs")}" lang="es">${escapeHtml(snapshot.brief.textEs)}</p>`}
   </section>`}
   <ul class="${prClasses("metrics")}" aria-label="Key metrics">
-    ${metricCards.map(({ label, value }) => `<li class="${prClasses("metric")}"><span class="${prClasses("metricValue")}">${value === undefined ? "—" : escapeHtml(typeof value === "number" ? number.format(value) : value)}</span><span class="${prClasses("metricLabel")}">${escapeHtml(label)}</span></li>`).join("\n    ")}
+    ${metricCards.map(({ label, value }) => `<li class="${prClasses("metric")}"><span class="${prClasses("metricValue")}">${value === undefined ? "–" : escapeHtml(typeof value === "number" ? number.format(value) : value)}</span><span class="${prClasses("metricLabel")}">${escapeHtml(label)}</span></li>`).join("\n    ")}
   </ul>
   <form class="${prClasses("filters")}" data-pr-filters hidden aria-label="Filter signals">
     <fieldset class="${prClasses("filterGroup")}"><legend class="${prClasses("filterLegend")}">Category</legend><div class="${prClasses("chips")}">${categoryChips.map((category) => `<button class="${prClasses("chip")}" type="button" data-pr-filter="category" data-pr-value="${escapeHtml(category)}" aria-pressed="false">${escapeHtml(CATEGORY_LABELS[category])}</button>`).join("")}</div></fieldset>
@@ -245,7 +245,7 @@ ${renderMarketingHeader(content, "/pr/")}
   </section>
   <section class="${prClasses("section")}" id="sources" aria-labelledby="sources-heading">
     <h2 class="${prClasses("sectionHeading")}" id="sources-heading">Sources</h2>
-    <p class="${prClasses("sectionNote")}">${sourcesOk.toString()} of ${snapshot.health.length.toString()} collectors succeeded in this snapshot. Failures are shown, not hidden — a missing source can mean a rate limit, an outage, or a changed endpoint.</p>
+    <p class="${prClasses("sectionNote")}">${sourcesOk.toString()} of ${snapshot.health.length.toString()} collectors succeeded in this snapshot. Failures are shown, not hidden: a missing source can mean a rate limit, an outage, or a changed endpoint.</p>
     <table class="${prClasses("healthTable")}"><thead><tr><th class="${prClasses("healthCell", "healthHead")}" scope="col">Status</th><th class="${prClasses("healthCell", "healthHead")}" scope="col">Source</th><th class="${prClasses("healthCell", "healthHead")}" scope="col">Area</th><th class="${prClasses("healthCell", "healthHead")}" scope="col">Signals</th><th class="${prClasses("healthCell", "healthHead")}" scope="col">Latency</th><th class="${prClasses("healthCell", "healthHead")}" scope="col">Note</th></tr></thead><tbody>${healthRows}</tbody></table>
   </section>
   <section class="${prClasses("section")}" id="trend" aria-labelledby="trend-heading">
@@ -255,12 +255,12 @@ ${renderMarketingHeader(content, "/pr/")}
   </section>
   <section class="${prClasses("section")}" id="resources" aria-labelledby="resources-heading">
     <h2 class="${prClasses("sectionHeading")}" id="resources-heading">Resources</h2>
-    <p class="${prClasses("sectionNote")}">Official, utility, and community links — curated, not exhaustive.</p>
+    <p class="${prClasses("sectionNote")}">Official, utility, and community links, curated rather than exhaustive.</p>
     <div class="${prClasses("resourceGroups")}">${PR_RESOURCES.map((group) => `<div class="${prClasses("resourceGroup")}"><h3 class="${prClasses("resourceHeading")}">${escapeHtml(group.heading)}</h3><ul class="${prClasses("resourceList")}">${group.links.map((link) => `<li class="${prClasses("resourceItem")}"><a class="${prClasses("sourceLink")}" href="${escapeHtml(link.url)}">${escapeHtml(link.label)}</a>${link.note === undefined ? "" : `<span class="${prClasses("resourceNote")}">${escapeHtml(link.note)}</span>`}</li>`).join("\n")}</ul></div>`).join("\n")}</div>
   </section>
   <section class="${prClasses("section")}" id="methodology" aria-labelledby="methodology-heading">
     <h2 class="${prClasses("sectionHeading")}" id="methodology-heading">How this works</h2>
-    <p class="${prClasses("methodology")}">A scheduled collector polls official feeds, public APIs, and open OSINT indexes — NWS, NHC, USGS, NOAA, FEMA, LUMA, AAA, USCG/DVIDS, IODA, GDACS, GDELT, FCC, CDC, PR Salud, and Puerto Rico newsrooms — normalizes each item into a typed signal with severity, regions, provenance, and a source link, then rebuilds this page. An optional AI pass translates Spanish items and writes the situation brief; it is labeled and never overrides an official severity. Source failures appear in the table above rather than being silently dropped. The raw snapshot is published at <a class="${prClasses("sourceLink")}" href="/pr/data/snapshot.json">/pr/data/snapshot.json</a>.</p>
+    <p class="${prClasses("methodology")}">A scheduled collector polls official feeds, public APIs, and open OSINT indexes (NWS, NHC, USGS, NOAA, FEMA, LUMA, AAA, USCG/DVIDS, IODA, GDACS, GDELT, FCC, CDC, PR Salud, and Puerto Rico newsrooms), normalizes each item into a typed signal with severity, regions, provenance, and a source link, then rebuilds this page. An optional AI pass translates Spanish items and writes the situation brief; it is labeled and never overrides an official severity. Source failures appear in the table above rather than being silently dropped. The raw snapshot is published at <a class="${prClasses("sourceLink")}" href="/pr/data/snapshot.json">/pr/data/snapshot.json</a>.</p>
   </section>
 </main>
 ${renderOompaSiteFooter()}

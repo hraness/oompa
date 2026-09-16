@@ -70,7 +70,7 @@ export const gdeltSignalsSource: PulseSource = {
           signals.push({
             id: signalId("gdelt", [entry.id, article.url]),
             source: "gdelt-queries",
-            sourceName: `GDELT — ${entry.label}`,
+            sourceName: `GDELT: ${entry.label}`,
             category: entry.category,
             severity: classified.severity,
             title: article.title.slice(0, 300),

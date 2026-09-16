@@ -48,7 +48,7 @@ export const gdacsCaribbeanSource: PulseSource = {
         category: eventType === "EQ" ? "seismic" : eventType === "TC" ? "weather" : eventType === "FL" ? "flood" : eventType === "DR" ? "climate" : "regional",
         severity,
         title: title.slice(0, 300),
-        summary: `${eventType === "" ? "Event" : eventType} ${country === "" ? "" : `— ${country} `}(${severityLevel || "unrated"}). ${description}`.slice(0, 1200),
+        summary: `${eventType === "" ? "Event" : eventType} ${country === "" ? "" : `, ${country} `}(${severityLevel || "unrated"}). ${description}`.slice(0, 1200),
         url: link.startsWith("http") ? link : "https://www.gdacs.org/",
         regions: ["caribbean"],
         lang: "en",

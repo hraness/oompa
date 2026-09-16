@@ -104,7 +104,7 @@ export const googleNewsSource: PulseSource = {
         signals.push({
           id: signalId("gnews", [entry.id, item.guid ?? item.link, item.title.slice(0, 60)]),
           source: `gnews-${entry.id}`,
-          sourceName: `Google News — ${entry.id}`,
+          sourceName: `Google News: ${entry.id}`,
           category: classified.category ?? "news",
           severity: classified.severity,
           title: item.title.slice(0, 300),

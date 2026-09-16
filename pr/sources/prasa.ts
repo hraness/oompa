@@ -68,7 +68,7 @@ export const prasaInterruptionsSource: PulseSource = {
       signals.push({
         id: signalId("prasa-plan", [url ?? href, title]),
         source: "prasa-interruptions",
-        sourceName: "AAA (PRASA) — planned interruptions",
+        sourceName: "AAA (PRASA): planned interruptions",
         category: "water",
         severity: "advisory",
         title: title.slice(0, 300),
@@ -85,7 +85,7 @@ export const prasaInterruptionsSource: PulseSource = {
       signals.push({
         id: signalId("prasa-plan", ["index"]),
         source: "prasa-interruptions",
-        sourceName: "AAA (PRASA) — planned interruptions",
+        sourceName: "AAA (PRASA): planned interruptions",
         category: "water",
         severity: "info",
         title: "AAA planned interruption index",

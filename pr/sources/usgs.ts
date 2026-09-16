@@ -68,7 +68,7 @@ export const usgsQuakesSource: PulseSource = {
         sourceName: "U.S. Geological Survey",
         category: "seismic",
         severity: quakeSeverity(mag, feature.properties.tsunami, feature.properties.felt ?? undefined),
-        title: `M${mag.toFixed(1)} — ${place}`,
+        title: `M${mag.toFixed(1)} - ${place}`,
         summary: [
           `Depth ${((feature.geometry?.coordinates ?? [])[2] ?? 0).toFixed(1)} km.`,
           felt > 0 ? `${felt.toString()} felt reports.` : "",

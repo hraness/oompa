@@ -14,7 +14,7 @@ export interface PulseSourceContext {
 /**
  * One adapter per upstream source. Collectors must be fully bounded: every
  * fetch carries a timeout and byte cap, and a throw only marks the source
- * unhealthy in the snapshot — it never aborts the pipeline.
+ * unhealthy in the snapshot; it never aborts the pipeline.
  */
 export interface PulseSource {
   readonly id: string;

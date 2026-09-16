@@ -22,7 +22,7 @@ const coopsPredictionsSchema = z.object({
 /** San Juan (La Puntilla) water level vs predicted astronomical tide. */
 export const noaaCoopsSource: PulseSource = {
   id: "noaa-coops-sju",
-  name: "NOAA tides — San Juan",
+  name: "NOAA tides: San Juan",
   category: "flood",
   homepage: "https://tidesandcurrents.noaa.gov/stationhome.html?id=9755371",
   collect: async (ctx) => {

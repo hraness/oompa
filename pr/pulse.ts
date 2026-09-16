@@ -10,7 +10,7 @@ import {
 import { collectSnapshot } from "./pipeline.ts";
 import { PULSE_SOURCES } from "./sources/index.ts";
 
-const DATA_DIRECTORY = join("site", "pr", "data");
+const DATA_DIRECTORY = join("pr", "data");
 const SNAPSHOT_PATH = join(DATA_DIRECTORY, "snapshot.json");
 const HISTORY_PATH = join(DATA_DIRECTORY, "history.json");
 const HISTORY_LIMIT = 6000;
