@@ -17,7 +17,10 @@ use std::time::Duration;
 
 use daemon::{CallError, Daemon};
 use desktop_foundation::outputs::OutputsSection;
-use desktop_foundation::{AccessibilityMetadata, Host, MenuItem, MenuModel, MenuNode, Options};
+use desktop_foundation::{
+    AccessibilityMetadata, DispatchOutcome, Host, MenuItem, MenuModel, MenuNode, Options,
+    RenderError,
+};
 
 const SESSION_LIMIT: u32 = 8;
 
@@ -107,9 +110,9 @@ impl Host for OompaHost {
         }
     }
 
-    fn dispatch(&self, id: &str) {
+    fn dispatch_result(&self, id: &str) -> DispatchOutcome {
         if self.outputs.dispatch(id) {
-            return;
+            return DispatchOutcome::Accepted;
         }
         if id == "daemon.start" {
             // The CLI owns daemon startup. Keep its exact argv and inherited
@@ -122,7 +125,13 @@ impl Host for OompaHost {
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null());
             let _ = run_cli_in_background(command);
+            return DispatchOutcome::Accepted;
         }
+        DispatchOutcome::Rejected
+    }
+
+    fn render_failed(&self, error: RenderError) {
+        eprintln!("oompa-menubar: render failed: {error:?}");
     }
 }
 
