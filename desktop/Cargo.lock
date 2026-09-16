@@ -589,13 +589,19 @@ dependencies = [
 
 [[package]]
 name = "desktop-foundation"
-version = "0.4.1"
-source = "git+https://github.com/hraness/desktop-foundation?tag=v0.4.1#8763e381274f9bbb94b6319c84ed98d23cf26ab7"
+version = "0.5.0"
+source = "git+https://github.com/hraness/desktop-foundation?tag=v0.5.0#513cfa766f5d7ef1c4b6b96151a5d90467f165c2"
 dependencies = [
+ "fs2",
  "image",
  "libc",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "serde",
  "serde_json",
  "tauri",
+ "tauri-build",
 ]
 
 [[package]]
@@ -866,6 +872,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fs2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9564fc758e15025b46aa6643b1b77d047d1a56a1aea6e01002ac0c7026876213"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]

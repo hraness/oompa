@@ -1222,8 +1222,9 @@ describe("release workflow", () => {
     const document = asRecord(Bun.YAML.parse(workflow), "CI workflow");
     const jobs = asRecord(document.jobs, "CI workflow jobs");
     const check = asRecord(jobs.check, "CI check job");
+    const menubar = asRecord(jobs.menubar, "CI menubar job");
     const required = asRecord(jobs.required, "CI required job");
-    expect(Object.keys(jobs).sort()).toEqual(["browser", "check", "required"]);
+    expect(Object.keys(jobs).sort()).toEqual(["browser", "check", "menubar", "required"]);
     expect(check.name).toBe("Check (${{ matrix.os }}, ${{ matrix.gate }})");
     expect(check["runs-on"]).toBe("${{ matrix.os }}");
     expect(check["timeout-minutes"]).toBe("${{ matrix.gate == 'remainder' && (matrix.os == 'macos-15' && 25 || 20) || 75 }}");
@@ -1322,8 +1323,33 @@ describe("release workflow", () => {
     expect(workflow).not.toContain("build:site -- --check");
     expect(workflow).not.toContain("authority-supervisor-runtime.test.ts");
 
+    expect(menubar.name).toBe("Menu-bar companion");
+    expect(menubar["runs-on"]).toBe("macos-15");
+    expect(menubar.if).toBeUndefined();
+    expect(menubar["continue-on-error"]).toBeUndefined();
+    if (!Array.isArray(menubar.steps)) {
+      throw new TypeError("CI menubar job steps must be an array");
+    }
+    const menubarSteps = menubar.steps.map((step, index) => asRecord(step, `CI menubar step ${index}`));
+    for (const step of menubarSteps) {
+      expect(step.if).toBeUndefined();
+      expect(step["continue-on-error"]).toBeUndefined();
+    }
+    expect(menubarSteps
+      .map((step) => step.uses)
+      .filter((value): value is string => typeof value === "string"))
+      .toEqual([reviewedActions.checkout]);
+    expect(menubarSteps.map((step) => step.name)).toEqual([
+      "Check out exact source",
+      "Build and test the menu-bar companion",
+    ]);
+    const menubarBuild = asRecord(menubarSteps[1], "CI menubar build step");
+    expect(String(menubarBuild.run).trim().replace(/\s+/gu, " ")).toBe(
+      "set -euo pipefail cargo build --release --locked --manifest-path desktop/Cargo.toml cargo test --locked --manifest-path desktop/Cargo.toml",
+    );
+
     expect(required.name).toBe("Required");
-    expect(required.needs).toEqual(["check", "browser"]);
+    expect(required.needs).toEqual(["check", "browser", "menubar"]);
     expect(required.if).toBe("${{ always() }}");
     expect(required["continue-on-error"]).toBeUndefined();
     if (!Array.isArray(required.steps)) {
@@ -1337,8 +1363,9 @@ describe("release workflow", () => {
     expect(asRecord(requiredStep.env, "CI required environment")).toEqual({
       CHECK_RESULT: "${{ needs.check.result }}",
       BROWSER_RESULT: "${{ needs.browser.result }}",
+      MENUBAR_RESULT: "${{ needs.menubar.result }}",
     });
-    expect(requiredStep.run).toBe('test "$CHECK_RESULT" = "success" && test "$BROWSER_RESULT" = "success"');
+    expect(requiredStep.run).toBe('test "$CHECK_RESULT" = "success" && test "$BROWSER_RESULT" = "success" && test "$MENUBAR_RESULT" = "success"');
   });
 
   test("keeps scoped Ubuntu Chromium setup mandatory before the unchanged compiled browser gate", async () => {

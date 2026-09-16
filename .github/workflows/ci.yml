@@ -187,9 +187,27 @@ jobs:
           include-hidden-files: false
           retention-days: 7
 
+  menubar:
+    name: Menu-bar companion
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          fetch-tags: false
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Build and test the menu-bar companion
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --manifest-path desktop/Cargo.toml
+          cargo test --locked --manifest-path desktop/Cargo.toml
+
   required:
     name: Required
-    needs: [check, browser]
+    needs: [check, browser, menubar]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -198,4 +216,5 @@ jobs:
         env:
           CHECK_RESULT: ${{ needs.check.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
-        run: test "$CHECK_RESULT" = "success" && test "$BROWSER_RESULT" = "success"
+          MENUBAR_RESULT: ${{ needs.menubar.result }}
+        run: test "$CHECK_RESULT" = "success" && test "$BROWSER_RESULT" = "success" && test "$MENUBAR_RESULT" = "success"
