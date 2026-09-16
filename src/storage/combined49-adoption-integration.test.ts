@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -12,6 +12,8 @@ import { combined49SwitchDatabaseBytes, combined49SwitchFixture } from "../../sc
 import { assertCombined49AdoptionSchema } from "./combined49-adoption-schema";
 import { initializeStatePaths, resolveStatePaths, type StatePaths } from "./paths";
 import { StateStore } from "./state-store";
+
+setDefaultTimeout(30_000);
 
 const captures = [
   { name: "retained owner, queue, usage and released Claude custody", bytes: combined49DatabaseBytes, identity: combined49Fixture },

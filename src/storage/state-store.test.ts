@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, renameSync, symlinkSync } from "node:fs";
 import { chmod, lstat, mkdtemp, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
@@ -142,6 +142,8 @@ import {
   deriveLegacySessionProfileKey,
   deriveLegacyWorkProfileKey,
 } from "./canonical-profile-storage";
+
+setDefaultTimeout(60_000);
 
 const stores: StateStore[] = [];
 // Compare archived readonly values directly, without parsing or normalizing

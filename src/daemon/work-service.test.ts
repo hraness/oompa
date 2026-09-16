@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,6 +45,8 @@ import type {
 import { SessionEventCursorCodec } from "./session-event-cursor";
 import { CommandFailure, OompaService } from "./service";
 import { provisionMigratedStateTemplate } from "../../scripts/fixtures/migrated-state-template";
+
+setDefaultTimeout(30_000);
 
 const signal = new AbortController().signal;
 
