@@ -2,7 +2,7 @@ import { lstat, realpath } from "node:fs/promises";
 import { delimiter, isAbsolute, join } from "node:path";
 
 import { DevinError } from "./errors.ts";
-import { DEVIN_PIN, DEVIN_VERSION_OUTPUT_PATTERN } from "./pin.ts";
+import { DEVIN_MODEL, DEVIN_PIN, DEVIN_VERSION_OUTPUT_PATTERN } from "./pin.ts";
 
 /** Environment keys a Devin child may inherit. Nothing else crosses the boundary. */
 export const DEVIN_SAFE_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
@@ -223,4 +223,14 @@ export async function resolvePinnedDevinRuntime(
     throw new DevinError("RUNTIME_MISMATCH", `Oompa requires Devin CLI ${DEVIN_PIN}`);
   }
   return { executablePath, version: DEVIN_PIN, build, versionOutput: reported.trim() };
+}
+
+/** The exact argv the daemon launches for one ACP session on the pinned build. */
+export type DevinAcpArgv = readonly [string, "acp", "--model", typeof DEVIN_MODEL];
+
+export function devinAcpArgv(runtime: Pick<PinnedDevinRuntime, "executablePath">): DevinAcpArgv {
+  if (!isAbsolute(runtime.executablePath)) {
+    throw new DevinError("INVALID_INPUT", "the Devin executable path must be absolute");
+  }
+  return Object.freeze([runtime.executablePath, "acp", "--model", DEVIN_MODEL] as const);
 }

@@ -3,6 +3,7 @@ import type { Preset, PresetRequirement, Provider } from "../domain/presets";
 import type { ProviderAccountId } from "../domain/provider-accounts";
 import type {
   EffectiveClaudeRuntimeProfile,
+  EffectiveDevinRuntimeProfileV2,
   EffectiveRuntimeProfile,
 } from "../domain/runtime-profile";
 import type { AccountRateLimitResetOutcome } from "../domain/usage-metrics";
@@ -365,6 +366,47 @@ export interface ClaudeRuntimePort extends SessionRuntimePort<EffectiveClaudeRun
    * Codex publishes its own request authority on the notification; Claude's
    * control request carries only an id, so the daemon asks the port for it.
    */
+  interactionAuthority(
+    authority: ProfileAuthority,
+    providerThreadId: string,
+    requestId: string,
+  ): ProviderInteractionAuthority;
+}
+
+export type DevinRuntimeStartReview = RuntimeStartReviewOf<EffectiveDevinRuntimeProfileV2>;
+
+/** Bounded Oompa observation; Devin exposes no admitted stable account identity. */
+export type DevinAccountReadinessProjection = {
+  readiness: "signed_in" | "signed_out" | "unverified";
+  observedAt: number;
+};
+
+/**
+ * The Devin implementation of the neutral seam. Devin owns authentication and
+ * native sessions inside its isolated home; Oompa observes only signed-in
+ * readiness and the bounded ACP facts required by the neutral session
+ * timeline. The daemon does not select this port yet: `kb/plans/devin-provider.md`
+ * Phase 3 lifts the retired-provider refusals that keep it unwired.
+ */
+export interface DevinRuntimePort extends SessionRuntimePort<EffectiveDevinRuntimeProfileV2> {
+  readonly provider: "devin";
+  readAccount(input: { authority: ProfileAuthority; signal: AbortSignal }): Promise<DevinAccountReadinessProjection>;
+  pinnedVersion(): string;
+  /**
+   * Rekeys idle live Devin sessions after the durable provider-generation
+   * commit. Active or ambiguously retained children are rejected rather than
+   * carried across authority.
+   */
+  rebindProfileAuthority(input: {
+    expectedAuthority: ProfileAuthority;
+    nextAuthority: ProfileAuthority;
+  }): void;
+  /** Current-daemon execution authority used before scheduled work becomes durable. */
+  hasLiveSession?(input: {
+    authority: ProfileAuthority;
+    providerThreadId: string;
+  }): boolean;
+  /** The exact durable authority one pending ACP permission request binds. */
   interactionAuthority(
     authority: ProfileAuthority,
     providerThreadId: string,

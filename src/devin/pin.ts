@@ -21,3 +21,13 @@ export const DEVIN_PIN = "3000.10.27" satisfies DevinPinVersion;
  * beside the observation; only the version participates in admission.
  */
 export const DEVIN_VERSION_OUTPUT_PATTERN = /^devin (\d+\.\d+\.\d+) \(([0-9a-f]{7,40})\)\s*$/u;
+
+/**
+ * Exact model family Oompa asks the pinned `devin acp` server to use. The
+ * Astra preset in `src/domain/presets.ts` names the same model; live
+ * acceptance (plan Phase 4) must confirm the pinned build honours it.
+ */
+export const DEVIN_MODEL = "gpt-6-astra";
+
+/** ACP protocol version the pinned build's `devin acp` server implements. */
+export const DEVIN_ACP_PROTOCOL_VERSION = 1;
