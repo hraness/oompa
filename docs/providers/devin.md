@@ -152,14 +152,40 @@ allowance, and Oompa uses no undocumented network endpoint for this read. See
 the [CLI reference](https://docs.devin.ai/cli/reference/commands) and
 [usage documentation](https://docs.devin.ai/admin/billing/usage).
 
+### The `devin_usage_panel` source
+
+`src/domain/devin-usage-source.ts` names the one source this reader feeds,
+`devin_usage_panel`, and holds its closed codec. An observation carries the
+exact `devin --version` line, the weekly and optional daily used and remaining
+percent, each window's resolved reset instant together with the year-less text
+the panel rendered, and the reader's exact `unknown` reason when the grammar
+refuses. A reading the codec cannot admit becomes `unknown` with
+`quota_line_ambiguous`; it is never reduced to a partial value.
+
+The source is deliberately **not** a member of `providerUsageSourceSchema` in
+`src/domain/provider-usage.ts`. That enum is the persisted and hosted usage
+vocabulary, and its values reach `provider_usage_observation_receipts`, the
+cloud usage payloads and the browser. A Devin panel observation reaches none of
+those: its binding is `local_only` with `persisted: false`, so no stored table,
+no hosted payload and no browser surface holds one, and no hosted data surface
+or cost entry is registered for it. `oompa account show` renders only the source
+name, as `Usage source: devin_usage_panel (local only, not stored)`, because
+naming a source is not observing one: that line carries no percentage, reset
+instant or allowance. Persisting an observation needs a registered data surface
+and its cost entry, which is separate work.
+
 ## Existing local data
 
 The v39 migration and historical provider tags remain readable. Oompa preserves
 existing Devin sessions, transcript events, usage facts, reviewed runtime
 profiles, and unsettled authority records. It never treats a historical Devin
-row's legacy Codex shadow column as Codex execution authority. Retired sessions
-are read-only and cannot accept turns, approvals, scheduled work, or provider
-switches.
+row's legacy Codex shadow column as Codex execution authority. Sessions created
+during the 2026-09-06 removal era may carry an inert `retiredProvider: "devin"`
+metadata marker; the marker still parses and keeps the session's name and note,
+and it grants and withholds nothing. Schema 61 removed the blanket
+`retired_provider_*` refusal triggers, so those rows are governed by the same
+ordinary authority guards as every other session rather than by a separate
+retired fence.
 
 Oompa does not delete or inspect existing provider-owned credentials or profile
 directories. New profiles receive their own isolated Devin HOME and XDG

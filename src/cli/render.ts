@@ -2595,6 +2595,13 @@ const renderAccountShow = (data: unknown): string => {
       rows.push("Account allowance: unknown");
       if (typeof usage.reason === "string") rows.push(`  ${safeDiagnostic(usage.reason)}`);
     }
+    // Additive and local only: name where a Devin quota read would come from
+    // without claiming a value this command did not observe. `persisted: false`
+    // is the payload's own statement that nothing stored or hosted holds it.
+    const usageSource = object(root?.usageSource);
+    if (typeof usageSource?.source === "string" && usageSource.persisted === false) {
+      rows.push(`Usage source: ${line(usageSource.source)} (local only, not stored)`);
+    }
     return rows.join("\n");
   }
   const rows = renderAccountHeader(account);
