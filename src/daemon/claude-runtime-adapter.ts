@@ -862,6 +862,25 @@ export class PinnedClaudeRuntimeManager implements ClaudeRuntimePort {
     });
   }
 
+  async compact(input: {
+    authority: ProfileAuthority;
+    providerThreadId: string;
+    signal: AbortSignal;
+  }): Promise<void> {
+    this.#assertLaunchAuthority(input.authority, input.signal);
+    const session = this.#requireSession(input.authority, input.providerThreadId);
+    if (session.activeTurnId !== undefined) {
+      throw new ClaudeError("INVALID_INPUT", "The Claude session has an active turn; compaction is only admitted between turns.");
+    }
+    await this.#assertSessionConfig(session, input.signal);
+    // `/compact` resolves once the runtime accepted the write; the episode's
+    // applied outcome arrives as the provider's own `compaction` fact.
+    await this.#withWriteWitness(session.client, "session/compact", async (onWriteStarted) => {
+      await session.client.compact(onWriteStarted);
+      input.signal.throwIfAborted();
+    });
+  }
+
   async observeSession(input: {
     authority: ProfileAuthority;
     providerThreadId: string;

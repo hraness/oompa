@@ -238,6 +238,7 @@ class SwitchFakeCodex implements CodexRuntimePort {
     this.calls.push("list");
     return { sessions: [], nextCursor: null };
   }
+  compact(): Promise<never> { return Promise.reject(this.#unsupported()); }
   rename(): Promise<never> { return Promise.reject(this.#unsupported()); }
   inspectTurn(): Promise<never> { return Promise.reject(this.#unsupported()); }
   inspectInteractionAuthority(): Promise<never> { return Promise.reject(this.#unsupported()); }
@@ -566,6 +567,7 @@ class SwitchFakeClaude implements ClaudeRuntimePort {
     };
     delete (this.projection as { activeTurnId?: string }).activeTurnId;
   }
+  async compact(): Promise<void> { this.calls.push("compact"); }
   #unsupported(): never { throw new Error("This fixture does not drive that Claude capability."); }
   interactionAuthority(): never {
     this.interactionAuthorityCalls += 1;

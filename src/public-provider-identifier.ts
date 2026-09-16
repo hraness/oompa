@@ -122,6 +122,7 @@ export const projectPublicSessionEventBody = (
       agentId: project("agentId"),
     };
     case "token_usage": return { ...body, turnId: project("turnId") };
+    case "compaction": return { ...body, turnId: project("turnId") };
     case "interaction_requested": return body.interactionKind === "mcp_elicitation"
       ? { ...body, summary: PUBLIC_MCP_FORM_SUMMARY }
       : body;

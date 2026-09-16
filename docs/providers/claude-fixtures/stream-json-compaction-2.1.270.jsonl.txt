@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","claude_code_version":"2.1.270","model":"claude-fable-5-1","permissionMode":"default","session_id":"5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a","tools":[],"uuid":"11111110-0000-4000-8000-000000000001"}
+{"type":"system","subtype":"status","status":"compacting","session_id":"5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a","uuid":"11111110-0000-4000-8000-000000000002"}
+{"type":"system","subtype":"compact_boundary","content":"Conversation compacted","level":"info","compactMetadata":{"trigger":"manual","preTokens":25920,"postTokens":2091},"session_id":"5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a","uuid":"11111110-0000-4000-8000-000000000003"}
+{"type":"system","subtype":"status","status":null,"compact_result":"success","session_id":"5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a","uuid":"11111110-0000-4000-8000-000000000004"}
+{"type":"system","subtype":"init","claude_code_version":"2.1.270","model":"claude-fable-5-1","permissionMode":"default","session_id":"5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a","tools":[],"uuid":"11111110-0000-4000-8000-000000000005"}
+{"type":"system","subtype":"status","status":"compacting","session_id":"5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a","uuid":"11111110-0000-4000-8000-000000000006"}
+{"type":"system","subtype":"status","status":null,"compact_result":"failed","compact_error":"Not enough messages to compact.","session_id":"5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a","uuid":"11111110-0000-4000-8000-000000000007"}

@@ -321,6 +321,13 @@ const sanitizeCompleteBody = (
       ...body,
       turnId: body.turnId === null ? null : publicId(body.turnId),
     };
+    case "compaction": return {
+      ...body,
+      turnId: body.turnId === null ? null : publicId(body.turnId),
+      ...(body.strategy === undefined
+        ? {}
+        : { strategy: safeInline(body.strategy) }),
+    };
     case "turn_started": return {
       ...body,
       turnId: publicId(body.turnId),

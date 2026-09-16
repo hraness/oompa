@@ -211,8 +211,10 @@ class FakeCodex implements CodexRuntimePort {
   steerError?: Error;
   interruptError?: Error;
   renameError?: Error;
+  compactError?: Error;
   beforeInterruptReturn?: () => Promise<void>;
   beforeRenameReturn?: () => Promise<void>;
+  beforeCompactReturn?: () => Promise<void>;
   turnId = "turn-next";
   turnStatus: "completed" | "interrupted" | "failed" | "inProgress" = "inProgress";
   committedStartTurns = 0;
@@ -599,6 +601,11 @@ class FakeCodex implements CodexRuntimePort {
     await this.beforeRenameReturn?.();
     if (this.renameError !== undefined) throw this.renameError;
   }
+  async compact(): Promise<void> {
+    this.calls.push("compact");
+    await this.beforeCompactReturn?.();
+    if (this.compactError !== undefined) throw this.compactError;
+  }
   async inspectTurn(): Promise<unknown> { return { id: "turn-next", runtimeMs: 123 }; }
   async inspectInteractionAuthority(
     input: Parameters<CodexRuntimePort["inspectInteractionAuthority"]>[0],
@@ -969,6 +976,7 @@ class FakeClaude implements ClaudeRuntimePort {
 
   async steer(): Promise<void> { this.calls.push("steer"); }
   async interrupt(): Promise<void> { this.calls.push("interrupt"); }
+  async compact(): Promise<void> { this.calls.push("compact"); }
   async close(): Promise<void> {
     this.closeCalls += 1;
     if (this.closeError !== undefined) throw this.closeError;
@@ -2432,6 +2440,10 @@ async function claudeAccountFixture(
     interrupt: async () => {
       providerSessionCalls.push("interrupt");
       throw new Error("Claude interrupt was not expected.");
+    },
+    compact: async () => {
+      providerSessionCalls.push("compact");
+      throw new Error("Claude compact was not expected.");
     },
     endSession: async () => {
       providerSessionCalls.push("end-session");
@@ -24426,6 +24438,63 @@ describe("OompaService", () => {
     const firstStop = await service.execute(stop, { signal });
     expect(await service.execute(stop, { signal })).toEqual(firstStop);
     expect(codex.calls.filter((call) => call === "stop")).toHaveLength(1);
+  });
+
+  test("session.compact dispatches provider compaction, events it, and replays by key", async () => {
+    const value = await fixture();
+    const { service, codex, store } = value;
+    const { sessionId } = await createIdleSession(value, "Compact dispatch");
+    const compact = { kind: "session.compact" as const, session: sessionId, idempotencyKey: "00000000-0000-4000-8000-000000000107" };
+    const first = await service.execute(compact, { signal });
+    expect(first).toMatchObject({ requested: true, idempotencyKey: compact.idempotencyKey });
+    expect(codex.calls.filter((call) => call === "compact")).toHaveLength(1);
+    const compactions = () => store.listSessionEvents({ afterSequence: 0, sessionId }).events.filter((event) => event.body.type === "compaction");
+    expect(compactions().map((event) => event.body)).toMatchObject([
+      { type: "compaction", outcome: "requested", trigger: "manual", turnId: null },
+    ]);
+    // A same-key replay returns the stored receipt: no second provider
+    // dispatch and no second request event.
+    expect(await service.execute(compact, { signal })).toEqual(first);
+    expect(codex.calls.filter((call) => call === "compact")).toHaveLength(1);
+    expect(compactions()).toHaveLength(1);
+  });
+
+  test("session.compact refuses a turn in flight without dispatching", async () => {
+    const value = await fixture();
+    const { service, codex } = value;
+    const { sessionId } = await createIdleSession(value, "Compact during turn");
+    codex.readProjection = { ...codex.readProjection, status: "active", activeTurnId: "turn-in-flight" };
+    await expect(service.execute({ kind: "session.compact", session: sessionId }, { signal }))
+      .rejects.toMatchObject({ code: "CONFLICT" });
+    expect(codex.calls).not.toContain("compact");
+  });
+
+  test("an uncertain session.compact reconciles against the event stream without replay", async () => {
+    const value = await fixture();
+    const { service, codex, store } = value;
+    const { sessionId } = await createIdleSession(value, "Compact recovery");
+    const session = store.requireSession(sessionId);
+    const profile = store.requireProfileById(session.profileId);
+    codex.compactError = new IndeterminateCodexEffectError("thread/compact/start", 7);
+    await expect(service.execute({ kind: "session.compact", session: sessionId, idempotencyKey: "00000000-0000-4000-8000-000000000108" }, { signal }))
+      .rejects.toMatchObject({ code: "RECOVERY_REQUIRED" });
+    expect(codex.calls.filter((call) => call === "compact")).toHaveLength(1);
+    // No compaction event exists yet, so the exact provider read cannot prove
+    // the effect; recovery stays unsettled rather than replaying.
+    await expect(service.execute({ kind: "session.recover", session: sessionId }, { signal }))
+      .rejects.toMatchObject({ code: "RECOVERY_REQUIRED" });
+    // The provider's own fact then lands: the compaction episode completed.
+    store.appendSessionEvent({
+      providerAuthority: store.requireProviderAccountAuthority(profile.id, "codex"),
+      sessionId,
+      accountId: profile.id,
+      providerGeneration: profile.processGeneration,
+      providerConnectionId: null,
+      body: { type: "compaction", outcome: "completed", trigger: "provider", turnId: "turn-compacted" },
+    });
+    const recovered = await service.execute({ kind: "session.recover", session: sessionId }, { signal });
+    expect(recovered).toMatchObject({ recovery: { resolved: true, resolution: "proven_applied" } });
+    expect(codex.calls.filter((call) => call === "compact")).toHaveLength(1);
   });
 
   test("fences incomplete pending transcript replay without manufacturing source runtime authority", async () => {

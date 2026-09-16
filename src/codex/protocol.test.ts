@@ -206,6 +206,12 @@ describe("pinned server requests and safe notifications", () => {
       expect(clientRequestSource).toContain(
         '{ "method": "account/rateLimitResetCredit/consume", id: RequestId, params: ConsumeAccountRateLimitResetCreditParams, }',
       );
+      expect(clientRequestSource).toContain(
+        '{ "method": "thread/compact/start", id: RequestId, params: ThreadCompactStartParams, }',
+      );
+      expect(notificationSource).toContain(
+        '{ "method": "thread/compacted", "params": ContextCompactedNotification }',
+      );
       expect(Object.keys(PINNED_CODEX_SCHEMA_DIGESTS)).toHaveLength(15);
       for (const [relativePath, expected] of Object.entries(PINNED_CODEX_SCHEMA_DIGESTS)) {
         const source = await readFile(join(outputDirectory, relativePath), "utf8");
@@ -236,6 +242,16 @@ describe("pinned server requests and safe notifications", () => {
       method: "account/rateLimitResetCredit/consume",
       effect: "account-mutation",
       deadlineMs: 15_000,
+      lostResponse: "reconcile",
+      experimental: false,
+    });
+  });
+
+  test("declares the pinned thread compaction operation with indeterminate-response reconciliation", () => {
+    expect(OPERATIONS["thread/compact/start"]).toEqual({
+      method: "thread/compact/start",
+      effect: "thread-mutation",
+      deadlineMs: 30_000,
       lostResponse: "reconcile",
       experimental: false,
     });
@@ -454,6 +470,7 @@ describe("pinned server requests and safe notifications", () => {
     expect(PINNED_CODEX_NOTIFICATION_SCHEMA_DIGEST).toMatch(/^[a-f0-9]{64}$/u);
     expect(() => assertPinnedCodexNotificationMatrix()).not.toThrow();
     expect(codexNotificationDisposition("thread/deleted")).toBe("routed");
+    expect(codexNotificationDisposition("thread/compacted")).toBe("routed");
     expect(codexNotificationDisposition("account/rateLimits/updated")).toBe("routed");
     expect(codexNotificationDisposition("turn/diff/updated")).toBe("reduced");
     expect(codexNotificationDisposition("thread/realtime/outputAudio/delta")).toBe("ignored");
@@ -470,6 +487,26 @@ describe("pinned server requests and safe notifications", () => {
       type: "threadDeleted",
       threadId: "thread-1",
     });
+    expect(parseFact("thread/compacted", {
+      threadId: "thread-1",
+      turnId: "turn-9",
+      private: "discarded",
+    })).toEqual({
+      type: "threadCompaction",
+      threadId: "thread-1",
+      turnId: "turn-9",
+      outcome: "completed",
+    });
+    for (const malformed of [
+      { threadId: "thread-1" },
+      { turnId: "turn-9" },
+      { threadId: "", turnId: "turn-9" },
+      { threadId: "x".repeat(513), turnId: "turn-9" },
+      { threadId: "thread-1", turnId: 42 },
+      { threadId: "thread-1", turnId: null },
+    ]) {
+      expect(() => parseFact("thread/compacted", malformed)).toThrow();
+    }
     expect(parseFact("account/rateLimits/updated", {
       rateLimits: { usedPercent: 99, private: "discarded" },
     })).toEqual({ type: "rateLimitsUpdated" });

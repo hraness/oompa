@@ -6512,6 +6512,7 @@ export async function main(
         || invocation.command.kind === "session.queue"
         || invocation.command.kind === "session.steer"
         || invocation.command.kind === "session.stop"
+        || invocation.command.kind === "session.compact"
         || invocation.command.kind === "session.rename"
         || invocation.command.kind === "session.switch"
         || invocation.command.kind === "session.task.create"

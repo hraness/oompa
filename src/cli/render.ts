@@ -472,6 +472,7 @@ const renderSingleEvent = (event: SessionEvent): string => {
     ].join("\n");
     case "diff_updated": return `Diff: ${String(body.changedFiles)} files, ${String(body.patchBytesObserved)} bytes observed`;
     case "token_usage": return `Tokens: ${body.totalTokens === null ? "unknown" : String(body.totalTokens)} total${body.modelContextWindow === null ? "" : ` of ${String(body.modelContextWindow)}`}${body.providerCost === undefined ? "" : `; provider cost ${String(body.providerCost.amount)} ${body.providerCost.currency}`}`;
+    case "compaction": return `Compaction ${line(body.outcome)} (${line(body.trigger)}${body.strategy === undefined ? "" : `, ${line(body.strategy)}`})${body.preTokens === undefined || body.postTokens === undefined ? "" : `, ${String(body.preTokens)} to ${String(body.postTokens)} tokens`}`;
     case "interaction_requested": return [
       `Interaction required: ${line(body.interactionKind)} ${line(body.interactionId)}`,
       `  revision ${String(body.revision)}${body.blocking ? ", blocking" : ""}`,

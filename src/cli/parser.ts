@@ -246,7 +246,7 @@ Usage:
   oompa session events <session> [--cursor <cursor>] [--limit <1..200>] [--wait-ms <0..30000>] [--json|--jsonl|--follow]
   oompa session watch <session> [--cursor <cursor>] [--jsonl]
   oompa session interactions <session> [--pending] [--limit <1..100>] [--cursor <cursor>]
-  oompa session rename|recover|abandon|archive|unarchive|note|preset|fast|project
+  oompa session rename|compact|recover|abandon|archive|unarchive|note|preset|fast|project
   oompa notification-hours status|set
   oompa notification-email status|enable|disable
   oompa autorespond-after-hours status|enable|disable
@@ -497,7 +497,7 @@ Usage:
   oompa session interactions <session> [--pending] [--limit <1..100>] [--cursor <cursor>]
   oompa session start <account> [--project <project>] [--provider <codex|claude>] [--preset <low|high|ultra|fable-max>] [--fast] [--idempotency-key <uuid> [--preset-contract <1|2>]]
   oompa session send|queue|steer <session> [--attach <path>]... <message>
-  oompa session stop|recover|abandon <session>
+  oompa session stop|compact|recover|abandon <session>
   oompa session archive|unarchive <session>
   oompa session adoption status [--provider <codex|claude>]
   oompa session adoption enable <account> --provider <codex|claude>
@@ -747,6 +747,7 @@ const idempotentCommandKinds = new Set<LocalCommand["kind"]>([
   "session.queue",
   "session.steer",
   "session.stop",
+  "session.compact",
   "session.rename",
   "session.switch",
   "session.task.create",
@@ -1792,6 +1793,7 @@ const parseSession = (
       };
     }
     case "stop": { const session = take(cursor, "session"); finish(cursor); return { kind: "session.stop", session }; }
+    case "compact": { const session = take(cursor, "session"); finish(cursor); return { kind: "session.compact", session }; }
     case "rename": { const session = take(cursor, "session"); return command({ kind: "session.rename", session, name: remainder(cursor, "name") }); }
     case "archive": { const session = take(cursor, "session"); finish(cursor); return { kind: "session.archive", session, archived: true }; }
     case "unarchive": { const session = take(cursor, "session"); finish(cursor); return { kind: "session.archive", session, archived: false }; }

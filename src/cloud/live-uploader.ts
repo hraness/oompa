@@ -177,6 +177,7 @@ export class LiveBatcher {
       case "plan_updated":
       case "diff_updated":
       case "token_usage":
+      case "compaction":
       case "interaction_requested":
       case "interaction_state":
       case "warning":

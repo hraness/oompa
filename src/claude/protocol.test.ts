@@ -255,6 +255,45 @@ describe("Claude stream-json fixtures", () => {
     if (notification?.type !== "task_notification") throw new Error("expected task_notification");
     expect(notification.status).toBe("completed");
   });
+
+  test("parses the captured /compact steering sequence", async () => {
+    const events = await parseFixture("stream-json-compaction-2.1.270");
+    expect(events.map((event) => event.type)).toEqual([
+      "session_init",
+      "status",
+      "compact_boundary",
+      "status",
+      "session_init",
+      "status",
+      "status",
+    ]);
+    const compacting = events[1];
+    if (compacting?.type !== "status") throw new Error("expected status");
+    expect(compacting).toEqual({
+      compactError: null,
+      compactResult: null,
+      sessionId: "5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a",
+      status: "compacting",
+      type: "status",
+    });
+    const boundary = events[2];
+    if (boundary?.type !== "compact_boundary") throw new Error("expected compact_boundary");
+    expect(boundary).toEqual({
+      postTokens: 2_091,
+      preTokens: 25_920,
+      sessionId: "5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a",
+      trigger: "manual",
+      type: "compact_boundary",
+    });
+    const succeeded = events[3];
+    if (succeeded?.type !== "status") throw new Error("expected status");
+    expect(succeeded.compactResult).toBe("success");
+    expect(succeeded.status).toBeNull();
+    const failed = events[6];
+    if (failed?.type !== "status") throw new Error("expected status");
+    expect(failed.compactResult).toBe("failed");
+    expect(failed.compactError).toBe("Not enough messages to compact.");
+  });
 });
 
 const rateLimitLine = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
@@ -593,6 +632,117 @@ describe("Claude event admission", () => {
       session_id: "s",
       type: "stream_event",
     })).toEqual({ event: "stream_event/content_block_start", type: "ignored" });
+  });
+});
+
+describe("Claude compaction event admission", () => {
+  const sessionId = "5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a";
+
+  test("parses the status envelope's outcome fields in either spelling", () => {
+    // The 2.1.x failure verdict rides on the status-clearing line itself.
+    expect(parseClaudeStreamLine({
+      compact_error: "Not enough messages to compact.",
+      compact_result: "failed",
+      session_id: sessionId,
+      status: null,
+      subtype: "status",
+      type: "system",
+    })).toEqual({
+      compactError: "Not enough messages to compact.",
+      compactResult: "failed",
+      sessionId,
+      status: null,
+      type: "status",
+    });
+    // The dedicated subtype spelling the pinned build also emits.
+    expect(parseClaudeStreamLine({
+      compact_result: "success",
+      session_id: sessionId,
+      subtype: "compact_result",
+      type: "system",
+    })).toEqual({
+      compactError: null,
+      compactResult: "success",
+      sessionId,
+      type: "compact_result",
+    });
+    // A status with no compaction fields is a valid, uninteresting envelope.
+    expect(parseClaudeStreamLine({
+      session_id: sessionId,
+      status: null,
+      subtype: "status",
+      type: "system",
+    })).toEqual({
+      compactError: null,
+      compactResult: null,
+      sessionId,
+      status: null,
+      type: "status",
+    });
+  });
+
+  test("parses compact_boundary metadata in both recorded casings", () => {
+    expect(parseClaudeStreamLine({
+      compact_metadata: { pre_tokens: 25_920, trigger: "auto" },
+      sessionId,
+      subtype: "compact_boundary",
+      type: "system",
+    })).toEqual({
+      postTokens: null,
+      preTokens: 25_920,
+      sessionId,
+      trigger: "auto",
+      type: "compact_boundary",
+    });
+    // The boundary itself is the signal; absent metadata stays explicitly null.
+    expect(parseClaudeStreamLine({
+      subtype: "compact_boundary",
+      type: "system",
+    })).toEqual({
+      postTokens: null,
+      preTokens: null,
+      sessionId: null,
+      trigger: null,
+      type: "compact_boundary",
+    });
+  });
+
+  test("degrades malformed compaction envelopes to bounded notices, never a fault", () => {
+    const notices: Array<readonly [unknown, string]> = [
+      [{ status: "has spaces", subtype: "status", type: "system" }, "system/status/invalid"],
+      [{ status: 7, subtype: "status", type: "system" }, "system/status/invalid"],
+      [
+        { compact_result: "not a code", subtype: "status", type: "system" },
+        "system/status/invalid",
+      ],
+      [
+        { compact_error: { text: "x" }, subtype: "status", type: "system" },
+        "system/status/invalid",
+      ],
+      [
+        { status: "ok", subtype: "compact_result", type: "system" },
+        "system/compact_result/invalid",
+      ],
+      [
+        { compact_result: ["failed"], subtype: "compact_result", type: "system" },
+        "system/compact_result/invalid",
+      ],
+      [
+        { compactMetadata: "nope", subtype: "compact_boundary", type: "system" },
+        "system/compact_boundary/invalid",
+      ],
+      [
+        { compactMetadata: { preTokens: -1 }, subtype: "compact_boundary", type: "system" },
+        "system/compact_boundary/invalid",
+      ],
+      [
+        { compactMetadata: { trigger: "bad trigger" }, subtype: "compact_boundary", type: "system" },
+        "system/compact_boundary/invalid",
+      ],
+    ];
+    for (const [line, event] of notices) {
+      expect(parseClaudeStreamLine(line)).toEqual({ event, type: "protocol_notice" });
+    }
   });
 });
 

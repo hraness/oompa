@@ -4243,6 +4243,121 @@ describe("CodexAppServerClient", () => {
     await client.close();
   });
 
+  test("sends the exact pinned thread compaction request and returns the empty result", async () => {
+    const codexHome = "/tmp/hra-control-plane/profile-a/codex-home";
+    const process = new FakeProcess((message, target) => {
+      if (message.method === "initialize") {
+        target.respond({
+          id: message.id,
+          result: {
+            userAgent: "codex-cli/0.153.2",
+            codexHome,
+            platformFamily: "unix",
+            platformOs: "macos",
+          },
+        });
+      } else if (message.method === "thread/compact/start") {
+        target.respond({ id: message.id, result: {} });
+      }
+    });
+    const client = createClient({
+      process,
+      authority: codexAuthority(1),
+      expectedCodexHome: codexHome,
+      isAuthorityCurrent: () => true,
+    });
+    await client.initialize();
+
+    await expect(client.compactThread("thread-live")).resolves.toMatchObject({
+      authority: codexAuthority(1),
+      value: {},
+    });
+    expect(process.writes.at(-1)).toEqual({
+      id: 3,
+      method: "thread/compact/start",
+      params: { threadId: "thread-live" },
+    });
+    await expect(client.compactThread("")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(client.compactThread("x".repeat(513))).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+    await client.close();
+  });
+
+  test("keeps a dispatched thread compaction indeterminate when its response deadline expires", async () => {
+    const codexHome = "/tmp/hra-control-plane/profile-a/codex-home";
+    const compactionWritten = deferred<undefined>();
+    const process = new FakeProcess((message, target) => {
+      if (message.method === "initialize") {
+        target.respond({
+          id: message.id,
+          result: {
+            userAgent: "codex-cli/0.153.2",
+            codexHome,
+            platformFamily: "unix",
+            platformOs: "macos",
+          },
+        });
+      } else if (message.method === "thread/compact/start") {
+        compactionWritten.resolve(undefined);
+      }
+    });
+    const client = createClient({
+      process,
+      authority: codexAuthority(1),
+      expectedCodexHome: codexHome,
+      isAuthorityCurrent: () => true,
+    });
+    await client.initialize();
+
+    jest.useFakeTimers();
+    try {
+      const mutation = client.compactThread("thread-1");
+      await compactionWritten.promise;
+      jest.advanceTimersByTime(30_000);
+
+      await expect(mutation).rejects.toMatchObject({
+        code: "INDETERMINATE_EFFECT",
+        operation: "thread/compact/start",
+      });
+      expect(process.writes.filter((frame) =>
+        (frame as { method?: unknown }).method === "thread/compact/start")).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    await client.close();
+  });
+
+  test("routes a compacted notification as a bounded thread fact", async () => {
+    const codexHome = "/tmp/hra-control-plane/profile-a/codex-home";
+    const process = successfulFake(codexHome);
+    const facts: CodexFact[] = [];
+    const client = createClient({
+      process,
+      authority: codexAuthority(1),
+      expectedCodexHome: codexHome,
+      isAuthorityCurrent: () => true,
+      connectionId: CONNECTION_ID,
+      onFact: ({ value }) => { facts.push(value); },
+    });
+    await client.initialize();
+
+    process.respond({
+      method: "thread/compacted",
+      params: { threadId: "thread-1", turnId: "turn-7", payload: "discarded" },
+    });
+    await waitFor(() => facts.some((fact) => fact.type === "threadCompaction"));
+    expect(facts.filter((fact) => fact.type === "threadCompaction")).toEqual([{
+      type: "threadCompaction",
+      threadId: "thread-1",
+      turnId: "turn-7",
+      outcome: "completed",
+      connectionId: CONNECTION_ID,
+    }]);
+    await client.close();
+  });
+
   test("bounds shutdown when TERM and stdout settlement are ignored", async () => {
     const codexHome = "/tmp/hra-control-plane/profile-a/codex-home";
     const process = new FakeProcess(

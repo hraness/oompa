@@ -192,6 +192,7 @@ export class SessionStateTracker {
       case "plan_updated":
       case "diff_updated":
       case "token_usage":
+      case "compaction":
       case "session_state":
       case "warning":
         return null;

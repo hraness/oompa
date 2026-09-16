@@ -144,7 +144,7 @@ export async function verifyClaudeLiveAcceptanceConsumption(
         && event.providerConnectionId === input.connectionId);
       switch (body.type) {
         case "gap": case "error": case "protocol_incompatible": case "provider_switched":
-        case "subagent_activity": case "warning": return refuse();
+        case "subagent_activity": case "warning": case "compaction": return refuse();
         case "connection": requireThat(body.state === "connected"); break;
         case "session_status":
           requireThat(body.status === "active" || body.status === "idle");

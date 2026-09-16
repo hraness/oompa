@@ -10,10 +10,26 @@ import { mutationEvidenceCanonical49Schema } from "./historical-effect-evidence-
 const [send, steer, stop, rename, start, switched, login, claudeLogin, devinLogin,
   logout, loginCancel] = mutationEvidenceCanonical49Schema.options;
 
+// `session.compact` exists only in this writer. Its recovery proof is the
+// session event stream itself, so the evidence pins the exact stream epoch
+// and the sequence observed before dispatch instead of a provider timestamp.
+const compact = z.object({
+  kind: z.literal("session.compact"),
+  providerThreadId: z.string().min(1).max(200),
+  baseline: z.object({
+    providerUpdatedAt: z.number().nonnegative().nullable(),
+    status: z.enum(["active", "idle", "terminal"]),
+    activeTurnId: z.string().min(1).max(200).nullable(),
+  }).strict(),
+  streamEpoch: z.string().uuid(),
+  streamSequence: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+}).strict();
+
 export const joinedMutationEffectEvidenceSchema = z.discriminatedUnion("kind", [
   send.extend({ runtimeProfile: reviewedRuntimeProfileV1Schema.optional() }),
   steer,
   stop,
+  compact,
   rename,
   start.extend({ runtimeProfile: reviewedRuntimeProfileV1Schema.optional() }),
   switched.extend({ runtimeProfile: reviewedRuntimeProfileV1Schema }),

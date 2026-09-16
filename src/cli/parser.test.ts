@@ -1190,6 +1190,7 @@ describe("CLI parser", () => {
       ["session", "queue", "session", "hello"],
       ["session", "steer", "session", "hello"],
       ["session", "stop", "session"],
+      ["session", "compact", "session"],
       ["session", "rename", "session", "New name"],
     ] as const;
     for (const argv of commands) {
