@@ -48,15 +48,13 @@ const commands = (...values: readonly string[]): ContentBlock => ({ kind: "comma
 const list = (...items: readonly (readonly InlineContent[])[]): ContentBlock => ({ kind: "list", items });
 const source = (path: string): string => `https://github.com/hraness/oompa/blob/main/${path}`;
 
-const candidateInstallNotice: ContentBlock = {
+const releaseInstallNotice: ContentBlock = {
   kind: "notice",
   label: isAdmittedRelease(publicContent.releaseVersion)
     ? "CLI artifact admitted; daemon startup blocked"
     : "Candidate artifact not yet admitted",
   content: [
-    text(isAdmittedRelease(publicContent.releaseVersion)
-      ? `The admitted v${admittedReleaseVersion} artifact may be installed with the command below.`
-      : publicContent.installNotice),
+    text(publicContent.installNotice),
     text(" Read the "),
     link("admitted release installation notes", publicContent.links.admittedInstall),
     text(isAdmittedRelease(publicContent.releaseVersion)
@@ -134,16 +132,16 @@ export const docsPages: readonly DocsPage[] = [
   {
     path: "/docs/start/",
     title: "Set up Oompa",
-    description: "Find the admitted CLI and this candidate's installation limits, then follow the first-run path only when artifact admission and rollout prerequisites are satisfied.",
+    description: "Install the admitted CLI and check its offline health, then follow the first-run path only when daemon rollout prerequisites are satisfied.",
     keywords: ["install", "setup", "login", "first session", "Bun"],
-    reviewDate: "2026-09-10",
+    reviewDate: "2026-09-16",
     admission: {
       owner: "Hraness",
-      checkedOn: "2026-09-10",
+      checkedOn: "2026-09-16",
       reassessOn: "2026-10-06",
       decision: "keep",
       readerJob: "Install Oompa safely and understand the shortest path to a first local conversation.",
-      contribution: "An ordered installer-to-session path separates the immutable admitted predecessor from the unavailable candidate installer and puts the still-closed startup boundary before the first state-changing setup command.",
+      contribution: "An ordered installer-to-session path identifies the admitted immutable artifact and puts the still-closed startup boundary before the first state-changing setup command.",
       overlapDecision: "The homepage offers a product overview, Sessions covers an existing setup, and Status owns upgrade and rollout detail. This page alone owns first-run order.",
       evidence: ["src/install-preflight.ts", "src/cli/parser.ts", "site/content.ts", "docs/beta-release-notes.md"],
       scores: [2, 2, 2, 2, 2, 1],
@@ -153,7 +151,7 @@ export const docsPages: readonly DocsPage[] = [
         id: "install",
         heading: "1. Install and check the CLI",
         blocks: [
-          candidateInstallNotice,
+          releaseInstallNotice,
           commands(publicContent.installCommand),
           paragraph(text(`Only after exact artifact admission, use macOS or Linux with Bun ${publicPins.bun} and curl to install v${publicContent.releaseVersion}. The installer verifies the immutable release before replacing the Oompa command. It does not start the daemon.`)),
           commands("oompa --version", publicContent.doctorCommand),
@@ -387,12 +385,12 @@ export const docsPages: readonly DocsPage[] = [
   {
     path: "/docs/status/",
     title: "Availability and release status",
-    description: "Distinguish the v0.8.3 candidate from the admitted v0.8.1 CLI, check provider support, and understand the runtime rollout prerequisites.",
+    description: "Check the admitted v0.8.3 CLI, provider support, and the separate runtime rollout prerequisites.",
     keywords: ["release", "availability", "platforms", "Codex", "Claude", "upgrade"],
-    reviewDate: "2026-09-09",
+    reviewDate: "2026-09-16",
     admission: {
       owner: "Hraness",
-      checkedOn: "2026-09-09",
+      checkedOn: "2026-09-16",
       reassessOn: "2026-09-22",
       decision: "keep",
       readerJob: "Decide whether to install, initialize, upgrade, or use a provider without confusing released files with operational readiness.",
@@ -408,8 +406,8 @@ export const docsPages: readonly DocsPage[] = [
           ? `v${publicContent.releaseVersion} artifacts are admitted. Daemon rollout remains blocked.`
           : `v${publicContent.releaseVersion} is a candidate. v${admittedReleaseVersion} remains admitted.`,
         blocks: [
-          candidateInstallNotice,
-          paragraph(text(`The v${admittedReleaseVersion} CLI passed immutable GitHub artifact admission. Its optional npm mirror is not admitted. ${isAdmittedRelease(publicContent.releaseVersion) ? "For its exact installation instructions, use the " : `The v${publicContent.releaseVersion} candidate is not yet admitted and requires its own immutable GitHub proof. For the admitted predecessor, use its `}`), link("verified installation notes", publicContent.links.admittedInstall), text(" to install and run "), code("oompa doctor --offline"), text(". The public website, browser app, and open-beta sync service are available; their availability does not authorize starting the current daemon or sending new hosted commands.")),
+          releaseInstallNotice,
+          paragraph(text(`The v${admittedReleaseVersion} CLI passed immutable GitHub and exact-byte npm artifact admission. ${isAdmittedRelease(publicContent.releaseVersion) ? "For its exact installation instructions, use the " : `The v${publicContent.releaseVersion} candidate is not yet admitted and requires its own immutable GitHub proof. For the admitted predecessor, use its `}`), link("verified installation notes", publicContent.links.admittedInstall), text(" to install and run "), code("oompa doctor --offline"), text(". The public website, browser app, and open-beta sync service are available; their availability does not authorize starting the current daemon or sending new hosted commands.")),
           paragraph(text(`The v${publicContent.releaseVersion} ${isAdmittedRelease(publicContent.releaseVersion) ? "release" : "candidate"} retains the read-only exact Codex default-profile observation admitted in v0.7.1. The display remains unavailable until the intended daemon publishes a matching fresh companion after its rollout gates pass. This does not change Ultra defaults, admit models, choose a route, or authorize a command.`)),
           releaseAdmissionNotice,
           { kind: "notice", label: "Current runtime hold", content: [text(publicContent.daemonRolloutNotice)] },

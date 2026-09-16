@@ -1,10 +1,10 @@
 # Changelog
 
-## v0.8.3 candidate (unreleased)
+## v0.8.3
 
 - Add optional Oompa updates and development support through the standalone CLI, native menu and public footer. The shared agent protocol preserves task stdout and keeps ordinary SDK calls quiet. Human consent remains required for signup or payment.
 - Preserve explicit support preferences in independent Codex and Claude provider sessions. Invitations do not change daemon authority, account setup, hosted capacity or intended-target gates.
-- This candidate needs its own exact immutable artifact admission. The published v0.8.2 coordinate remains unchanged; its canonical GitHub release passed, while its optional npm mirror remains unadmitted.
+- The exact GitHub and npm artifacts passed release run 35066335703, attempt 1. The [release record](docs/beta-release.md#immutable-v083-successful-release-record) binds source, bytes, and provenance. The published v0.8.2 coordinate remains unchanged; its canonical GitHub release passed, while its optional npm mirror remains unadmitted.
 
 ## v0.8.2 candidate (unreleased)
 
