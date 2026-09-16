@@ -199,6 +199,22 @@ const assertDesktopIconPng = async (path: string, label: string): Promise<void> 
   }
 };
 
+const desktopIconRgba = /^desktop\/[a-z0-9-]+\/icons\/[a-z0-9-]+\.rgba$/u;
+/** Raw tray art is structurally bounded: a square RGBA bitmap of 8-128px. */
+const assertDesktopIconRgba = async (path: string, label: string): Promise<void> => {
+  const bytes = await readFile(path);
+  const side = Math.sqrt(bytes.byteLength / 4);
+  if (
+    bytes.byteLength === 0
+    || bytes.byteLength % 4 !== 0
+    || !Number.isInteger(side)
+    || side < 8
+    || side > 128
+  ) {
+    throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
+  }
+};
+
 const assertEditorialWebp = async (path: string, label: string): Promise<void> => {
   const bytes = await readFile(path);
   const riffSize = bytes.byteLength >= 8 ? bytes.readUInt32LE(4) : -1;
@@ -232,6 +248,8 @@ async function scanPublicTree(root: string, skipCheckoutTmp: boolean): Promise<v
         await assertEditorialWebp(child, label);
       } else if (entry.isFile() && desktopIconPng.test(label)) {
         await assertDesktopIconPng(child, label);
+      } else if (entry.isFile() && desktopIconRgba.test(label)) {
+        await assertDesktopIconRgba(child, label);
       } else if (entry.isFile() && label === `${marketingDirectory}/${marketingFont}`) {
         await assertMarketingPublicSource(root, label);
       } else if (entry.isFile() && supportRuntimePath.test(label)) {
