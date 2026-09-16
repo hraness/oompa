@@ -10636,6 +10636,47 @@ const retireMigratedOrphanCodexUsageAuthorities = (
   }
 };
 
+/**
+ * A pre-authority release prunes usage snapshots by age and count while it
+ * keeps up to USAGE_CLOUD_UPLOAD_ANCHOR_COUNT upload anchors, so an authentic
+ * state can hold an anchor whose snapshot is gone. The schema-41 backfill
+ * derives snapshot authority only from retained snapshots, so that anchor's
+ * compatibility authority can never bind to one and the integrity scan would
+ * refuse the whole migration. The anchor is an upload deduplication marker
+ * with no evidence of its own. Retire it through the schema-41 prune trigger,
+ * which records the prune target and removes the sidecar. An anchor whose
+ * snapshot survived is untouched.
+ */
+const retireMigratedUploadAnchorsWithoutSnapshots = (database: Database): void => {
+  const rows = database.query(
+    `SELECT anchor.profile_id,anchor.source_revision
+     FROM usage_cloud_upload_anchors anchor
+     WHERE NOT EXISTS(
+       SELECT 1 FROM usage_snapshots snapshot
+       WHERE snapshot.profile_id=anchor.profile_id
+         AND snapshot.source_revision=anchor.source_revision
+     )
+     ORDER BY anchor.profile_id,anchor.source_revision`,
+  ).all().map((row) => z.object({
+    profile_id: profileIdSchema,
+    source_revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  }).strict().parse(row));
+  // The prune trigger's own statements are counted in the reported change
+  // total, so the exact removal is proved by rereading instead.
+  for (const row of rows) {
+    database.query(
+      "DELETE FROM usage_cloud_upload_anchors WHERE profile_id=? AND source_revision=?",
+    ).run(row.profile_id, row.source_revision);
+    const remaining = z.object({ count: z.number().int().nonnegative() }).strict().parse(
+      database.query(
+        `SELECT COUNT(*) AS count FROM usage_cloud_upload_anchors
+         WHERE profile_id=? AND source_revision=?`,
+      ).get(row.profile_id, row.source_revision),
+    );
+    if (remaining.count !== 0) throw new Error("CODEX_USAGE_MIGRATION_PRUNE_CONFLICT");
+  }
+};
+
 const providerAccountForProfile = (
   database: Database,
   profileId: ProfileId,
@@ -20254,6 +20295,7 @@ const migrateWritableDatabase = (
     if (version < 52) {
       applySchemaVersion41ProviderUsage(database);
       const migratedAt = unixMillisecondsSchema.parse(now());
+      retireMigratedUploadAnchorsWithoutSnapshots(database);
       retireMigratedOrphanCodexUsageAuthorities(database, migratedAt);
       assertProviderAccountAuthority(database);
       assertSchemaVersion41ProviderUsage(database);

@@ -61,7 +61,7 @@ const packageSchema = z.object({
     url: z.literal("git+https://github.com/hraness/oompa.git"),
   }).strict(),
   scripts: z.record(z.string(), z.string()),
-  version: z.literal("0.8.3"),
+  version: z.literal("0.8.4"),
 }).passthrough();
 
 type ProcessResult = Readonly<{

@@ -26473,6 +26473,95 @@ describe("StateStore", () => {
     }
   });
 
+  test("migrates a canonical40 upload anchor whose snapshot was pruned before authority tracking", async () => {
+    // Pre-authority releases prune usage snapshots by age and count while
+    // keeping up to 128 upload anchors, so an authentic state can hold an
+    // anchor with no snapshot. The schema-41 backfill derives snapshot
+    // authority only from retained snapshots, so that anchor can never bind
+    // to one. The migration retires it and keeps every anchor whose snapshot
+    // survived, instead of refusing the whole state.
+    const home = await realpath(await mkdtemp(join(tmpdir(), "oompa-store-canonical40-pruned-anchor-")));
+    const paths = resolveStatePaths({ homeDirectory: home, platform: "darwin" });
+    await initializeStatePaths(paths);
+    await writeFile(paths.database, canonical40UsageDatabaseBytes(), { mode: 0o600 });
+    const profileId = canonical40UsageFixture.profileId;
+    const prunedAnchor = canonical40UsageFixture.anchors[0];
+    const retainedSnapshot = canonical40UsageFixture.snapshots[1];
+    const retainedAnchor = {
+      profile_id: profileId,
+      source_revision: retainedSnapshot.source_revision,
+      received_at: canonical40UsageFixture.third.observation.receivedAt,
+    };
+    expect(prunedAnchor.source_revision).toBe(canonical40UsageFixture.snapshots[0].source_revision);
+    expect(retainedAnchor.source_revision).not.toBe(prunedAnchor.source_revision);
+    const inspector = new Database(paths.database, { create: false, strict: true });
+    try {
+      const anchors = () => inspector.query(
+        "SELECT * FROM usage_cloud_upload_anchors ORDER BY profile_id,source_revision",
+      ).all();
+      const snapshots = () => inspector.query(
+        "SELECT * FROM usage_snapshots ORDER BY profile_id,source_revision",
+      ).all();
+      const sidecars = () => inspector.query(
+        `SELECT scope_kind,scope_id,process_generation,provenance
+         FROM account_scoped_provider_authorities
+         WHERE scope_kind IN ('usage_snapshot','usage_poll_failure','usage_upload_anchor')
+         ORDER BY scope_kind,scope_id`,
+      ).all();
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 40 });
+      inspector.transaction(() => {
+        inspector.query("DELETE FROM usage_snapshots WHERE profile_id=? AND source_revision=?")
+          .run(profileId, prunedAnchor.source_revision);
+        inspector.query(
+          "INSERT INTO usage_cloud_upload_anchors(profile_id,source_revision,received_at) VALUES (?,?,?)",
+        ).run(retainedAnchor.profile_id, retainedAnchor.source_revision, retainedAnchor.received_at);
+      }).immediate();
+      expect(anchors()).toEqual([prunedAnchor, retainedAnchor]);
+      expect(snapshots()).toEqual([retainedSnapshot]);
+
+      const migrated = new StateStore(paths, { now: () => 40_000 });
+      stores.push(migrated);
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(anchors()).toEqual([retainedAnchor]);
+      expect(snapshots()).toEqual([retainedSnapshot]);
+      const compatibility = { process_generation: null, provenance: "legacy_codex_compatibility" };
+      const admittedSidecars = [
+        { scope_kind: "usage_poll_failure", scope_id: `${profileId}:${canonical40UsageFixture.failures[0].source_revision}`, ...compatibility },
+        { scope_kind: "usage_snapshot", scope_id: `${profileId}:${retainedAnchor.source_revision}`, ...compatibility },
+        { scope_kind: "usage_upload_anchor", scope_id: `${profileId}:${retainedAnchor.source_revision}`, ...compatibility },
+      ];
+      expect(sidecars()).toEqual(admittedSidecars);
+      expect(inspector.query("SELECT COUNT(*) AS count FROM codex_usage_authority_prune_targets").get())
+        .toEqual({ count: 0 });
+      for (const [scope, revision] of [
+        ["usage_snapshot", retainedAnchor.source_revision],
+        ["usage_upload_anchor", retainedAnchor.source_revision],
+        ["usage_poll_failure", canonical40UsageFixture.failures[0].source_revision],
+      ] as const) {
+        expect(migrated.readCodexUsageAuthorityMetadata(scope, profileId, revision))
+          .toMatchObject({ canAuthorizeQuota: false, mode: "compatibility_display_only" });
+      }
+      expect(() => migrated.readCodexUsageAuthorityMetadata("usage_upload_anchor", profileId, prunedAnchor.source_revision))
+        .toThrow("ACCOUNT_SCOPED_PROVIDER_AUTHORITY_MISSING");
+      expect(inspector.query("SELECT version,applied_at FROM migrations WHERE version<=40 ORDER BY version").all())
+        .toEqual([...canonical40UsageFixture.migrations]);
+      const ledger = inspector.query("SELECT * FROM migrations ORDER BY version").all();
+      migrated.close();
+      stores.splice(stores.indexOf(migrated), 1);
+
+      const readonly = new StateStore(paths, { readonly: true });
+      readonly.close();
+      const reopened = new StateStore(paths, { now: () => 40_001 });
+      stores.push(reopened);
+      expect(anchors()).toEqual([retainedAnchor]);
+      expect(sidecars()).toEqual(admittedSidecars);
+      expect(inspector.query("SELECT * FROM migrations ORDER BY version").all()).toEqual(ledger);
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+    } finally {
+      inspector.close(false);
+    }
+  });
+
   test("rejects a trigger-disabled provider usage receipt-to-JSON mismatch on reopen", async () => {
     const { store } = await fixture();
     const daemon = startInputFixtureDaemon(store);
