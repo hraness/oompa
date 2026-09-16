@@ -103,6 +103,12 @@
   "src/daemon/usage-history-cursor.ts": {
     "timingSafeEqual": 2
   },
+  "src/devin/index.ts": {
+    "safeEnvironmentKeys": 1
+  },
+  "src/devin/runtime.ts": {
+    "safeEnvironmentKeys": 2
+  },
   "src/install-normalizer.ts": {
     "O_NOFOLLOW": 13,
     "fsync": 9,
