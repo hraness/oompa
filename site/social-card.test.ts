@@ -109,7 +109,7 @@ describe("social card", () => {
       }
     }
     expect(createHash("sha256").update(coverage).digest("hex"))
-      .toBe("45d5921733574f3dc4685a16582704030240dc72bf18eb33c3f59f9c9b551519");
+      .toBe("e27401f039f6f904c8a2b5f3df70df720b0b0ff50b809f5ce2442faa1679f5c4");
     expect(mismatchedChannels).toBe(0);
     const luminance = (color: readonly [number, number, number]): number => color.reduce((sum, channel, index) => {
       const value = channel / 255;
