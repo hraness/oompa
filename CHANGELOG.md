@@ -1,5 +1,9 @@
 # Changelog
 
+## Devin runtime restore (unreleased)
+
+- Restore the Devin ACP v1 runtime under `src/devin/` and the runtime adapter as `src/daemon/devin-runtime-adapter.ts` on the current provider-neutral session seam, using the pinned Devin CLI 3000.10.27. Oompa frames the NDJSON transport itself; no ACP SDK dependency returns. The adapter reviews a new runtime-profile document for that pin. It is a constructed port with fixture tests only: the daemon does not select it, the parser and storage still refuse Devin, and the new document is not yet admitted by the reviewed profile union. Plan: `kb/plans/devin-provider.md`, Phase 2.
+
 ## v0.8.4
 
 - Migrating a state root from a pre-authority release no longer fails with `CODEX_USAGE_UPLOAD_AUTHORITY_INVALID` when retention pruned a Codex usage snapshot before its cloud upload anchor. The schema-41 step retires such an anchor through its prune trigger and keeps every anchor whose snapshot survived. `oompa daemon start` now names the refused invariant in its migration failure message instead of a generic line.

@@ -1,8 +1,32 @@
 # Devin integration
 
-Devin is not yet a supported Oompa provider. Oompa does not launch Devin
-sessions, resume them, offer Devin in provider selection, or execute a Devin
-turn. The retired runtime records below remain read-only.
+Devin is not yet a supported Oompa provider. The daemon does not construct the
+Devin runtime, the service does not select it, and the CLI parser refuses Devin
+operations, so Oompa does not launch Devin sessions, resume them, offer Devin in
+provider selection, or execute a Devin turn. The retired runtime records below
+remain read-only.
+
+## Runtime adapter
+
+Current source contains the restored Devin runtime under `src/devin/` and
+`src/daemon/devin-runtime-adapter.ts`, the second phase of the plan in
+`kb/plans/devin-provider.md`. It speaks ACP v1 over `devin acp --model gpt-6-astra`
+on the same pinned CLI as the quota reader, frames every JSON-RPC line itself
+with a byte bound, and projects agent text, tool calls, plans, context usage,
+permission requests and stop reasons into Oompa's neutral session facts. Each
+managed profile runs in an isolated HOME and XDG home; Oompa never reads the
+credentials file, projects `devin auth status` to one readiness bit, and runs
+the interactive `devin auth login` in the foreground with terminal-signal
+custody.
+
+The adapter implements the provider-neutral `SessionRuntimePort` with
+provider-account authority at every boundary and reviews a runtime profile
+pinned to CLI `3000.10.27`. That document is not yet admitted by storage,
+cloud sync or the browser: the third phase adds it with an append-only
+migration and lifts the retired-provider refusals. Attachments and in-turn
+steering are refused by the adapter, as in the original integration, and
+Devin's persistent always-allow permission is never mapped to an Oompa session
+scope.
 
 ## Quota reader
 
