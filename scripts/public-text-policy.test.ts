@@ -421,6 +421,24 @@ describe("public text policy", () => {
     }
   });
 
+  test("admits only the exact reviewed support bundle at its source or archive path", async () => {
+    const reviewed = await readFile(join(import.meta.dir, "../src/support-runtime.js"));
+    for (const prefix of ["", "package/"]) {
+      const root = await realpath(await mkdtemp(join(tmpdir(), "oompa-public-support-")));
+      const path = join(root, prefix, "src/support-runtime.js");
+      try {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, reviewed);
+        await expect(assertPublicTree(root)).resolves.toBeUndefined();
+        await writeFile(path, Buffer.concat([reviewed, Buffer.from("\n")]));
+        await expect(assertPublicTree(root)).rejects.toMatchObject({ code: "UNREVIEWED_FILE_TYPE" });
+        await unlink(path);
+        await writeFile(join(dirname(path), "other.js"), reviewed);
+        await expect(assertPublicTree(root)).rejects.toMatchObject({ code: "UNREVIEWED_FILE_TYPE" });
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
+  });
+
   test("admits only the complete canonical editorial font and scans its declaration as public text", async () => {
     const source = join(import.meta.dir, "../site/vendor/marketing-preset");
     const font = "fonts/instrument-serif/instrument-serif-latin-400.woff2";
