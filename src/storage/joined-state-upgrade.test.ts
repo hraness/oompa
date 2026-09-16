@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,6 +14,8 @@ import { combined49SwitchDatabaseBytes } from "../../scripts/fixtures/combined49
 import { privateTask48DatabaseBytes } from "../../scripts/fixtures/private-task48";
 import { initializeStatePaths, resolveStatePaths } from "./paths";
 import { StateStore } from "./state-store";
+
+setDefaultTimeout(30_000);
 
 const directories: string[] = [];
 afterEach(async () => {

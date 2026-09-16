@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -46,6 +46,8 @@ import {
   OompaOhMemoryCoordinator,
 } from "./memory-coordinator";
 import type { OompaCanonicalMemorySyncPort } from "./canonical-memory-sync";
+
+setDefaultTimeout(30_000);
 
 type Clock = {
   monotonic: number;

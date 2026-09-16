@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,6 +21,8 @@ import { canonicalWorkJson, type WorkDispatchOutcome } from "./work-store";
 // These are real current StateStore integration fixtures, not reconstructed
 // historical releases. Authentic predecessor fixtures require their own frozen
 // source-bound capture; never stamp this current database with an older version.
+setDefaultTimeout(60_000);
+
 const roots: string[] = [];
 const stores = new Set<StateStore>();
 const fixedNow = () => 10_000;

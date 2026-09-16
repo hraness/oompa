@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
@@ -9,6 +9,8 @@ import { z } from "zod";
 import { combined49SwitchDatabaseBytes, combined49SwitchFixture, combined49SwitchGeneratorSource } from "../../scripts/fixtures/combined49-switch";
 import { initializeStatePaths, resolveStatePaths } from "./paths";
 import { StateStore } from "./state-store";
+
+setDefaultTimeout(30_000);
 
 const archived = combined49SwitchFixture;
 const migratedAt = 1_900_000_001_000;

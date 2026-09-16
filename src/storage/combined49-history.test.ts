@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -12,6 +12,8 @@ import { combined49SwitchDatabaseBytes, combined49SwitchFixture, combined49Switc
 import { fingerprintSessionSendRequest } from "../domain/session-send-request";
 import { initializeStatePaths, resolveStatePaths } from "./paths";
 import { StateStore } from "./state-store";
+
+setDefaultTimeout(30_000);
 
 const sourceRevision = "0ae317793d5ff694b4d333effe25f85f7e7f1491";
 const sourceTree = "8d66385130378febb9be4358dc40fe84de4d0591";

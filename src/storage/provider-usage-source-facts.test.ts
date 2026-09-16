@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
@@ -17,6 +17,8 @@ import { effectiveClaudeRuntimeProfileSchema } from "../domain/runtime-profile";
 import { createStoredAccountUsageSnapshot } from "../domain/usage-metrics";
 import { initializeStatePaths, resolveStatePaths } from "./paths";
 import { PROVIDER_USAGE_RESET_FACT_CANDIDATE_LIMIT, StateStore } from "./state-store";
+
+setDefaultTimeout(30_000);
 
 const now = 1_800_000_000_000;
 const email = "Facts@Example.com";

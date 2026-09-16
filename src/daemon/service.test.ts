@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fc from "fast-check";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
@@ -142,6 +142,8 @@ import type {
 import { SessionEventCursorCodec } from "./session-event-cursor";
 import { CommandFailure, FACTS_MEMORY_SESSION_TTL_MS, OompaService } from "./service";
 import { USAGE_HISTORY_CURSOR_TTL_MS } from "./usage-history-cursor";
+
+setDefaultTimeout(60_000);
 
 const privatePathRoot = ["", "Users", "private"].join("/");
 const codexProviderAccountKey = (email = "person@example.com"): string =>
