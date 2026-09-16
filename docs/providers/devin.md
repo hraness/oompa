@@ -1,15 +1,50 @@
-# Retired Devin integration
+# Devin integration
 
-Devin is not a supported Oompa provider. Oompa no longer launches its CLI,
-starts or resumes its sessions, offers it in provider selection, or reports
-unknown account allowance as a usable quota integration.
+Devin is not yet a supported Oompa provider. Oompa does not launch Devin
+sessions, resume them, offer Devin in provider selection, or execute a Devin
+turn. The retired runtime records below remain read-only.
 
-The supported Devin CLI and ACP interfaces report session consumption and
-context usage, not verified remaining subscription allowance and reset times.
-Devin's own billing dashboard shows quotas, and enterprise billing APIs exist,
-but neither establishes a supported quota read through an ordinary CLI account's
-provider-owned login. See the [CLI reference](https://docs.devin.ai/cli/reference/commands)
-and [usage documentation](https://docs.devin.ai/admin/billing/usage).
+## Quota reader
+
+Current source contains a credential-free quota reader in `src/devin/`. It is
+the first phase of the reactivated plan in `kb/plans/devin-provider.md` and is
+not wired into the daemon, CLI, storage, or cloud sync.
+
+The reader depends on the pinned official Devin CLI, exactly `3000.10.27`, and
+refuses any other reported version. It launches that CLI on a pseudo-terminal
+in a caller-supplied directory with `--respect-workspace-trust false`, waits for
+the input prompt, types `/usage` and Enter, waits for the quota line, then
+types `/exit` and Enter. It never submits a prompt, so it cannot spend a model
+turn. Output is bounded to 256 KiB and the child is killed when it does not
+exit within the deadline.
+
+The panel is a human-facing surface, not a published contract. The parser
+recognizes only the lines captured on the pinned build: the startup banner
+(`v3000.10.27 · Max · 100% remaining (resets in 3d 13h)`), one `Weekly` line
+and one optional `Daily` line in the form
+`Weekly  ■■■■  0% used  · resets Sep 20, 4:00 AM (UTC-4)`, and an optional
+`Extra usage  $12.50 remaining` balance line. The `Daily` line is absent on Max
+plans, which the observation reports as `dailyShown: false`. Remaining percent is
+`100 - used`. The panel prints no year, so the reset instant is the first
+occurrence of that date and clock time, in the printed UTC offset, at or after
+two days before the observation; the observation records that rule and the
+exact rendered text beside the instant.
+
+Any other shape, a repeated line with different values, a percent outside 0 to
+100, an impossible date, a banner from another version, or the workspace-trust
+prompt yields an `unknown` observation with a closed reason. The reader retains
+only the parsed observation and the exact `devin --version` line. It never
+reads, copies, logs, or forwards `~/.local/share/devin/credentials.toml` or a
+session identifier.
+
+The captured fixture and its synthetic variants live in
+`src/devin/usage-panel.fixture.json` and are excluded from the package. Re-pin
+by re-capturing that fixture on the new build and updating `src/devin/pin.ts`.
+
+Devin's supported CLI and ACP interfaces still expose no machine-readable
+allowance, and Oompa uses no undocumented network endpoint for this read. See
+the [CLI reference](https://docs.devin.ai/cli/reference/commands) and
+[usage documentation](https://docs.devin.ai/admin/billing/usage).
 
 ## Existing local data
 

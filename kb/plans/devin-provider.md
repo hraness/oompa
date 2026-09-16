@@ -1,11 +1,71 @@
 # Devin provider and preset authority
 
-## Superseded: provider removal
+## Reactivation (2026-09-16)
+
+On 2026-09-16 the owner accepted a quota source for Devin: the panel the pinned
+official Devin CLI renders for its own `/usage` slash command, read by driving
+that CLI on a pseudo-terminal. This automates the vendor's supported user
+surface. Oompa uses no undocumented network endpoint, reads no credential file,
+and never submits a prompt. The reader pins exactly one CLI version and reports
+`unknown` with a closed reason on any drift instead of guessing.
+
+Current Devin self-serve plans are token-metered with daily and weekly calendar
+resets; ACUs remain an Enterprise billing unit. "Remaining quota" therefore
+means the panel's remaining percent per window plus each window's reset
+instant, not an ACU balance.
+
+### Phase 1. Credential-free quota reader
+
+- **Status:** Implemented in `src/devin/` on `feat/devin-usage-panel-reader`.
+- **Scope:** pin (`3000.10.27`) and version admission; PTY driver that types
+  only `/usage`, Enter, `/exit`, Enter; closed panel grammar for the banner, the
+  `Weekly` and optional `Daily` lines, and the optional extra-usage line;
+  year-less reset resolution; bounded output and guaranteed child cleanup;
+  captured fixture plus synthetic variants; lint layering for `src/devin`.
+- **Not in scope:** daemon, CLI, storage, cloud, or browser wiring; any change
+  to retired-provider refusals or schema.
+- **Acceptance:** focused tests for the parser, runtime admission and driver
+  pass; lint and strict types pass; one live read on the pinned build returns
+  an `observed` result without spending a turn (the live fixture records
+  `No quota consumed yet in this session`); independent review; Required CI.
+
+### Phase 2. Provider runtime and ACP adapter on the current architecture
+
+- **Status:** Not started.
+- **Scope:** restore the ACP v1 client, process custody, fact reduction and
+  foreground login from PR #115 onto the Effect-based provider seams that
+  replaced the 2026-09-06 adapters, using the same pinned CLI as Phase 1.
+- **Acceptance:** the protocol, client and adapter fixtures from the removed
+  implementation pass again on the current ports; every child is joined on
+  shutdown; a zero-token initialization check on the pinned build passes.
+
+### Phase 3. Lifting refusals with append-only migrations
+
+- **Status:** Not started.
+- **Scope:** parser, storage admission guards, service, cloud payloads and
+  browser selectors admit Devin again; usage snapshots gain a `devin_usage_panel`
+  source recorded with the exact CLI version line and the `unknown` reason when
+  present; historical v39 and v40 rows keep their bytes.
+- **Acceptance:** fresh and upgraded databases accept Devin while retaining
+  older rows byte-for-byte; retired rows never regain execution authority;
+  routing, Work and scheduled-task eligibility treat Devin explicitly.
+
+### Phase 4. Live acceptance
+
+- **Status:** Not started.
+- **Scope:** one bounded paid turn in a disposable isolated profile covering
+  turn, tool, approval, cancellation and usage-update paths; a quota read before
+  and after that turn.
+- **Acceptance:** sanitized acceptance record bound to the exact pin and argv;
+  no credential, session identifier or raw panel retained.
+
+## Removal record (2026-09-06)
 
 On 2026-09-06 the user made verified remaining account quota and reset reporting
-a condition of provider support. Current official CLI/ACP documentation does not
-provide that surface for an ordinary signed-in CLI account. The integration below
-is superseded by removal, not a supported feature or an active rollout plan.
+a condition of provider support. Official CLI/ACP documentation did not provide
+that surface for an ordinary signed-in CLI account. The integration below was
+superseded by removal on that date; the reactivation above supersedes the
+removal for the quota reader only.
 
 Removal deletes runtime/ACP dependencies and active CLI, cloud, and UI selection.
 Historical v39 authority and later migrations remain append-only; stored Devin
