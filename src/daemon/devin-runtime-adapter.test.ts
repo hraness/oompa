@@ -49,9 +49,11 @@ const directories: DevinDirectories = {
 
 const runtime: PinnedDevinRuntime = {
   argv: ["/usr/local/bin/devin", "acp", "--model", DEVIN_MODEL],
+  build: "bcbe88c7",
   executablePath: "/usr/local/bin/devin",
   model: DEVIN_MODEL,
   version: DEVIN_PIN,
+  versionOutput: `devin ${DEVIN_PIN} (bcbe88c7)`,
 };
 
 const method = (message: JsonRecord): string | undefined =>

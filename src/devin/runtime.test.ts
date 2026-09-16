@@ -117,12 +117,13 @@ describe("pinned Devin runtime", () => {
   test("bounds a hung probe with terminate, force, and an exit join", async () => {
     const trace: string[] = [];
     let resolveExit!: (code: number) => void;
+    let endStdout!: () => void;
     const process: DevinVersionProbeProcess = {
       exited: new Promise<number>((resolve) => { resolveExit = resolve; }),
-      stdout: (async function* () { await new Promise<void>(() => undefined); yield new Uint8Array(); })(),
+      stdout: (async function* () { await new Promise<void>((resolve) => { endStdout = resolve; }); yield new Uint8Array(); })(),
       stderr: chunks([]),
       terminate: () => { trace.push("terminate"); },
-      forceTerminate: () => { trace.push("force"); resolveExit(137); },
+      forceTerminate: () => { trace.push("force"); endStdout(); resolveExit(137); },
     };
     await expect(resolvePinnedDevinRuntime({ executablePath: executable, processFactory: () => process, versionProbeDeadlineMs: 50, signal: signal() }))
       .rejects.toMatchObject({ code: "TIMEOUT" });

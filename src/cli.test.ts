@@ -110,9 +110,11 @@ const cliClaudeRuntime = {
 
 const cliDevinRuntime = {
   argv: ["/test/devin", "acp", "--model", DEVIN_PIN_MODEL] as const,
+  build: "bcbe88c7",
   executablePath: "/test/devin",
   model: DEVIN_PIN_MODEL,
   version: DEVIN_PIN,
+  versionOutput: `devin ${DEVIN_PIN} (bcbe88c7)`,
 } as const;
 
 class CliClaudeLoginSignalSource implements ClaudeLoginSignalSource {

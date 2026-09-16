@@ -22,9 +22,11 @@ const directories: DevinDirectories = {
 };
 const runtime: PinnedDevinRuntime = {
   argv: ["/opt/devin", "acp", "--model", DEVIN_MODEL],
+  build: "bcbe88c7",
   executablePath: "/opt/devin",
   model: DEVIN_MODEL,
   version: DEVIN_PIN,
+  versionOutput: `devin ${DEVIN_PIN} (bcbe88c7)`,
 };
 const encoder = new TextEncoder();
 const signedOutStatus = [
