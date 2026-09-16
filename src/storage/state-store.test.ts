@@ -26520,7 +26520,7 @@ describe("StateStore", () => {
 
       const migrated = new StateStore(paths, { now: () => 40_000 });
       stores.push(migrated);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(anchors()).toEqual([retainedAnchor]);
       expect(snapshots()).toEqual([retainedSnapshot]);
       const compatibility = { process_generation: null, provenance: "legacy_codex_compatibility" };
@@ -26555,7 +26555,7 @@ describe("StateStore", () => {
       expect(anchors()).toEqual([retainedAnchor]);
       expect(sidecars()).toEqual(admittedSidecars);
       expect(inspector.query("SELECT * FROM migrations ORDER BY version").all()).toEqual(ledger);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     } finally {
       inspector.close(false);
     }
