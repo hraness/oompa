@@ -99,40 +99,40 @@ describe("public content contract", () => {
 
   test("binds admitted installation to exact release evidence while preserving the runtime hold", () => {
     expect(publicContent.releaseVersion).toBe("0.8.4");
-    expect(admittedReleaseVersion).toBe("0.8.3");
+    expect(admittedReleaseVersion).toBe("0.8.4");
     expect(publicReleaseState).toBe("live");
     expect(publicContent.endpoints.betaTag).toBe("live");
     const llms = renderLlmsText();
     expect(llms).toContain(publicContent.statusLine);
-    expect(llms).toContain("Local CLI v0.8.4 is a release candidate, not an admitted artifact; v0.8.3 remains the admitted canonical GitHub artifact.");
-    expect(publicContent.links.admittedInstall).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts");
+    expect(llms).toContain("Local CLI v0.8.4 is the fully admitted public artifact.");
+    expect(publicContent.links.admittedInstall).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts");
     const visibleSite = htmlVisibleText(renderSiteHtml());
-    expect(visibleSite).toContain("The admitted v0.8.3 CLI has its own");
+    expect(visibleSite).toContain("The admitted v0.8.4 CLI has its own");
     expect(visibleSite).toContain("Starting or upgrading a daemon and enabling hosted commands are paused until the capacity checks pass.");
     for (const surface of [llms, renderDocumentationMarkdown("/docs/status/"), htmlVisibleText(renderDocumentationHtml("/docs/status/"))]) {
-      expect(surface).not.toContain("The v0.8.3 candidate is not yet admitted");
+      expect(surface).not.toContain("The v0.8.4 candidate is not yet admitted");
       expect(surface).not.toContain("npm mirror is not admitted");
       expect(surface).toContain(publicContent.daemonRolloutNotice);
     }
     const admission = renderMarkdownBlocks(publicContent.introduction, 2);
-    expect(admission).toContain("https://github.com/hraness/oompa/actions/runs/35066335703");
-    expect(admission).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.3");
+    expect(admission).toContain("https://github.com/hraness/oompa/actions/runs/35136703343");
+    expect(admission).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.4");
     expect(admission).toContain("attempt 1");
     expect(admission).toContain("passed immutable GitHub and exact-byte npm release admission");
     expect(admission).toContain("artifact admission does not authorize current-daemon startup or hosted command writers");
   });
 
   test("never transfers current admission to another version", () => {
-    expect(isAdmittedRelease("0.8.3")).toBe(true);
-    expect(renderLlmsText()).toContain("Only after immutable GitHub release admission, install the v0.8.4 local CLI artifact");
-    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.1", "0.8.4", "v0.8.3", "0.8.3-beta.1", ""]) {
+    expect(isAdmittedRelease("0.8.4")).toBe(true);
+    expect(renderLlmsText()).toContain("Install the admitted v0.8.4 local CLI artifact");
+    for (const version of ["0.7.0", "0.7.1", "0.7.2", "0.8.1", "0.8.3", "v0.8.4", "0.8.4-beta.1", ""]) {
       expect(isAdmittedRelease(version)).toBe(false);
     }
-    for (const version of ["0.7.2", "0.8.1", "0.8.4"]) {
+    for (const version of ["0.7.2", "0.8.1", "0.8.5"]) {
       const content = { ...publicContent, releaseVersion: version };
       const llms = renderLlmsText(content);
       expect(llms).toContain("This release candidate is not yet admitted.");
-      expect(llms).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts");
+      expect(llms).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts");
       expect(llms.indexOf("This release candidate is not yet admitted."))
         .toBeLessThan(llms.indexOf(content.installCommand));
       expect(llms).not.toContain(`Install the admitted v${version} local CLI artifact`);
@@ -190,7 +190,7 @@ describe("public content contract", () => {
     expect(markdown.split("\n")[0]).toBe("# Oompa");
     expect(markdown).toContain(publicContent.thesis);
     expect(markdown).toContain(publicContent.statusLine);
-    expect(publicContent.statusLine).toContain("Local CLI v0.8.4 is a release candidate, not an admitted artifact");
+    expect(publicContent.statusLine).toContain("Local CLI v0.8.4 is the fully admitted public artifact");
     expect(publicContent.statusLine).toContain("hosted sync is live as an open beta");
     expect(markdown).toContain(publicContent.installNotice);
     expect(markdown).toContain(publicContent.links.admittedInstall);
@@ -255,7 +255,7 @@ describe("public content contract", () => {
       maintainer: { "@type": "Organization", name: "Hraness", url: "https://hraness.com/" },
     });
     expect(structured).not.toHaveProperty("softwareVersion");
-    expect(publicContent.description).toContain("v0.8.3 passed GitHub and npm artifact admission");
+    expect(publicContent.description).toContain("v0.8.4 passed GitHub and npm artifact admission");
     expect(publicContent.description).toContain("daemon and hosted command-writer rollout remains blocked on capacity");
     expect(html).toContain('href="/docs/status/"');
     expect(html).toContain(`<title>${publicContent.productName} | ${publicContent.tagline}</title>`);
@@ -264,7 +264,7 @@ describe("public content contract", () => {
     expect(previewEyebrow.textContent).toBe(publicContent.tagline);
     expectCompiledClasses(previewEyebrow);
     expect(publicContent.socialCard).toEqual({
-      alt: "Oompa command-line card showing offline diagnostics and read-only status · v0.8.4 candidate · daemon rollout blocked on capacity · oompa.app",
+      alt: "Oompa command-line card showing offline diagnostics and read-only status · v0.8.4 released · daemon rollout blocked on capacity · oompa.app",
       height: 630,
       path: "/social-card.png",
       width: 1200,
@@ -384,7 +384,7 @@ describe("public content contract", () => {
     const html = renderDocumentationHtml("/docs/reference/");
     const document = parseHTML(html).document;
     const commands = [...document.querySelectorAll("pre.command-list")];
-    for (const version of ["v0.8.3"]) {
+    for (const version of ["v0.8.4"]) {
       const versionCodes = [...document.querySelectorAll("code.oompa-inline-code")].filter((code) => code.textContent === version);
       expect(versionCodes.length).toBeGreaterThan(0);
       for (const code of versionCodes) expectCompiledClasses(code);
@@ -417,19 +417,19 @@ describe("public content contract", () => {
     const markdown = renderDocsMarkdown("/docs/status/");
     const html = htmlVisibleText(renderDocumentationHtml("/docs/status/"));
     for (const surface of [markdown, html]) {
-      expect(surface).toContain("v0.8.3");
+      expect(surface).toContain("v0.8.4");
       expect(surface).toContain("passed immutable GitHub and exact-byte npm artifact admission");
-      expect(surface).not.toContain("The v0.8.3 candidate is not yet admitted");
+      expect(surface).not.toContain("The v0.8.4 candidate is not yet admitted");
       expect(surface).not.toContain("The v0.8.0 candidate is not yet admitted");
-      expect(surface).not.toContain("v0.8.3 is released");
+      expect(surface).not.toContain("v0.8.4 is released");
       expect(surface).toContain("daemon and hosted command-writer rollout remains blocked on capacity");
       expect(surface).toContain("Artifact availability and the live sync service do not clear this gate");
       expect(surface).not.toContain("v0.7.0 candidate");
       expect(surface).not.toContain("v0.7.0 is a release candidate");
-      expect(surface).toContain("This release candidate is not yet admitted");
+      expect(surface).not.toContain("This release candidate is not yet admitted");
       expect(surface).toContain(publicContent.installNotice);
-      expect(surface).toContain("v0.8.3 artifacts admitted");
-      expect(surface).not.toContain("v0.8.3 is the fully admitted public artifact");
+      expect(surface).toContain("v0.8.4 artifacts admitted");
+      expect(surface).not.toContain("v0.8.4 is the fully admitted public artifact");
       expect(surface).not.toContain("beta-not-yet-live");
 
       expect(surface).not.toContain("Beta not yet live");
@@ -443,24 +443,22 @@ describe("public content contract", () => {
       expect(noticePosition).toBeLessThan(commandPosition);
     }
     for (const surface of [renderLlmsText()]) {
-      expect(surface).toContain("v0.8.3 remains the admitted canonical GitHub artifact");
+      expect(surface).toContain("admitted v0.8.4");
       expect(surface).toContain(publicContent.daemonRolloutNotice);
       expect(surface).toContain("/docs/status/");
     }
-    expect(markdown).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.3");
-    expect(markdown).toContain("https://github.com/hraness/oompa/actions/runs/35066335703");
-    expect(markdown).toContain("Local v0.8.3 artifacts admitted; hosted sync live as an open beta");
+    expect(markdown).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.4");
+    expect(markdown).toContain("https://github.com/hraness/oompa/actions/runs/35136703343");
+    expect(markdown).toContain("Local v0.8.4 artifacts admitted; hosted sync live as an open beta");
     const reference = renderDocsMarkdown("/docs/reference/");
     expect(reference).toContain("Local release boundary");
-    expect(reference).toContain("v0.8.3");
-    expect(reference).toContain("admitted local CLI release and are retained in the");
     expect(reference).toContain("v0.8.4");
-    expect(reference).toContain("candidate. The predecessor's immutable GitHub artifact and exact-byte npm mirror passed admission; the candidate requires its own admission.");
-    expect(renderLlmsText()).toContain("Only after immutable GitHub release admission, install the v0.8.4 local CLI artifact");
+    expect(reference).toContain("admitted local CLI release. Its immutable GitHub artifact and exact-byte npm mirror passed admission.");
+    expect(renderLlmsText()).toContain("Install the admitted v0.8.4 local CLI artifact");
     for (const path of ["/docs/start/", "/docs/status/"] as const) {
       const guideHtml = renderDocumentationHtml(path);
       expect(guideHtml).toContain(publicContent.links.admittedInstall);
-      const notice = 'aside[aria-label="Candidate artifact not yet admitted"]';
+      const notice = 'aside[aria-label="CLI artifact admitted; daemon startup blocked"]';
       expect(oneElement(guideHtml, notice).textContent).toContain(publicContent.installNotice);
       const guide = parseHTML(guideHtml).document;
       const firstCommand = guide.querySelector("pre.command-list");
@@ -931,7 +929,7 @@ describe("public content contract", () => {
       expect(surface).toContain("oompa daemon stop");
       expect(surface).toContain("oompa daemon status --json");
       expect(surface).toContain("oompa daemon start");
-      expect(surface).toContain("Only after immutable GitHub release admission for v0.8.4, install its exact release and verify the installed version and offline health");
+      expect(surface).toContain("Install the admitted v0.8.4 exact release, then verify the installed version and offline health");
       expect(surface).not.toContain("bun remove --global oompa");
       expect(surface).not.toContain("uninstall the package");
     }

@@ -204,7 +204,7 @@ const {
 } = hostedSignupCopy(hostedSignup);
 
 const links = {
-  admittedInstall: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts",
+  admittedInstall: "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts",
   app: "https://app.oompa.app",
   contributing: "https://github.com/hraness/oompa/blob/main/CONTRIBUTING.md",
   documentation: "https://oompa.app/docs/",
@@ -300,8 +300,8 @@ const productName = "Oompa";
 const tagline = "Workspace for Codex and Claude Code";
 const providerRoadmap = "Codex and Claude Code, side by side.";
 const releaseVersion = "0.8.4";
-export const admittedReleaseVersion = "0.8.3";
-const admittedReleaseRun = "35066335703";
+export const admittedReleaseVersion = "0.8.4";
+const admittedReleaseRun = "35136703343";
 export const isAdmittedRelease = (version: string): boolean => version === admittedReleaseVersion;
 const installNoticeFor = (version: string): string => isAdmittedRelease(version)
   ? `The v${version} CLI artifact and its exact-byte npm mirror passed release admission. Use the reviewed immutable GitHub installer below; installation does not authorize daemon startup.`
