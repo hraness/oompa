@@ -6,7 +6,7 @@ import { buildOompaGlobalInstallCommand } from "../src/install-preflight";
 
 // Package documentation is authored in root README.md. This admission contract
 // reads no website content and never renders or rewrites the package document.
-export const packageDescription = "Bun CLI and local daemon for isolated Codex and Claude Code profiles, durable sessions, and optional encrypted sync. Local CLI v0.8.4 passed GitHub and npm artifact admission; daemon and hosted command-writer rollout remains blocked on capacity.";
+export const packageDescription = "Bun CLI and local daemon for isolated Codex, Claude Code, and Devin profiles, durable sessions, and optional encrypted sync. Local CLI v0.8.4 passed GitHub and npm artifact admission; daemon and hosted command-writer rollout remains blocked on capacity.";
 
 const manifestSchema = z.object({
   description: z.literal(packageDescription),

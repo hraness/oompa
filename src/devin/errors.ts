@@ -10,7 +10,7 @@ export type DevinFailureCode =
   | "TIMEOUT"
   | "UNSUPPORTED_CAPABILITY";
 
-/** Never carries provider output text. Callers add only bounded, safe detail. */
+/** Never carries an unreviewed provider payload. */
 export class DevinError extends Error {
   readonly code: DevinFailureCode;
 

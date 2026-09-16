@@ -110,7 +110,7 @@ test("retained combined49 prepared switch preserves original cells and installs 
     const sessionCells = original.cells.sessions;
     if (sessionCells === undefined) throw new Error("Missing original session cells.");
     database.exec("PRAGMA query_only=ON");
-    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:60");
+    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:61");
     expect(snapshot(paths.database)).toEqual(original);
     const store = new StateStore(paths, { now: () => migratedAt, resolveMachineTimeZone: () => "UTC" });
     try {
@@ -150,7 +150,7 @@ test("retained combined49 prepared switch preserves original cells and installs 
       });
     } finally { store.close(); }
     const migrated = snapshot(paths.database);
-    expect(migrated.version).toEqual({ user_version: 60 });
+    expect(migrated.version).toEqual({ user_version: 61 });
     expect(migrated.foreignKeys).toEqual([]);
     for (const readonly of [false, true]) {
       const reopened = new StateStore(paths, { readonly, now: () => migratedAt + 1, resolveMachineTimeZone: () => "UTC" });

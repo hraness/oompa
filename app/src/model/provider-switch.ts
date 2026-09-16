@@ -1,5 +1,5 @@
 /**
- * Switching a live session between Codex and Claude Code.
+ * Switching a live session between Codex, Claude Code, and Devin.
  *
  * This module is the single alignment point for the `set_provider` remote
  * command. The daemon-side kind is being added in parallel, so the payload is
@@ -16,15 +16,15 @@ import {
   activeRemotePresetSelection,
   isCommandKind,
   parseRemoteCommandPayload,
+  type ModelPreset,
   type RemoteCommandPayload,
-  type SupportedPreset,
 } from "../oompa/cloud";
 
-export type SessionProvider = "codex" | "claude";
+export type SessionProvider = "codex" | "claude" | "devin";
 
 export type SessionPresetOption = Readonly<{
   label: string;
-  value: SupportedPreset;
+  value: ModelPreset;
 }>;
 
 const codexPresetOptions: readonly SessionPresetOption[] = Object.freeze([
@@ -39,9 +39,14 @@ const claudePresetOptions: readonly SessionPresetOption[] = Object.freeze([
   { label: "Claude Fable Max", value: "fable-max" },
 ]);
 
+const devinPresetOptions: readonly SessionPresetOption[] = Object.freeze([
+  { label: "GPT-6 Astra", value: "astra" },
+]);
+
 const allPresetOptions: readonly SessionPresetOption[] = Object.freeze([
   ...codexPresetOptions,
   ...claudePresetOptions,
+  ...devinPresetOptions,
 ]);
 
 /**
@@ -56,12 +61,14 @@ export function sessionPresetOptionsForProvider(
 ): readonly SessionPresetOption[] {
   if (provider === "codex") return codexPresetOptions;
   if (provider === "claude") return claudePresetOptions;
+  if (provider === "devin") return devinPresetOptions;
   return allPresetOptions;
 }
 
 /** The pinned preset sent atomically with a provider switch. */
-export function defaultSessionPresetForProvider(provider: SessionProvider): SupportedPreset {
+export function defaultSessionPresetForProvider(provider: SessionProvider): ModelPreset {
   if (provider === "claude") return "fable-max";
+  if (provider === "devin") return "astra";
   return "ultra";
 }
 
@@ -71,6 +78,7 @@ export const providerSwitchOptions: readonly Readonly<{
 }>[] = Object.freeze([
   { label: "Run on Codex", provider: "codex" },
   { label: "Run on Claude Code (Linux machine only)", provider: "claude" },
+  { label: "Run on Devin", provider: "devin" },
 ]);
 
 /**
@@ -99,7 +107,7 @@ export const setProviderCommandKind = "set_provider";
  * explicit preset shapes.
  */
 export function buildSetProviderPayload(input: Readonly<{
-  preset?: SupportedPreset;
+  preset?: ModelPreset;
   provider: SessionProvider;
 }>): RemoteCommandPayload {
   const payload = input.preset === undefined
@@ -174,7 +182,7 @@ export function providerSwitchNotice(
   if (command === null || provider === null) return null;
   const name = provider === "claude"
     ? "Claude Code"
-    : "Codex";
+    : provider === "devin" ? "Devin" : "Codex";
   switch (command.state) {
     case "pending":
       return { settled: false, text: `Waiting for the machine to pick up the switch to ${name}.` };

@@ -213,12 +213,12 @@ describe("model routing shadow decisions", () => {
     {
       ...CODEX_INPUT,
       selection: "explicit_family_default",
-      effective: { provider: "devin", preset: "astra", fast: false },
+      effective: { provider: "devin", preset: "high", fast: false },
     },
     {
       ...CODEX_INPUT,
       selection: "explicit_preset",
-      effective: { provider: "devin", preset: "astra", fast: false },
+      effective: { provider: "devin", preset: "high", fast: false },
     },
     {
       ...CODEX_INPUT,
@@ -276,7 +276,7 @@ describe("model routing shadow decisions", () => {
     expect(
       modelRoutingDecisionSchema.safeParse({
         ...codexDecision,
-        effective: { provider: "devin", preset: "astra", fast: false },
+        effective: { provider: "devin", preset: "high", fast: false },
         rule: "preserve_explicit_preset",
         reason: "Explicit preset choices retain their admitted effective route.",
         candidates: [],

@@ -850,7 +850,7 @@ function expectCanonical43ReadonlyRefusal(paths: StateStore["paths"]) {
   });
   try {
     const before = snapshot();
-    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:43:60");
+    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:43:61");
     expect(snapshot()).toEqual(before);
   } finally { database.close(false); }
 }
@@ -1128,7 +1128,7 @@ describe("automatic usage policy configuration", () => {
     try {
       const baseline = unrelatedRows(database);
       expect(store.readAutomaticUsagePolicyConfiguration()).toEqual(initialAutomaticUsagePolicyConfiguration());
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       const request = command();
       expect(store.updateAutomaticUsagePolicyConfiguration(request)).toEqual({
         ...initialAutomaticUsagePolicyConfiguration(), defaultEnabled: false, automaticPolicyRevision: 2,
@@ -1292,7 +1292,7 @@ describe("automatic usage policy configuration", () => {
         expect(() => { new StateStore(pathsFor(home), { readonly }).close(); }).toThrow();
         expect(policyAdmissionSnapshot(database)).toEqual(beforeAdmission);
       }
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     } finally { database.close(false); }
   });
 
@@ -1389,7 +1389,7 @@ describe("automatic usage policy configuration", () => {
         migrations: database.query("SELECT * FROM migrations ORDER BY version").all(),
         policy: partial ? database.query("SELECT * FROM automatic_usage_policy_revisions ORDER BY automatic_policy_revision").all() : null,
       };
-      expect(() => new StateStore(pathsFor(home), { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:43:60");
+      expect(() => new StateStore(pathsFor(home), { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:43:61");
       // Only the archived private48 checkpoint is admitted by the bridge.
       // An intermediate restamp must not gain repair authority from its number.
       expect(() => reopen(home)).toThrow("STATE_SCHEMA_COHORT_UNSUPPORTED:43");
@@ -3375,7 +3375,7 @@ describe("StateStore", () => {
       const ledger = database.query("SELECT * FROM migrations ORDER BY version").all();
       const upgraded = new StateStore(paths);
       stores.push(upgraded);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(database.query("SELECT * FROM migrations WHERE version<=40 ORDER BY version").all()).toEqual(ledger);
       expect(readLegacy()).toEqual(mutation);
       expect(upgraded.prepareMutation({ kind: mutation.kind, authorityId: mutation.authority_id,
@@ -3502,7 +3502,7 @@ describe("StateStore", () => {
     } finally { database.close(false); }
   });
 
-  test("current Devin admission refuses new login, session, queue, and close authority without rewriting retained receipts", async () => {
+  test("current Devin admission admits new sessions and queued sends while keeping archived receipts untouched", async () => {
     const paths = await archivedRetired49();
     const store = new StateStore(paths);
     stores.push(store);
@@ -3511,14 +3511,18 @@ describe("StateStore", () => {
     try {
       const before = retiredCloseHistory(database);
       const loginBefore = store.readMutation(archived.login.idempotencyKey);
-      expect(() => store.createSession({ profileId: archived.owner.history.owner.sourceAuthority.profileId,
-        provider: "devin", preset: "astra", fastEnabled: false })).toThrow("PROVIDER_RETIRED:devin");
-      expect(() => store.prepareMutation({ kind: "account.devin-login",
+      const session = store.createSession({ profileId: archived.owner.history.owner.sourceAuthority.profileId,
+        provider: "devin", preset: "astra", fastEnabled: false });
+      expect(session.provider).toBe("devin");
+      // A fresh Devin login prepares under ordinary authority; the archived
+      // login's own attempt and receipts stay untouched.
+      expect(store.prepareMutation({ kind: "account.devin-login",
         authorityId: archived.login.originalMutation.authorityId,
         authorityGeneration: archived.login.originalMutation.authorityGeneration,
-        idempotencyKey: randomUUID(), request: { provider: "devin" } })).toThrow("PROVIDER_RETIRED:devin");
-      expect(() => store.enqueue(archived.owner.history.owner.sessionId, "No retired provider dispatch"))
-        .toThrow("PROVIDER_RETIRED:devin");
+        idempotencyKey: randomUUID(), request: { provider: "devin" } }))
+        .toMatchObject({ state: "prepared", replay: false });
+      expect(store.enqueue(archived.owner.history.owner.sessionId, "No retired provider dispatch"))
+        .toMatchObject({ sessionId: archived.owner.history.owner.sessionId, state: "pending" });
       expect("prepareDevinJoinedClose" in StateStore.prototype).toBe(false);
       expect("recordDevinJoinedClose" in StateStore.prototype).toBe(false);
       expect(retiredCloseHistory(database)).toEqual(before);
@@ -3577,7 +3581,7 @@ describe("StateStore", () => {
     expect(migrated.latestSessionRuntimeProfile(session.id)).toBeNull();
     const inspector = new Database(migrated.paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT COUNT(*) AS count FROM devin_joined_close_intents").get()).toEqual({ count: 0 });
       expect(inspector.query("SELECT COUNT(*) AS count FROM devin_joined_close_receipts").get()).toEqual({ count: 0 });
       expect(inspector.query("SELECT * FROM session_provider_authorities WHERE session_id=?").all(session.id)).toEqual([]);
@@ -4734,7 +4738,7 @@ describe("StateStore", () => {
       });
       expect(snapshotSwitchContainmentForTest(inspector).schema).toEqual(schema);
       const corrupted = snapshotSwitchContainmentForTest(inspector);
-      expect(corrupted.version).toEqual({ user_version: 60 });
+      expect(corrupted.version).toEqual({ user_version: 61 });
       for (const readonly of [true, false]) {
         expect(() => new StateStore(paths, { readonly, now: () => 9_570 }))
           .toThrow("SESSION_SWITCH_EXECUTION_CONTEXT_CORRUPT");
@@ -5706,7 +5710,7 @@ describe("StateStore", () => {
       });
       expect(corrupt.query("SELECT phase FROM session_switch_attempts").get()).toEqual({ phase: "prepared" });
       const before = snapshotSwitchContainmentForTest(corrupt);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:61");
       expect(snapshotSwitchContainmentForTest(corrupt)).toEqual(before);
     } finally { corrupt.close(false); }
 
@@ -5938,7 +5942,7 @@ describe("StateStore", () => {
       expect(snapshotSwitchContainmentForTest(corrupt)).toEqual(before);
       corrupt.exec("DELETE FROM migrations WHERE version>42; PRAGMA user_version=42");
     } finally { corrupt.close(false); }
-    expectInertSchemaRefusal(paths, "STATE_SCHEMA_COHORT_UNSUPPORTED:42", "STATE_SCHEMA_MIGRATION_REQUIRED:42:60");
+    expectInertSchemaRefusal(paths, "STATE_SCHEMA_COHORT_UNSUPPORTED:42", "STATE_SCHEMA_MIGRATION_REQUIRED:42:61");
   });
   test("keeps the switch journal sequence bounded and immutable", async () => {
     const { store } = await fixture();
@@ -6102,15 +6106,10 @@ describe("StateStore", () => {
     expect(store.requireProfile("work").providerEmail).toBe("work@example.com");
   });
 
-  test("retains inert Devin binding metadata while refusing new routing, readiness, usage, and session authority", async () => {
+  test("drives Devin binding routing, readiness, and session authority like any provider", async () => {
     const { store } = await fixture();
     const first = store.createProfile("Devin first route");
     const second = store.createProfile("Devin second route");
-    const siblingState = () => (["codex", "claude"] as const).map((provider) => ({
-      accounts: store.listProviderAccounts(provider),
-      state: store.readProviderAccountState(provider),
-    }));
-    const before = siblingState();
     const firstDevin = store.requireProviderAccountForProfile(first.id, "devin");
     const secondDevin = store.requireProviderAccountForProfile(second.id, "devin");
     expect(firstDevin.id).toMatch(/^dact_[0-9a-f]{32}$/u);
@@ -6118,36 +6117,27 @@ describe("StateStore", () => {
     for (const account of [firstDevin, secondDevin]) {
       expect(account).toMatchObject({ readiness: "unverified", bindingGeneration: 1, processGeneration: 0 });
     }
-    const initialState = store.readProviderAccountState("devin");
-    const database = new Database(store.paths.database, { strict: true });
-    try {
-      const allBefore = canonicalAuthBudgetSnapshot(database);
-      for (const operation of [
-        () => store.replaceProviderAccountOrder({
-          provider: "devin", expectedOrderRevision: initialState.orderRevision,
-          providerAccountIds: [secondDevin.id, firstDevin.id],
-        }),
-        () => store.activateProviderAccount({
-          provider: "devin", expectedPointerRevision: initialState.pointerRevision,
-          providerAccountId: secondDevin.id,
-        }),
-        () => store.observeProviderAccountReadiness({
-          profileId: second.id, provider: "devin", expectedBindingGeneration: secondDevin.bindingGeneration,
-          readiness: "signed_in",
-        }),
-        () => store.createSession({ provider: "devin", preset: "astra", fastEnabled: false, routing: "managed" }),
-      ]) {
-        expect(operation).toThrow("PROVIDER_RETIRED:devin");
-        expect(canonicalAuthBudgetSnapshot(database)).toEqual(allBefore);
-      }
-      expect(() => store.latestProviderUsage(secondDevin.id)).toThrow();
-      expect(() => store.providerUsageObservations({ providerAccountId: secondDevin.id })).toThrow();
-      expect(store.requireProviderAccountForProfile(first.id, "devin")).toEqual(firstDevin);
-      expect(store.requireProviderAccountForProfile(second.id, "devin")).toEqual(secondDevin);
-      expect(store.readProviderAccountState("devin")).toEqual(initialState);
-      expect(siblingState()).toEqual(before);
-      expect(canonicalAuthBudgetSnapshot(database)).toEqual(allBefore);
-    } finally { database.close(false); }
+    let state = store.readProviderAccountState("devin");
+    store.replaceProviderAccountOrder({
+      provider: "devin", expectedOrderRevision: state.orderRevision,
+      providerAccountIds: [secondDevin.id, firstDevin.id],
+    });
+    state = store.readProviderAccountState("devin");
+    store.activateProviderAccount({
+      provider: "devin", expectedPointerRevision: state.pointerRevision,
+      providerAccountId: secondDevin.id,
+    });
+    expect(store.readProviderAccountState("devin").activeProviderAccountId).toBe(secondDevin.id);
+    store.observeProviderAccountReadiness({
+      profileId: second.id, provider: "devin", expectedBindingGeneration: secondDevin.bindingGeneration,
+      readiness: "signed_in",
+    });
+    const session = store.createSession({ provider: "devin", preset: "astra", fastEnabled: false, routing: "managed" });
+    expect(session.provider).toBe("devin");
+    expect(() => store.latestProviderUsage(secondDevin.id)).toThrow();
+    expect(() => store.providerUsageObservations({ providerAccountId: secondDevin.id })).toThrow();
+    expect(store.requireProviderAccountForProfile(first.id, "devin"))
+      .toMatchObject({ id: firstDevin.id, orderPosition: 2 });
   });
 
   test("refuses compatibility-shadow confusion on authentic retired Devin session history", async () => {
@@ -7144,7 +7134,7 @@ describe("StateStore", () => {
           const before = snapshot();
           const oldRows = canonicalAuthBudgetRows(database, Object.keys(before.rows).filter((table) => table !== "migrations"));
           const ledgerBefore = database.query("SELECT * FROM migrations ORDER BY version").all();
-          expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:48:60");
+          expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:48:61");
           expect(snapshot()).toEqual(before);
           const originalExec = z.custom<Database["exec"]>((value) => typeof value === "function")
             .parse(Object.getOwnPropertyDescriptor(Database.prototype, "exec")?.value);
@@ -7177,10 +7167,10 @@ describe("StateStore", () => {
           // The one-guard preapplication above is an uncommitted48 substep,
           // not a claim that the full joined migration installs only a guard.
           expect(oldRows.read()).toEqual(oldRows.before);
-          expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+          expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
           expect(database.query("SELECT * FROM migrations WHERE version<=48 ORDER BY version").all()).toEqual(ledgerBefore);
           expect(database.query("SELECT * FROM migrations WHERE version>48 ORDER BY version").all())
-            .toEqual(Array.from({ length: 12 }, (_, index) => ({ version: index + 49, applied_at: migratedAt })));
+            .toEqual(Array.from({ length: 13 }, (_, index) => ({ version: index + 49, applied_at: migratedAt })));
           expect(database.query("SELECT * FROM legacy_provider_authority_quarantines ORDER BY scope_id").all())
             .toEqual(canonical48WorkFixture.retained.cases.map((entry) => ({ scope_kind: "session", scope_id: entry.session.id,
               reason: "missing_immutable_runtime_authority", recorded_at: migratedAt }))
@@ -7312,7 +7302,7 @@ describe("StateStore", () => {
         database.exec("DROP TRIGGER refuse_work_project_migration");
         const reopened = new StateStore(paths);
         stores.push(reopened);
-        expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+        expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       } finally { database.close(false); }
     });
 
@@ -10189,7 +10179,7 @@ describe("StateStore", () => {
         .toThrow("Claude process launch intent is immutable");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
       expect(() => { new StateStore(paths, { readonly: true }).close(); })
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:36:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:36:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
 
       const migrated = new StateStore(paths, { now: () => source.migratedAt, resolveMachineTimeZone: () => "UTC" });
@@ -10220,8 +10210,8 @@ describe("StateStore", () => {
       expect(database.query("SELECT * FROM migrations WHERE version<=36 ORDER BY version").all())
         .toEqual(Array.from({ length: 36 }, (_, index) => ({ version: index + 1, applied_at: source.fixedTime })));
       expect(database.query("SELECT version FROM migrations ORDER BY version").all())
-        .toEqual(Array.from({ length: 60 }, (_, index) => ({ version: index + 1 })));
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+        .toEqual(Array.from({ length: 61 }, (_, index) => ({ version: index + 1 })));
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(database.query("SELECT * FROM session_provider_authorities").all()).toEqual([]);
       const beforeRefusal = canonicalAuthBudgetSnapshot(database);
       expect(() => migrated.requireSessionProviderAuthority(source.launchSessionId))
@@ -10248,7 +10238,7 @@ describe("StateStore", () => {
         .toEqual(objects.parse(before.schema).filter(({ name }) => name !== "work_member_account_authority_guard"));
       for (const readonly of [true, false]) {
         expect(() => { new StateStore(paths, { readonly, now: () => syntheticAdoption36.migratedAt }).close(); })
-          .toThrow(readonly ? "STATE_SCHEMA_MIGRATION_REQUIRED:36:60" : "STATE_SCHEMA_V39_LEGACY_ADOPTION_WORK_INVALID");
+          .toThrow(readonly ? "STATE_SCHEMA_MIGRATION_REQUIRED:36:61" : "STATE_SCHEMA_V39_LEGACY_ADOPTION_WORK_INVALID");
         expect(canonicalAuthBudgetSnapshot(database)).toEqual(damaged);
       }
       expect(database.query("SELECT revision,claim_status FROM session_adoption_candidates").get())
@@ -10286,7 +10276,7 @@ describe("StateStore", () => {
       .toThrow("STATE_SCHEMA_V39_ADOPTION_WORK_INVALID");
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         `SELECT revision,claim_status FROM session_adoption_candidates
          WHERE provider=? AND provider_thread_id=?`,
@@ -12133,13 +12123,13 @@ describe("StateStore", () => {
             .toThrow("STATE_SCHEMA_V49_WORK_PROJECT_AUTHORITY_INVALID");
           expect(canonicalAuthBudgetSnapshot(database)).toEqual(contradictory);
           expect(() => new StateStore(paths, { readonly: true }))
-            .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:40:60");
+            .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:40:61");
           expect(canonicalAuthBudgetSnapshot(database)).toEqual(contradictory);
           database.query("UPDATE sessions SET project_id=? WHERE id=?").run(project.id, partial.id);
           expect(canonicalAuthBudgetSnapshot(database)).toEqual(corrupted);
         }
         const before = canonicalAuthBudgetSnapshot(database);
-        expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:40:60");
+        expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:40:61");
         expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
         const retained = canonicalAuthBudgetRows(database, Object.keys(before.rows)
           .filter((table) => !["migrations", "sessions", "session_autorespond_counters"].includes(table)));
@@ -12176,8 +12166,8 @@ describe("StateStore", () => {
         expect(database.query("SELECT * FROM session_provider_authorities WHERE session_id=?").all(partial.id)).toEqual([]);
         expect(database.query("SELECT * FROM migrations WHERE version<=40 ORDER BY version").all()).toEqual([...source.ledger]);
         expect(database.query("SELECT version FROM migrations ORDER BY version").all())
-          .toEqual(Array.from({ length: 60 }, (_, index) => ({ version: index + 1 })));
-        expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+          .toEqual(Array.from({ length: 61 }, (_, index) => ({ version: index + 1 })));
+        expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
         const joined = canonicalAuthBudgetSnapshot(database);
         expect(() => store.requireSessionProviderAuthority(partial.id))
           .toThrow("SESSION_PROVIDER_AUTHORITY_QUARANTINED:missing_immutable_runtime_authority");
@@ -12274,7 +12264,7 @@ describe("StateStore", () => {
         ["session_provider_account_authorities", "session_account_authorities", "mutation_attempts", "session_tasks"]);
       const oldSessions = z.array(z.record(z.string(), z.unknown())).parse(database.query("SELECT * FROM sessions ORDER BY id").all());
       expect(() => { new StateStore(paths, { readonly: true }).close(); })
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:36:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:36:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(damaged);
 
       const repaired = new StateStore(paths, { now: () => source.migratedAt, resolveMachineTimeZone: () => "UTC" });
@@ -12327,7 +12317,7 @@ describe("StateStore", () => {
           : { ...row, state: "recovery_required", revision: 2, updated_at: source.migratedAt }));
       expect(database.query("SELECT * FROM migrations WHERE version<=36 ORDER BY version").all())
         .toEqual(Array.from({ length: 36 }, (_, index) => ({ version: index + 1, applied_at: source.fixedTime })));
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       // Even the unaffected legacy account row is not a new execution proof.
       const beforeAuthorityRead = canonicalAuthBudgetSnapshot(database);
       expect(database.query("SELECT * FROM session_provider_authorities").all()).toEqual([]);
@@ -12998,13 +12988,6 @@ describe("StateStore", () => {
     expect(store.latestSessionRuntimeProfile(source.session.id)?.profile).toEqual(source.runtimeProfile);
   });
 
-  test("does not expose retired Devin account-login execution APIs", () => {
-    expect("beginDevinLoginMutationEffect" in StateStore.prototype).toBe(false);
-    expect("settleDevinLoginMutation" in StateStore.prototype).toBe(false);
-    expect("canReleaseIdleDevinSessionForAccountLogin" in StateStore.prototype).toBe(false);
-    expect("terminalizeIdleDevinSessionForAccountLogin" in StateStore.prototype).toBe(false);
-  });
-
   test.each([0, 2])("retains authentic canonical39 Devin generation %i login only for exact acknowledged abandonment", async (generation) => {
     const paths = await canonical39DevinArchive();
     const source = canonical39DevinFixture.cases.find((entry) => entry.generation === generation);
@@ -13041,9 +13024,11 @@ describe("StateStore", () => {
       });
       expect(database.query("SELECT * FROM mutation_effect_evidence WHERE attempt_id=?").get(source.mutation.id)).toEqual(effectBefore);
       expect(store.providerAuthorityAdvanceBlocker(source.profile.id, "devin")).toBeNull();
-      expect(() => store.prepareMutation({ kind: "account.devin-login", authorityId: source.profile.id,
+      // With the abandoned login settled, a fresh Devin login prepares under
+      // ordinary authority like any provider.
+      expect(store.prepareMutation({ kind: "account.devin-login", authorityId: source.profile.id,
         authorityGeneration: generation, request: { provider: "devin" }, idempotencyKey: randomUUID() }))
-        .toThrow("PROVIDER_RETIRED:devin");
+        .toMatchObject({ state: "prepared", replay: false });
     } finally { database.close(false); }
   });
   test("classifies effect-started authorities at restart and rejects new keys", async () => {
@@ -15671,11 +15656,13 @@ describe("StateStore", () => {
         .toBe(JSON.stringify(effectiveRuntimeProfileSchema.parse(codexProfile)));
       expect(stored.get(claude.session.id))
         .toBe(JSON.stringify(effectiveClaudeRuntimeProfileSchema.parse(claudeProfile)));
-      const beforeRetiredAdmission = snapshotSwitchContainmentForTest(inspector);
-      expect(() => store.advanceProviderAccountProcessGeneration({
+      // Devin re-admission only advances ordinary account authority; it never
+      // fabricates a runtime-profile row.
+      expect(store.advanceProviderAccountProcessGeneration({
         profileId: profile.id, provider: "devin", expectedProcessGeneration: 0,
-      })).toThrow("PROVIDER_RETIRED:devin");
-      expect(snapshotSwitchContainmentForTest(inspector)).toEqual(beforeRetiredAdmission);
+      })).toMatchObject({ provider: "devin", processGeneration: 1 });
+      expect(inspector.query("SELECT COUNT(*) AS count FROM session_runtime_profiles").get())
+        .toEqual({ count: 2 });
     } finally {
       inspector.close(false);
     }
@@ -17200,7 +17187,7 @@ describe("StateStore", () => {
     const evidence = mutation.evidence.evidence;
     expect(mutation).toMatchObject({ state: "effect_started", evidence: source.mutation.evidence });
     expect(() => store.beginSessionProviderSwitchEffect({ attemptId: mutation.id,
-      evidence, sessionId: session.id })).toThrow("PROVIDER_RETIRED:devin");
+      evidence, sessionId: session.id })).toThrow("SESSION_PROVIDER_SWITCH_TARGET_ACCOUNT_AUTHORITY_REQUIRED");
     expect(store.readMutation(source.idempotencyKey)).toEqual(mutation);
     expect(store.requireSession(session.id)).toEqual(session);
   });
@@ -17319,7 +17306,7 @@ describe("StateStore", () => {
         expect(store.requireQueue(queue.id).message).toBe(queue.message);
         expect(store.requireSession(session.id).state).toBe("recovery_required");
         expect(store.recoverDispatchingQueueEffects()).toEqual({ recovered: [], unresolved: [] });
-        expect(store.sessionAccountAuthorityMatches(session.id, source.profile.id)).toBe(false);
+        expect(store.sessionAccountAuthorityMatches(session.id, source.profile.id)).toBe(true);
         expect(database.query("SELECT * FROM queue_effect_evidence WHERE queue_id=?").get(queue.id)).toEqual(before);
       } finally { database.close(false); }
     },
@@ -17336,18 +17323,22 @@ describe("StateStore", () => {
     const database = new Database(paths.database, { readonly: true, strict: true });
     try {
     const before = snapshotSwitchContainmentForTest(database);
-    expect(() => store.resolveSessionStatusRecovery({ sessionId: recovery.id,
-      expectedRevision: recovery.revision, resolution: "provider_state_reconciled",
-      provider: { providerThreadId: source.session.providerThreadId, title: "Must not restore", status: "idle" },
-    })).toThrow("PROVIDER_RETIRED:devin");
-    expect(store.requireSession(recovery.id)).toEqual(recovery);
-    expect(store.requireQueue(queue.id).state).toBe("pending");
     // The archived enqueue predates immutable attachment identity. Generic
     // status recovery cannot bypass its separate abandonment receipt guard.
     expect(() => store.resolveSessionStatusRecovery({ sessionId: recovery.id,
       expectedRevision: recovery.revision, resolution: "abandoned" }))
       .toThrow("QUEUE_ATTACHMENT_IDENTITY_UNPROVED");
     expect(snapshotSwitchContainmentForTest(database)).toEqual(before);
+    expect(store.requireSession(recovery.id)).toEqual(recovery);
+    expect(store.requireQueue(queue.id).state).toBe("pending");
+    // A provider-reported reconcile restores the live Devin session like any
+    // provider; the pending queue debt is untouched.
+    expect(store.resolveSessionStatusRecovery({ sessionId: recovery.id,
+      expectedRevision: recovery.revision, resolution: "provider_state_reconciled",
+      provider: { providerThreadId: source.session.providerThreadId,
+        title: source.session.title, status: "idle" },
+    })).toMatchObject({ provider: "devin", state: "idle" });
+    expect(store.requireQueue(queue.id).state).toBe("pending");
     expect(store.latestSessionRuntimeProfile(bound.id)).toEqual(source.runtime);
     } finally { database.close(false); }
   });
@@ -17370,7 +17361,7 @@ describe("StateStore", () => {
     expect(store.requireCapturedSessionProviderAuthority(source.session.id)).toEqual(authority);
   });
 
-  test("includes authentic retired local history only through an explicit read-only authority-filter opt-in", async () => {
+  test("keeps authentic v39 Devin history readable and admits its migrated authority until account identity changes", async () => {
     const paths = await canonical39RetiredArchive("mixed_history");
     const source = canonical39RetiredFixtures.mixed_history.retained;
     const store = new StateStore(paths);
@@ -17384,32 +17375,32 @@ describe("StateStore", () => {
     const unprovenCodex = store.requireSession(source.codex.id);
     const unprovenClaude = store.requireSession(source.claude.id);
     const input = { profileId: account.id, after: null, limit: 10, requireCurrentAccountAuthority: true } as const;
-    expect(store.listLocalSessionPage(input).sessions).toEqual([codex]);
-    expect(store.listLocalSessionPage({ ...input, includeRetiredHistory: false }).sessions).toEqual([codex]);
-    expect(new Set(store.listLocalSessionPage({ ...input, includeRetiredHistory: true }).sessions.map((session) => session.id)))
-      .toEqual(new Set([codex.id, devin.id]));
-    expect(store.listLocalSessionPage({ ...input, includeRetiredHistory: true, excludedProvider: "devin" }).sessions).toEqual([codex]);
-    for (const session of [unprovenCodex, unprovenClaude, devin]) {
+    expect(store.listLocalSessionPage(input).sessions).toEqual([codex, devin]);
+    expect(store.listLocalSessionPage({ ...input, excludedProvider: "devin" }).sessions).toEqual([codex]);
+    for (const session of [unprovenCodex, unprovenClaude]) {
       expect(store.sessionAccountAuthorityMatches(session.id, account.id)).toBe(false);
       expect(store.requireSession(session.id)).toEqual(session);
     }
+    expect(store.sessionAccountAuthorityMatches(devin.id, account.id)).toBe(true);
+    // A Codex sign-in only advances the Codex authority generation; the Devin
+    // binding is fenced per provider and stays current.
     expect(store.setProfileState(account.id, account.processGeneration, "signed_in", {
       email: "replacement-history@example.com", plan: "Plus",
     })).toBe(true);
-    expect(store.listLocalSessionPage(input).sessions).toEqual([]);
-    expect(store.listLocalSessionPage({ ...input, includeRetiredHistory: true }).sessions).toEqual([devin]);
+    expect(store.listLocalSessionPage(input).sessions).toEqual([devin]);
     expect(store.sessionAccountAuthorityMatches(codex.id, account.id)).toBe(false);
-    expect(store.sessionAccountAuthorityMatches(devin.id, account.id)).toBe(false);
+    expect(store.sessionAccountAuthorityMatches(devin.id, account.id)).toBe(true);
     const database = new Database(paths.database, { readonly: true, strict: true });
     try {
       const before = snapshotSwitchContainmentForTest(database);
-      // This history fails its existing authority precheck before provider admission.
+      // The recovery_required state precheck fences dispatch before provider
+      // admission, without any provider-name check.
       expect(() => store.enqueue(devin.id, "history is not executable")).toThrow("MUTATION_EFFECT_AUTHORITY_CHANGED");
       expect(snapshotSwitchContainmentForTest(database)).toEqual(before);
     } finally { database.close(false); }
   });
 
-  test("keeps authentic mixed v39 history readable while rejecting new retired-provider effects", async () => {
+  test("keeps authentic mixed v39 history readable while admitting current Devin effects under migrated authority", async () => {
     const paths = await canonical39RetiredArchive("mixed_history");
     const source = canonical39RetiredFixtures.mixed_history.retained;
     const store = new StateStore(paths);
@@ -17429,23 +17420,28 @@ describe("StateStore", () => {
       try { return snapshotSwitchContainmentForTest(database); }
       finally { database.close(false); }
     };
-    const beforeAdmission = snapshot();
-    expect(store.sessionAccountAuthorityMatches(devin.id, account.id)).toBe(false);
+    expect(store.sessionAccountAuthorityMatches(devin.id, account.id)).toBe(true);
     expect(store.listLocalSessionPage({ profileId: account.id, after: null, limit: 10,
-      requireCurrentAccountAuthority: true }).sessions).not.toContainEqual(devin);
+      requireCurrentAccountAuthority: true }).sessions).toContainEqual(devin);
     expect(store.listLocalSessionPage({ profileId: account.id, after: null, limit: 10 }).sessions).toContainEqual(devin);
+    // The archived send predates the provider-authority model; its stale
+    // authority proof fences it without any provider-name check.
     expect(store.isSessionMutationProviderAuthorityCurrent({ attemptId: mutation.id,
       profileId: account.id, provider: "devin", originGeneration: source.profile.processGeneration })).toBe(false);
-    expect(() => store.createSession({ profileId: account.id, provider: "devin", preset: "astra", fastEnabled: false }))
-      .toThrow("PROVIDER_RETIRED:devin");
-    expect(() => store.upsertProviderSession({
+    const created = store.createSession({ profileId: account.id, provider: "devin", preset: "astra", fastEnabled: false });
+    expect(created.provider).toBe("devin");
+    const imported = store.upsertProviderSession({
       providerAuthority: store.requireProviderAccountAuthority(account.id, "devin"), profileId: account.id, provider: "devin",
-      providerThreadId: "rejected-import", title: "Rejected import", preset: "astra",
-      fastEnabled: false, state: "idle" })).toThrow("PROVIDER_RETIRED:devin");
-    expect(() => store.setDefaultPreset("astra")).toThrow();
-    expect(() => store.enqueue(devin.id, "rejected")).toThrow("MUTATION_EFFECT_AUTHORITY_CHANGED");
-    expect(() => store.updateSessionMetadata({ sessionId: devin.id, expectedRevision: devin.revision, preset: "astra" }))
-      .toThrow("PROVIDER_RETIRED:devin");
+      providerThreadId: "admitted-import", title: "Admitted import", preset: "astra",
+      fastEnabled: false, state: "idle" });
+    expect(imported.provider).toBe("devin");
+    store.setDefaultPreset("astra");
+    // The archived session is recovery_required: the state prechecks fence
+    // dispatch and preset reinterpretation before provider admission.
+    expect(() => store.enqueue(devin.id, "admitted")).toThrow("MUTATION_EFFECT_AUTHORITY_CHANGED");
+    expect(() => store.updateSessionMetadata({ sessionId: devin.id, expectedRevision: devin.revision, preset: "ultra" }))
+      .toThrow("SESSION_PRESET_RECOVERY_REQUIRED");
+    const beforeRefusals = snapshot();
     expect(() => store.beginSessionMutationEffect({
       providerAuthority: capturedProviderAuthorityForTest(store, devin.id), transcript: {
       accountId: account.id, providerGeneration: source.profile.processGeneration,
@@ -17454,7 +17450,7 @@ describe("StateStore", () => {
     evidence: { kind: "session.send", providerThreadId: source.session.providerThreadId,
       baseline: { providerUpdatedAt: null, status: "idle", activeTurnId: null },
       clientMessageId: mutation.id, messageDigest: testDigest("rejected"), runtimeProfile },
-    })).toThrow("PROVIDER_RETIRED:devin");
+    })).toThrow("MUTATION_EFFECT_AUTHORITY_CHANGED");
     expect(() => store.beginQueueEffect({
       providerAuthority: capturedProviderAuthorityForTest(store, devin.id), queueId: queue.id, sessionId: devin.id,
       profileGeneration: source.profile.processGeneration, providerConnectionId: "10000000-0000-4000-8000-000000000005",
@@ -17464,7 +17460,7 @@ describe("StateStore", () => {
         clientMessageId: queue.id, messageDigest: testDigest(queue.message), runtimeProfile },
     // The immutable attachment-identity precheck precedes provider admission.
     })).toThrow("QUEUE_ATTACHMENT_IDENTITY_UNPROVED");
-    expect(snapshot()).toEqual(beforeAdmission);
+    expect(snapshot()).toEqual(beforeRefusals);
     expect(store.readMutation(source.idempotencyKey)).toEqual(mutation);
     expect(store.requireQueue(queue.id)).toMatchObject({ state: "pending", message: "legacy pending send" });
     const inspect = () => {
@@ -17766,7 +17762,7 @@ describe("StateStore", () => {
       expect(original.evidence_digest).toBe(source.effect.digest);
       expect(inspector.query("SELECT evidence_json FROM mutation_resolutions WHERE attempt_id=?").get(source.effect.attemptId))
         .toEqual({ evidence_json: resolutionBytes });
-      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:40:60");
+      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:40:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
 
       const migrated = new StateStore(paths, { now: () => 50_000, resolveMachineTimeZone: () => "UTC" });
@@ -17779,9 +17775,9 @@ describe("StateStore", () => {
         .toEqual({ evidence_json: resolutionBytes });
       expect(inspector.query("SELECT * FROM migrations WHERE version<=40 ORDER BY version").all()).toEqual([...capture.snapshot.ledger]);
       expect(inspector.query("SELECT * FROM migrations WHERE version>40 ORDER BY version").all()).toEqual(
-        Array.from({ length: 20 }, (_, index) => ({ version: index + 41, applied_at: 50_000 })),
+        Array.from({ length: 21 }, (_, index) => ({ version: index + 41, applied_at: 50_000 })),
       );
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       for (const name of ["mutation_resolutions_timestamp_proof_insert", "session_peer_policies", "project_memory_sync_intents"]) {
         expect(inspector.query("SELECT name FROM sqlite_master WHERE name=?").get(name)).toEqual({ name });
@@ -17814,7 +17810,7 @@ describe("StateStore", () => {
           expect(() => new StateStore(store.paths, { readonly })).toThrow("STATE_SCHEMA_V41_TIMESTAMP_PROOF_GUARD_INVALID");
           expect(inspector.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all()).toEqual(schemaBefore);
           expect(inspector.query("SELECT * FROM migrations ORDER BY version").all()).toEqual(ledgerBefore);
-          expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+          expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
         }
       } finally { inspector.close(false); }
     }
@@ -17843,7 +17839,7 @@ describe("StateStore", () => {
           "STATE_SCHEMA_V41_TIMESTAMP_PROOF_GUARD_INVALID",
         );
         expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow(
-          "STATE_SCHEMA_MIGRATION_REQUIRED:41:60",
+          "STATE_SCHEMA_MIGRATION_REQUIRED:41:61",
         );
         expect(inspector.query(
           "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name",
@@ -17879,7 +17875,7 @@ describe("StateStore", () => {
               : "STATE_SCHEMA_COHORT_LEDGER_INVALID",
         );
         expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow(
-          "STATE_SCHEMA_MIGRATION_REQUIRED:40:60",
+          "STATE_SCHEMA_MIGRATION_REQUIRED:40:61",
         );
         expect(inspector.query(
           "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name",
@@ -17922,7 +17918,7 @@ describe("StateStore", () => {
           "STATE_SCHEMA_V41_MIGRATION_LEDGER_INVALID",
         );
         expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow(
-          "STATE_SCHEMA_MIGRATION_REQUIRED:41:60",
+          "STATE_SCHEMA_MIGRATION_REQUIRED:41:61",
         );
         expect(inspector.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all()).toEqual(schemaBefore);
         expect(inspector.query("SELECT * FROM migrations ORDER BY version").all()).toEqual(ledgerBefore);
@@ -17933,7 +17929,7 @@ describe("StateStore", () => {
     },
   );
 
-  for (const version of [45, 46, 47, 48, 60] as const) test.each([
+  for (const version of [45, 46, 47, 48, 61] as const) test.each([
     "missing_table", "missing_guard", "weaker_guard", "wrong_table_guard", "extra_index",
   ] as const)(
     `auth45 authority refuses DDL drift at ${version === 47 ? "source-derived staged schema 47" : `schema ${String(version)}`} without writes: %s`,
@@ -17961,8 +17957,8 @@ describe("StateStore", () => {
         const before = canonicalAuthBudgetSnapshot(inspector);
         for (const readonly of [false, true]) {
           expect(() => new StateStore(paths, { readonly })).toThrow(
-            readonly && version < 60
-              ? `STATE_SCHEMA_MIGRATION_REQUIRED:${String(version)}:60`
+            readonly && version < 61
+              ? `STATE_SCHEMA_MIGRATION_REQUIRED:${String(version)}:61`
               : "STATE_SCHEMA_V45_ACCOUNT_MUTATION_AUTHORITY_INVALID",
           );
           expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
@@ -17982,7 +17978,7 @@ describe("StateStore", () => {
       const before = canonicalAuthBudgetSnapshot(inspector);
       for (const readonly of [false, true]) {
         expect(() => new StateStore(paths, { readonly })).toThrow(
-          readonly ? `STATE_SCHEMA_MIGRATION_REQUIRED:${String(version)}:60`
+          readonly ? `STATE_SCHEMA_MIGRATION_REQUIRED:${String(version)}:61`
             : `STATE_SCHEMA_V${String(version)}_MIGRATION_LEDGER_INVALID`,
         );
         expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
@@ -17998,7 +17994,7 @@ describe("StateStore", () => {
       const before = canonicalAuthBudgetSnapshot(database);
       const oldRows = canonicalAuthBudgetRows(database, Object.keys(before.rows).filter((table) => table !== "migrations"));
       const ledgerBefore = database.query("SELECT * FROM migrations ORDER BY version").all();
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:47:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:47:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
       const now = canonical48WorkFixture.fixedTime + 1_000;
       const store = new StateStore(paths, { now: () => now });
@@ -18006,7 +18002,7 @@ describe("StateStore", () => {
         expect(oldRows.read()).toEqual(oldRows.before);
         expect(database.query("SELECT * FROM migrations WHERE version<=47 ORDER BY version").all()).toEqual(ledgerBefore);
         expect(database.query("SELECT * FROM migrations WHERE version>47 ORDER BY version").all())
-          .toEqual(Array.from({ length: 13 }, (_, index) => ({ version: index + 48, applied_at: now })));
+          .toEqual(Array.from({ length: 14 }, (_, index) => ({ version: index + 48, applied_at: now })));
         expect(database.query("SELECT * FROM session_provider_authorities").all()).toEqual([]);
         expect(database.query("SELECT * FROM legacy_provider_authority_quarantines ORDER BY scope_id").all())
           .toEqual(canonical48WorkFixture.retained.cases.map((entry) => ({ scope_kind: "session", scope_id: entry.session.id,
@@ -18031,7 +18027,7 @@ describe("StateStore", () => {
         if (collision === "table") inspector.exec("CREATE TABLE account_mutation_authority_rebinds(unreviewed TEXT) STRICT");
         else inspector.exec("CREATE TRIGGER account_mutation_authority_rebinds_insert_guard BEFORE INSERT ON profiles BEGIN SELECT 1; END");
         const before = canonicalAuthBudgetSnapshot(inspector);
-        expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:44:60");
+        expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:44:61");
         expect(() => new StateStore(paths)).toThrow("already exists");
         expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
         expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 44 });
@@ -18063,7 +18059,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT state,process_generation FROM profiles WHERE id=?").get(profile.id))
         .toEqual({ state: "login_pending", process_generation: 1 });
       const beforeReadonly = canonicalAuthBudgetSnapshot(inspector);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:44:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:44:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(beforeReadonly);
       const reopened = new StateStore(paths, { now: () => 50_000 });
       stores.push(reopened);
@@ -18086,7 +18082,7 @@ describe("StateStore", () => {
         .run(siblingSession.id)).toThrow("autorespond budget history is immutable");
       expect(inspector.query("SELECT count(*) AS count FROM account_mutation_authority_rebinds").get()).toEqual({ count: 0 });
       expect(inspector.query("SELECT count(*) AS count FROM mutation_resolutions WHERE attempt_id=?").get(attempt.id)).toEqual({ count: 0 });
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       const after = canonicalAuthBudgetSnapshot(inspector);
       for (const readonly of [false, true]) {
         const again = new StateStore(paths, { readonly, now: () => 50_001 });
@@ -18133,7 +18129,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT * FROM session_runtime_profiles").all()).toEqual([]);
       const beforeReadonly = canonicalAuthBudgetSnapshot(inspector);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:50:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:50:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(beforeReadonly);
 
       const migrated = new StateStore(paths, { now: () => migratedAt });
@@ -18141,8 +18137,8 @@ describe("StateStore", () => {
       expect(originalCells()).toEqual(oldCells);
       expect(inspector.query("SELECT * FROM migrations WHERE version<=50 ORDER BY version").all()).toEqual(oldLedger);
       expect(inspector.query("SELECT * FROM migrations WHERE version>50 ORDER BY version").all())
-        .toEqual(Array.from({ length: 10 }, (_, index) => ({ version: index + 51, applied_at: migratedAt })));
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+        .toEqual(Array.from({ length: 11 }, (_, index) => ({ version: index + 51, applied_at: migratedAt })));
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT scope_kind,scope_id,reason,recorded_at FROM legacy_provider_authority_quarantines ORDER BY scope_kind,scope_id").all())
         .toEqual([{ scope_kind: "session", scope_id: captured.session.id,
           reason: "missing_immutable_runtime_authority", recorded_at: migratedAt }]);
@@ -18167,7 +18163,7 @@ describe("StateStore", () => {
     } finally { inspector.close(false); }
   });
 
-  for (const version of [49, 50, 60] as const) test.each([
+  for (const version of [49, 50, 61] as const) test.each([
     "missing_40",
     "missing_41",
     "missing_42",
@@ -18183,7 +18179,7 @@ describe("StateStore", () => {
     "unsafe_time",
     "later_version",
   ] as const)(
-    `refuses an invalid ${version === 60 ? "current" : "authentic predecessor"} schema ${String(version)} migration ledger without writes: %s`,
+    `refuses an invalid ${version === 61 ? "current" : "authentic predecessor"} schema ${String(version)} migration ledger without writes: %s`,
     async (damage) => {
       let paths: ReturnType<typeof resolveStatePaths>;
       let profileId: string;
@@ -18243,9 +18239,9 @@ describe("StateStore", () => {
 
         for (const readonly of [false, true]) {
           expect(() => new StateStore(paths, { readonly })).toThrow(
-            readonly && version < 60
-              ? `STATE_SCHEMA_MIGRATION_REQUIRED:${String(version)}:60`
-              : version === 60 ? "STATE_SCHEMA_JOIN_LEDGER_INVALID"
+            readonly && version < 61
+              ? `STATE_SCHEMA_MIGRATION_REQUIRED:${String(version)}:61`
+              : version === 61 ? "STATE_SCHEMA_JOIN_LEDGER_INVALID"
                 : `STATE_SCHEMA_V${String(version)}_MIGRATION_LEDGER_INVALID`,
           );
           expect(inspector.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all()).toEqual(schemaBefore);
@@ -18925,7 +18921,7 @@ describe("StateStore", () => {
       expect(legacy.query("SELECT message,state FROM queue_entries WHERE id=?").get(source.ambiguous.id))
         .toEqual({ message: source.ambiguousMessage, state: "ambiguous" });
       expect(legacy.query("SELECT name FROM sqlite_master WHERE name='queue_message_scrub_authority'").get()).toBeNull();
-      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:20:60");
+      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:20:61");
       expect(canonicalAuthBudgetSnapshot(legacy)).toEqual(before);
     } finally { legacy.close(false); }
     for (const message of [source.terminalMessage, source.ambiguousMessage]) {
@@ -18944,7 +18940,7 @@ describe("StateStore", () => {
       for (const projection of projections) expect(inspector.query(projection.sql).all()).toEqual(projection.rows);
       expect(inspector.query("SELECT * FROM migrations WHERE version<=20 ORDER BY version").all()).toEqual([...capture.snapshot.ledger]);
       expect(inspector.query("SELECT applied_at FROM migrations WHERE version=23").get()).toEqual({ applied_at: 30_000 });
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       expect(inspector.query("SELECT required_at,requires_vacuum FROM queue_message_scrub_authority WHERE singleton=1").get()).toBeNull();
       const joined = canonicalAuthBudgetSnapshot(inspector);
@@ -19678,7 +19674,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT * FROM desktop_switch_resolutions WHERE attempt_id=?")
         .get(source.receipt.attemptId)).toEqual(source.immutableDesktop);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:34:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:34:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(original);
 
       const migrated = new StateStore(paths, { now: () => 40_000 });
@@ -22302,7 +22298,7 @@ describe("StateStore", () => {
     expect(store.admitInteraction(input)).toMatchObject({ replayed: false, record: { state: "pending" } });
   });
 
-  test("refuses new callbacks for authentic retired Devin history even with the exact retained thread", async () => {
+  test("admits callbacks on migrated Devin history only with the exact retained thread", async () => {
     const paths = await canonical39DevinArchive();
     const source = canonical39DevinFixture.cases.find((entry) => entry.generation === 0);
     if (source === undefined) throw new Error("Expected archived generation-zero Devin session.");
@@ -22312,27 +22308,30 @@ describe("StateStore", () => {
     try {
       const before = snapshotSwitchContainmentForTest(database);
       const authority = store.requireProviderAccountAuthority(source.profile.id, "devin");
-      for (const threadId of [source.session.providerThreadId, "unrelated-interaction-thread", null]) {
-        const input = {
-          publicId: "20000000-0000-4000-8000-000000000802", sessionId: source.session.id,
-          authority: { ...authority, connectionId: "20000000-0000-4000-8000-000000000801",
-            requestId: { type: "number" as const, value: 1 }, method: "devin/session/request_permission",
-            requestDigest: "a".repeat(64), threadId, turnId: null, itemId: null, approvalId: null },
-          kind: "command_approval" as const, blocking: true,
-          display: { kind: "command_approval" as const, summary: "Rejected retired callback", reason: null,
-            commandClass: "test", workingDirectory: null, availableDecisions: ["once" as const] },
-        };
-        expect(() => store.admitInteraction(input)).toThrow(threadId === source.session.providerThreadId
-          ? "RETIRED_PROVIDER_ADMISSION_REFUSED" : "INTERACTION_SESSION_AUTHORITY_MISMATCH");
-        expect(() => database.query(`INSERT INTO provider_interactions(
-          public_id,session_id,profile_id,process_generation,connection_id,request_id_type,request_id_number,
-          method,request_digest,thread_id,kind,state,revision,blocking,display_json,requested_at,updated_at
-        ) VALUES (?,?,?,?,?,'number',1,?,?,?,'command_approval','pending',1,1,?,2000,2000)`)
-          .run(input.publicId, source.session.id, source.profile.id, authority.processGeneration,
-            input.authority.connectionId, input.authority.method, input.authority.requestDigest, threadId,
-            JSON.stringify(input.display))).toThrow("RETIRED_PROVIDER_ADMISSION_REFUSED");
-        expect(snapshotSwitchContainmentForTest(database)).toEqual(before);
+      const input = {
+        publicId: "20000000-0000-4000-8000-000000000802", sessionId: source.session.id,
+        authority: { ...authority, connectionId: "20000000-0000-4000-8000-000000000801",
+          requestId: { type: "number" as const, value: 1 }, method: "devin/session/request_permission",
+          requestDigest: "a".repeat(64), threadId: source.session.providerThreadId, turnId: null, itemId: null, approvalId: null },
+        kind: "command_approval" as const, blocking: true,
+        display: { kind: "command_approval" as const, summary: "Migrated Devin callback", reason: null,
+          commandClass: "test", workingDirectory: null, availableDecisions: ["once" as const] },
+      };
+      // Every other binding still refuses through the ordinary authority fence.
+      for (const [publicId, threadId] of [
+        ["20000000-0000-4000-8000-000000000803", "unrelated-interaction-thread"],
+        ["20000000-0000-4000-8000-000000000804", null],
+      ] as const) {
+        expect(() => store.admitInteraction({
+          ...input, publicId,
+          authority: { ...input.authority, threadId },
+        })).toThrow("INTERACTION_SESSION_AUTHORITY_MISMATCH");
       }
+      expect(snapshotSwitchContainmentForTest(database)).toEqual(before);
+      // The migrated session's exact authority admits like any live session.
+      expect(store.admitInteraction(input)).toMatchObject({
+        replayed: false, record: { state: "pending" },
+      });
     } finally { database.close(false); }
   });
 
@@ -23224,7 +23223,7 @@ describe("StateStore", () => {
       expect(database.query("SELECT name FROM sqlite_master WHERE name='session_provider_account_authorities'").get()).toBeNull();
       expect(database.query("SELECT * FROM session_events").all()).toEqual([]);
       expect(database.query("SELECT * FROM session_autorespond_counters").all()).toEqual([]);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:39:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:39:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(original);
       const retained = canonicalAuthBudgetRows(database, Object.keys(original.rows)
         .filter((table) => !["migrations", "sessions", "session_autorespond_counters"].includes(table)));
@@ -23240,8 +23239,8 @@ describe("StateStore", () => {
         .toEqual([{ session_id: session.id, consecutive_count: 3, updated_at: 90_000 }]);
       expect(database.query("SELECT * FROM migrations WHERE version<=39 ORDER BY version").all()).toEqual([...source.ledger]);
       expect(database.query("SELECT version FROM migrations ORDER BY version").all())
-        .toEqual(Array.from({ length: 60 }, (_, index) => ({ version: index + 1 })));
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+        .toEqual(Array.from({ length: 61 }, (_, index) => ({ version: index + 1 })));
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(store.hasUnsettledLegacyProviderAuthorityQuarantineForSession(session.id)).toBe(true);
       expect(store.sessionAccountAuthorityMatches(session.id, source.retained.profile.id)).toBe(false);
       expect(store.readSessionProviderAccountAuthority(session.id)).toBeNull();
@@ -24058,7 +24057,7 @@ describe("StateStore", () => {
       const original = canonicalAuthBudgetRows(inspector, ["profiles", "account_rate_limit_reset_attempts", "usage_revision_authority"]);
       const before = canonicalAuthBudgetSnapshot(inspector);
       expect(() => { const opened = new StateStore(paths, { readonly: true }); opened.close(); })
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:27:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:27:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
 
       const migrated = new StateStore(paths, { now: () => 40_000, resolveMachineTimeZone: () => "UTC" });
@@ -24112,7 +24111,7 @@ describe("StateStore", () => {
         idempotencyKey: source.started.idempotencyKey, localResolution: "account_identity_changed",
         outcome: null, state: "closed",
       });
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT COUNT(*) AS count FROM account_rate_limit_reset_attempts").get()).toEqual({ count: 1 });
     } finally { inspector.close(false); }
   });
@@ -24142,7 +24141,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT * FROM migrations ORDER BY version").all())
         .toEqual(ledger.filter((entry) => entry.version !== 28));
       expect(() => { const opened = new StateStore(paths, { readonly: true }); opened.close(); })
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:27:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:27:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(partial);
 
       const migrated = new StateStore(paths, { now: () => 40_000, resolveMachineTimeZone: () => "UTC" });
@@ -24162,7 +24161,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT * FROM migrations WHERE version<=27 ORDER BY version").all())
         .toEqual(ledger.filter((entry) => entry.version !== 28));
       expect(inspector.query("SELECT * FROM migrations WHERE version=28").get()).toEqual({ version: 28, applied_at: 40_000 });
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       for (const readonly of [false, true]) {
         const snapshot = canonicalAuthBudgetSnapshot(inspector);
@@ -26458,7 +26457,7 @@ describe("StateStore", () => {
         .toEqual({ count: 0 });
       expect(inspector.query("SELECT version,applied_at FROM migrations WHERE version<=40 ORDER BY version").all())
         .toEqual([...canonical40UsageFixture.migrations]);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       const ledger = inspector.query("SELECT * FROM migrations ORDER BY version").all();
       migrated.close();
       stores.splice(stores.indexOf(migrated), 1);
@@ -26469,7 +26468,7 @@ describe("StateStore", () => {
       expect(storedBytes()).toEqual(archived);
       expect(sidecars()).toEqual(admittedSidecars);
       expect(inspector.query("SELECT * FROM migrations ORDER BY version").all()).toEqual(ledger);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     } finally {
       inspector.close(false);
     }
@@ -26523,7 +26522,7 @@ describe("StateStore", () => {
 
       const migrated = new StateStore(paths, { now: () => 40_000 });
       stores.push(migrated);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(anchors()).toEqual([retainedAnchor]);
       expect(snapshots()).toEqual([retainedSnapshot]);
       const compatibility = { process_generation: null, provenance: "legacy_codex_compatibility" };
@@ -26558,7 +26557,7 @@ describe("StateStore", () => {
       expect(anchors()).toEqual([retainedAnchor]);
       expect(sidecars()).toEqual(admittedSidecars);
       expect(inspector.query("SELECT * FROM migrations ORDER BY version").all()).toEqual(ledger);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     } finally {
       inspector.close(false);
     }
@@ -26783,7 +26782,7 @@ describe("StateStore", () => {
       ]);
       const sessions = canonicalAuthBudgetRows(inspector, ["sessions"]);
       const mutations = canonicalAuthBudgetRows(inspector, ["mutation_attempts"]);
-      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:38:60");
+      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:38:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(derived);
       const migrated = new StateStore(paths, { now: () => migratedAt, resolveMachineTimeZone: () => "UTC" });
       stores.push(migrated);
@@ -27051,9 +27050,9 @@ describe("StateStore", () => {
     const { store } = await fixture({ provision: "migrate" });
     const inspector = new Database(store.paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT version FROM migrations ORDER BY version").all())
-        .toEqual(Array.from({ length: 60 }, (_, index) => ({ version: index + 1 })));
+        .toEqual(Array.from({ length: 61 }, (_, index) => ({ version: index + 1 })));
       expect(inspector.query("PRAGMA table_info(account_rate_limit_reset_attempts)").all())
         .toContainEqual(expect.objectContaining({ name: "attempt_sequence", type: "INTEGER", pk: 1 }));
       expect(inspector.query("PRAGMA table_info(account_rate_limit_reset_attempts)").all())
@@ -27162,7 +27161,7 @@ describe("StateStore", () => {
       const sessionRows = canonicalAuthBudgetRows(database, ["sessions"]);
       expect(database.query("SELECT name FROM sqlite_master WHERE name='provider_accounts'").get()).toBeNull();
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:38:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:38:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
 
       const migratedAt = 90_000_000;
@@ -27182,7 +27181,7 @@ describe("StateStore", () => {
         ...row, state: "recovery_required", revision: z.number().parse(row.revision) + 1, updated_at: migratedAt,
       })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))));
       expect(database.query("SELECT * FROM session_provider_account_authorities").all()).toEqual([]);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(database.query("SELECT * FROM migrations WHERE version<=38 ORDER BY version").all())
         .toEqual([...captured.snapshot.ledger]);
       expect(database.query("PRAGMA foreign_key_check").all()).toEqual([]);
@@ -27202,7 +27201,7 @@ describe("StateStore", () => {
       expect(database.query("SELECT profile_json FROM session_runtime_profiles WHERE session_id=?")
         .get(retained.session.id)).toEqual({ profile_json: JSON.stringify(retained.runtime) });
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:37:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:37:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
       const migrated = new StateStore(paths, { now: () => 90_000_000,
         resolveMachineTimeZone: () => { throw new Error("CAPTURED_SOL_ZONE_MUST_NOT_BE_REPLACED"); },
@@ -27215,7 +27214,7 @@ describe("StateStore", () => {
       expect(runtimeRows.read()).toEqual(runtimeRows.before);
       expect(database.query("SELECT * FROM session_provider_account_authorities WHERE session_id=?")
         .get(retained.session.id)).toBeNull();
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(database.query("PRAGMA foreign_key_check").all()).toEqual([]);
       expectCanonical35To38InertReopens(paths, database);
     } finally { database.close(false); }
@@ -27289,7 +27288,7 @@ describe("StateStore", () => {
       const sessions = canonicalAuthBudgetRows(inspector, ["sessions"]);
       const oldProviders = z.array(z.object({ id: z.string(), provider: z.string() }).strict())
         .parse(inspector.query("SELECT id,provider FROM sessions ORDER BY id").all());
-      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:38:60");
+      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:38:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
       const migrated = new StateStore(paths, { now: () => 60_000, resolveMachineTimeZone: () => "UTC" });
       stores.push(migrated);
@@ -27306,11 +27305,12 @@ describe("StateStore", () => {
       expect(sessions.read().sessions).toEqual(z.array(sessionSchema).parse(sessions.before.sessions).map((row) =>
         row.state === "terminal" || row.state === "recovery_required" ? row
           : { ...row, state: "recovery_required", revision: row.revision + 1, updated_at: 60_000 }));
+      // Historical widening stays readable. Devin is admitted again, so a new
+      // Devin session starts under the current contract like any provider.
+      const revived = migrated.createSession({ profileId: c.signedIn.id, provider: "devin",
+        preset: "astra", fastEnabled: false });
+      expect(revived).toMatchObject({ provider: "devin", preset: "astra" });
       const joined = canonicalAuthBudgetSnapshot(inspector);
-      // Historical widening stays readable. Retirement still prohibits new
-      // Devin execution; this compatibility test must not revive that provider.
-      expect(() => migrated.createSession({ profileId: c.signedIn.id, provider: "devin",
-        preset: "astra", fastEnabled: false })).toThrow("PROVIDER_RETIRED:devin");
       expect(() => inspector.query("INSERT INTO session_mutation_authority_rebinds_v39(attempt_id,profile_id,provider,from_generation,to_generation,recorded_at) VALUES (?,?,?,?,?,?)")
         .run(c.pendingSwitch.attempt.id, c.restartTarget.id, "devin",
           originalRebind.from_generation, originalRebind.to_generation, 60_001))
@@ -27353,7 +27353,7 @@ describe("StateStore", () => {
     }
 
     expectInertSchemaRefusal(paths, "STATE_SCHEMA_V39_DEVIN_PRESET_CONTRACT_INVALID:sessions",
-      "STATE_SCHEMA_MIGRATION_REQUIRED:39:60");
+      "STATE_SCHEMA_MIGRATION_REQUIRED:39:61");
 
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
@@ -27464,7 +27464,7 @@ describe("StateStore", () => {
       foreignKeyViolations: 0,
       profileColumns: ["codex_account_key"],
       sqliteVersion: expect.stringMatching(/^3\./u),
-      userVersion: 60,
+      userVersion: 61,
     });
   });
 
@@ -27483,7 +27483,7 @@ describe("StateStore", () => {
       expect(original.version).toEqual({ user_version: 34 });
       expect(providerSwitchSchemaObjectCount(inspector)).toBe(0);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:34:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:34:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(original);
 
       const migrated = new StateStore(paths, { now: () => 40_000 });
@@ -27501,10 +27501,10 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT * FROM queue_attachment_identities WHERE queue_id=?")
         .all(source.unboundQueue.id)).toEqual([]);
       expect(retained.read()).toEqual(retained.before);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT * FROM migrations WHERE version<=34 ORDER BY version").all()).toEqual(ledger);
       expect(inspector.query("SELECT version,applied_at FROM migrations WHERE version>=35 ORDER BY version").all())
-        .toEqual(Array.from({ length: 26 }, (_, index) => ({ version: index + 35, applied_at: 40_000 })));
+        .toEqual(Array.from({ length: 27 }, (_, index) => ({ version: index + 35, applied_at: 40_000 })));
       expect(providerSwitchSchemaObjectCount(inspector)).toBe(21);
       expect(inspector.query("SELECT name FROM sqlite_master WHERE type='table' AND name='session_adoption_policies'")
         .get()).toEqual({ name: "session_adoption_policies" });
@@ -27537,7 +27537,7 @@ describe("StateStore", () => {
         "session_provider_switch_targets", "mutation_effect_evidence", "session_runtime_profiles", "queue_entries",
       ]);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
       let zoneReads = 0;
       const migrated = new StateStore(paths, { now: () => 90_000_000,
@@ -27546,10 +27546,10 @@ describe("StateStore", () => {
       stores.push(migrated);
       expect(zoneReads).toBe(1);
       expect(history.read()).toEqual(history.before);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(database.query("SELECT * FROM migrations ORDER BY version").all()).toEqual([
         ...captured.snapshot.ledger,
-        ...Array.from({ length: 25 }, (_, index) => ({ version: index + 36, applied_at: 90_000_000 })),
+        ...Array.from({ length: 26 }, (_, index) => ({ version: index + 36, applied_at: 90_000_000 })),
       ]);
       expect(database.query(`SELECT name FROM sqlite_master WHERE type='table'
         AND name IN ('session_provider_switch_targets','session_adoption_policies') ORDER BY name`).all())
@@ -27559,9 +27559,10 @@ describe("StateStore", () => {
     } finally { database.close(false); }
   });
 
-  test("migrates the exact provider-v39 predecessor through transcript finalization v43", async () => {
+  test("migrates the exact protected-main provider-v39 predecessor to adoption v40", async () => {
     const paths = await canonical39DevinArchive();
-    const source = canonical39DevinFixture.cases[0];
+    const source = canonical39DevinFixture.cases.find((entry) => entry.generation === 0);
+    if (source === undefined) throw new Error("Expected archived canonical39 Devin session.");
     const session = source.session;
 
     const predecessor = new Database(paths.database, { create: false, strict: true });
@@ -27581,7 +27582,7 @@ describe("StateStore", () => {
     }
 
     expect(() => new StateStore(paths, { readonly: true }))
-      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:39:60");
+      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:39:61");
     const migrated = new StateStore(paths, { now: () => 2_000 });
     stores.push(migrated);
     expect(migrated.requireSession(session.id)).toMatchObject({
@@ -27590,7 +27591,7 @@ describe("StateStore", () => {
     });
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT version FROM migrations WHERE version>=39 ORDER BY version",
       ).all()).toEqual([
@@ -27598,7 +27599,7 @@ describe("StateStore", () => {
         { version: 42 }, { version: 43 }, { version: 44 },
         { version: 45 }, { version: 46 }, { version: 47 },
         { version: 48 }, { version: 49 },
-        ...Array.from({ length: 11 }, (_, index) => ({ version: index + 50 })),
+        ...Array.from({ length: 12 }, (_, index) => ({ version: index + 50 })),
       ]);
       expect(inspector.query(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='session_adoption_policies'",
@@ -27648,7 +27649,7 @@ describe("StateStore", () => {
     }
 
     expect(() => new StateStore(paths, { readonly: true }))
-      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:41:60");
+      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:41:61");
     const migrated = new StateStore(paths, { now: () => 2_000 });
     stores.push(migrated);
     expect(migrated.requireSession(session.id)).toMatchObject({
@@ -27658,10 +27659,10 @@ describe("StateStore", () => {
 
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT version FROM migrations WHERE version>=40 ORDER BY version",
-      ).all()).toEqual([{ version: 40 }, { version: 41 }, { version: 42 }, { version: 43 }, { version: 44 }, { version: 45 }, { version: 46 }, { version: 47 }, { version: 48 }, { version: 49 }, ...Array.from({ length: 11 }, (_, index) => ({ version: index + 50 }))]);
+      ).all()).toEqual([{ version: 40 }, { version: 41 }, { version: 42 }, { version: 43 }, { version: 44 }, { version: 45 }, { version: 46 }, { version: 47 }, { version: 48 }, { version: 49 }, ...Array.from({ length: 12 }, (_, index) => ({ version: index + 50 }))]);
       expect(inspector.query(
         "SELECT type,tbl_name,sql FROM sqlite_master WHERE name='mutation_resolutions_timestamp_proof_insert'",
       ).get()).toEqual(timestampGuardBefore);
@@ -27727,7 +27728,7 @@ describe("StateStore", () => {
     }
 
     expect(() => new StateStore(paths, { readonly: true }))
-      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:42:60");
+      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:42:61");
     const migrated = new StateStore(paths, { now: () => 4_300 });
     stores.push(migrated);
     expect(migrated.hasSessionUserMessageSource(session.id, "mutation", appliedMutationKey)).toBe(false);
@@ -27757,9 +27758,9 @@ describe("StateStore", () => {
       .toEqual([]);
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT version FROM migrations WHERE version>=40 ORDER BY version").all())
-        .toEqual([{ version: 40 }, { version: 41 }, { version: 42 }, { version: 43 }, { version: 44 }, { version: 45 }, { version: 46 }, { version: 47 }, { version: 48 }, { version: 49 }, ...Array.from({ length: 11 }, (_, index) => ({ version: index + 50 }))]);
+        .toEqual([{ version: 40 }, { version: 41 }, { version: 42 }, { version: 43 }, { version: 44 }, { version: 45 }, { version: 46 }, { version: 47 }, { version: 48 }, { version: 49 }, ...Array.from({ length: 12 }, (_, index) => ({ version: index + 50 }))]);
       expect(inspector.query(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='session_user_message_finalizations'",
       ).get()).toBeNull();
@@ -27792,14 +27793,14 @@ describe("StateStore", () => {
       const schemaBefore = canonicalAuthBudgetFrozenSchema(predecessor);
       const ledgerBefore = predecessor.query("SELECT * FROM migrations ORDER BY version").all();
       const beforeReadonly = canonicalAuthBudgetSnapshot(predecessor);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:44:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:44:61");
       expect(canonicalAuthBudgetSnapshot(predecessor)).toEqual(beforeReadonly);
       const upgraded = new StateStore(paths, { now: () => 50_000 });
       stores.push(upgraded);
-      expect(predecessor.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(predecessor.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(predecessor.query("SELECT * FROM migrations WHERE version<=44 ORDER BY version").all()).toEqual(ledgerBefore);
       expect(predecessor.query("SELECT * FROM migrations WHERE version>44 ORDER BY version").all())
-        .toEqual(Array.from({ length: 16 }, (_, index) => ({ version: index + 45, applied_at: 50_000 })));
+        .toEqual(Array.from({ length: 17 }, (_, index) => ({ version: index + 45, applied_at: 50_000 })));
       for (const row of schemaBefore) expect(canonicalAuthBudgetFrozenSchema(predecessor)).toContainEqual(row);
       expect(stable.read()).toEqual({ ...stable.before, sessions: quarantine.sessions });
       quarantine.assertInstalled(upgraded);
@@ -27843,14 +27844,14 @@ describe("StateStore", () => {
       const schemaBefore = canonicalAuthBudgetFrozenSchema(predecessor);
       const ledgerBefore = predecessor.query("SELECT * FROM migrations ORDER BY version").all();
       const beforeReadonly = canonicalAuthBudgetSnapshot(predecessor);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:46:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:46:61");
       expect(canonicalAuthBudgetSnapshot(predecessor)).toEqual(beforeReadonly);
       const upgraded = new StateStore(paths, { now: () => 52_000 });
       stores.push(upgraded);
-      expect(predecessor.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(predecessor.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(predecessor.query("SELECT * FROM migrations WHERE version<=46 ORDER BY version").all()).toEqual(ledgerBefore);
       expect(predecessor.query("SELECT * FROM migrations WHERE version>46 ORDER BY version").all())
-        .toEqual(Array.from({ length: 14 }, (_, index) => ({ version: index + 47, applied_at: 52_000 })));
+        .toEqual(Array.from({ length: 15 }, (_, index) => ({ version: index + 47, applied_at: 52_000 })));
       expect(stable.read()).toEqual({ ...stable.before, sessions: quarantine.sessions });
       quarantine.assertInstalled(upgraded);
       for (const row of schemaBefore) expect(canonicalAuthBudgetFrozenSchema(predecessor)).toContainEqual(row);
@@ -27896,14 +27897,14 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT attempt_id,profile_id,kind,from_generation,to_generation FROM account_mutation_authority_rebinds").all())
         .toEqual([{ attempt_id: cancellation.id, profile_id: profile.id, kind: "account.login-cancel", from_generation: 1, to_generation: 2 }]);
       const beforeReadonly = canonicalAuthBudgetSnapshot(inspector);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:45:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:45:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(beforeReadonly);
       const upgraded = new StateStore(paths, { now: () => 51_000 });
       stores.push(upgraded);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT * FROM migrations WHERE version<=45 ORDER BY version").all()).toEqual(ledgerBefore);
       expect(inspector.query("SELECT * FROM migrations WHERE version>45 ORDER BY version").all())
-        .toEqual(Array.from({ length: 15 }, (_, index) => ({ version: index + 46, applied_at: 51_000 })));
+        .toEqual(Array.from({ length: 16 }, (_, index) => ({ version: index + 46, applied_at: 51_000 })));
       for (const row of schemaBefore) expect(canonicalAuthBudgetFrozenSchema(inspector)).toContainEqual(row);
       expect(stable.read()).toEqual({ ...stable.before, sessions: quarantine.sessions });
       quarantine.assertInstalled(upgraded);
@@ -28241,7 +28242,7 @@ describe("StateStore", () => {
       inspector.close(false);
     }
     expect(() => new StateStore(paths, { readonly: true }))
-      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:42:60");
+      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:42:61");
   });
 
   test("refuses a missing or weakened current60 transcript authority guard without repair", async () => {
@@ -28412,7 +28413,7 @@ describe("StateStore", () => {
         .toEqual([{ source_id: retained.mutation.id, source_kind: "mutation" }, { source_id: sourceId, source_kind: "queue" }]);
       const migrated = new StateStore(paths, { now: () => 60_000 });
       stores.push(migrated);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       for (const original of originals) expect(inspector.query(original.query).all()).toEqual(original.rows);
       const before = snapshotSwitchContainmentForTest(inspector);
       for (const sourceKind of ["mutation", "queue"] as const) {
@@ -29365,7 +29366,7 @@ describe("StateStore", () => {
 
     expectInertSchemaRefusal(paths,
       "STATE_SCHEMA_V39_OBJECT_INVALID:session_mutation_authority_rebinds_v39_immutable_delete",
-      "STATE_SCHEMA_MIGRATION_REQUIRED:39:60");
+      "STATE_SCHEMA_MIGRATION_REQUIRED:39:61");
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
       expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 39 });
@@ -29397,7 +29398,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT * FROM session_adoption_candidates").all()).toEqual([captured.rawCandidate]);
       expect(inspector.query("SELECT name FROM pragma_table_info('profiles') WHERE name='codex_account_key'").get()).toBeNull();
       const oldRows = canonicalAuthBudgetRows(inspector, Object.keys(before.rows).filter((table) => table !== "migrations"));
-      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:60");
+      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
       const migrated = new StateStore(paths, { now: () => 2_000, resolveMachineTimeZone: () => "UTC" });
       stores.push(migrated);
@@ -29407,7 +29408,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT last_live_observed_at,provider_project_root FROM session_adoption_candidates").get())
         .toEqual({ last_live_observed_at: null, provider_project_root: null });
       expect(inspector.query("SELECT * FROM migrations WHERE version<=35 ORDER BY version").all()).toEqual([...captured.ledger]);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       expectCanonical35To38InertReopens(paths, inspector);
     } finally { inspector.close(false); }
@@ -29448,7 +29449,7 @@ describe("StateStore", () => {
             : "STATE_SCHEMA_V39_LEGACY_ADOPTION_V35_INVALID",
         );
         expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(damaged);
-        expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:60");
+        expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:61");
         expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(damaged);
       } finally { inspector.close(false); }
     });
@@ -29540,7 +29541,7 @@ describe("StateStore", () => {
       .toThrow("STATE_SCHEMA_V39_OBJECT_INVALID:session_adoption_candidates");
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT name FROM pragma_table_info('session_adoption_candidates') WHERE name=?",
       ).get(column)).toBeNull();
@@ -29566,7 +29567,7 @@ describe("StateStore", () => {
     expectInertSchemaRefusal(paths, "PROVIDER_LOGIN_BINDING_PROOF_INVALID");
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT name FROM sqlite_master WHERE name='session_mutation_authority_rebinds_v39'",
       ).get()).toBeNull();
@@ -29605,7 +29606,7 @@ describe("StateStore", () => {
     }
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         `SELECT sql FROM sqlite_master
          WHERE type='trigger'
@@ -29636,7 +29637,7 @@ describe("StateStore", () => {
     expectInertSchemaRefusal(paths, "CANONICAL_PROFILE_SCHEMA_TRIGGER:canonical_profile_session_insert_guard");
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT name FROM pragma_table_info('sessions') WHERE name='provider_v39'",
       ).get()).toBeNull();
@@ -29695,7 +29696,7 @@ describe("StateStore", () => {
       .toThrow("STATE_SCHEMA_V39_OBJECT_INVALID:session_claude_process_authorities_live_identity");
     const inspector = new Database(paths.database, { create: false, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT sql FROM sqlite_master WHERE name='session_adoption_candidate_revision_guard'",
       ).get()).toEqual(expect.objectContaining({ sql: expect.stringContaining("SELECT 1") }));
@@ -29754,7 +29755,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT preset_contract FROM sessions WHERE id=?").get(session.id))
         .toEqual({ preset_contract: legacyPresetContract });
       expect(inspector.query("SELECT * FROM session_provider_account_authorities WHERE session_id=?").get(session.id)).toBeNull();
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT version FROM migrations WHERE version=38").get())
         .toEqual({ version: 38 });
       expect(inspector.query("SELECT * FROM migrations WHERE version<=25 ORDER BY version").all())
@@ -29863,7 +29864,7 @@ describe("StateStore", () => {
           recorded_at: captured.metadata.fixedTime });
       const before = canonicalAuthBudgetSnapshot(database);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
       const migrated = new StateStore(paths, { now: () => 90_000_000, resolveMachineTimeZone: () => "UTC" });
       stores.push(migrated);
@@ -29889,7 +29890,7 @@ describe("StateStore", () => {
       expect(providerSwitchSchemaObjectCount(database)).toBe(0);
       const before = canonicalAuthBudgetSnapshot(database);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:35:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
       const migrated = new StateStore(paths, { now: () => 90_000_000,
         resolveMachineTimeZone: () => { throw new Error("CAPTURED_FEATURE35_MUST_RETAIN_ITS_ZONE"); },
@@ -29899,7 +29900,7 @@ describe("StateStore", () => {
       expect(migrated.readNotificationEmailPolicy()).toEqual({ enabled: false, revision: 2, version: 1 });
       expect(history.read()).toEqual(history.before);
       expect(providerSwitchSchemaObjectCount(database)).toBe(21);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(database.query("PRAGMA foreign_key_check").all()).toEqual([]);
       expectCanonical35To38InertReopens(paths, database);
     } finally { database.close(false); }
@@ -29949,7 +29950,7 @@ describe("StateStore", () => {
       expect(database.query("PRAGMA foreign_key_check").all()).toEqual([]);
     } finally { database.close(false); declarations.close(false); }
     expectInertSchemaRefusal(paths, "ATTENTION_EMAIL_POLICY_MIGRATION_OPT_IN_REFUSED",
-      "STATE_SCHEMA_MIGRATION_REQUIRED:36:60");
+      "STATE_SCHEMA_MIGRATION_REQUIRED:36:61");
   });
 
   test("preserves captured feature36 explicit email opt-in and its original policy rows", async () => {
@@ -29964,7 +29965,7 @@ describe("StateStore", () => {
       expect(providerSwitchSchemaObjectCount(database)).toBe(0);
       const before = canonicalAuthBudgetSnapshot(database);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:36:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:36:61");
       expect(canonicalAuthBudgetSnapshot(database)).toEqual(before);
       const migrated = new StateStore(paths, { now: () => 90_000_000,
         resolveMachineTimeZone: () => { throw new Error("CAPTURED_FEATURE36_MUST_RETAIN_ITS_ZONE"); },
@@ -29974,7 +29975,7 @@ describe("StateStore", () => {
       expect(migrated.readNotificationEmailPolicy()).toEqual(captured.metadata.caseState.email);
       expect(history.read()).toEqual(history.before);
       expect(providerSwitchSchemaObjectCount(database)).toBe(21);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(database.query("PRAGMA foreign_key_check").all()).toEqual([]);
       expectCanonical35To38InertReopens(paths, database);
     } finally { database.close(false); }
@@ -29992,7 +29993,7 @@ describe("StateStore", () => {
       expect(database.query("PRAGMA user_version").get()).toEqual(before.version);
     } finally { database.close(false); }
     expectInertSchemaRefusal(paths, "ATTENTION_EMAIL_POLICY_MIGRATION_OPT_IN_REFUSED",
-      "STATE_SCHEMA_MIGRATION_REQUIRED:36:60");
+      "STATE_SCHEMA_MIGRATION_REQUIRED:36:61");
   });
 
   test("shares one immediate CAS revision across email opt-in and hours", async () => {
@@ -30089,7 +30090,7 @@ describe("StateStore", () => {
       ]);
       expect(before.version).toEqual({ user_version: 34 });
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:34:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:34:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
       expect(inspector.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='notification_hours'")
         .get()).toBeNull();
@@ -30111,7 +30112,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT * FROM session_provider_account_authorities WHERE session_id=?")
         .all(source.unboundSession.id)).toEqual([]);
       expect(providerSwitchSchemaObjectCount(inspector)).toBe(21);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       const joined = canonicalAuthBudgetSnapshot(inspector);
       migrated.close();
@@ -30404,7 +30405,7 @@ describe("StateStore", () => {
       // Rebuilds change column positions. Reopen the inspector so Bun cannot
       // reuse SELECT * result metadata prepared against the archived schema.
       inspector = new Database(paths.database, { readonly: true, strict: true });
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT name,dflt_value FROM pragma_table_info('sessions') WHERE name='provider'").get())
         .toEqual({ name: "provider", dflt_value: "'codex'" });
       expect(inspector.query("SELECT name FROM pragma_table_info('autorespond_evidence') WHERE name='path'").get())
@@ -30419,7 +30420,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT version,applied_at FROM migrations WHERE version<=30 ORDER BY version").all())
         .toEqual([...canonical30WorkFixture.migrations]);
       expect(inspector.query("SELECT version FROM migrations WHERE version>30 ORDER BY version").all())
-        .toEqual(Array.from({ length: 30 }, (_, index) => ({ version: index + 31 })));
+        .toEqual(Array.from({ length: 31 }, (_, index) => ({ version: index + 31 })));
       const retained = migrated.requireSession(canonical30WorkFixture.sessionId);
       expect(retained.providerThreadId).toBe(canonical30WorkFixture.sessionRow.provider_thread_id);
       expect(retained.preset).toBe(canonical30WorkFixture.sessionRow.preset);
@@ -30464,7 +30465,7 @@ describe("StateStore", () => {
       expect(unchanged.query(
         "SELECT name FROM sqlite_master WHERE name='session_provider_switch_targets_immutable_delete'",
       ).get()).toBeNull();
-      expect(unchanged.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(unchanged.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     } finally {
       unchanged.close(false);
     }
@@ -30578,7 +30579,7 @@ describe("StateStore", () => {
     }
     // These two rows were accepted by the actual17 public writer. Neither
     // current SQL corruption nor a fabricated23 cohort supplies this input.
-    expectInertSchemaRefusal(paths, "STATE_ACCOUNT_LABEL_COLLISION", "STATE_SCHEMA_MIGRATION_REQUIRED:17:60");
+    expectInertSchemaRefusal(paths, "STATE_ACCOUNT_LABEL_COLLISION", "STATE_SCHEMA_MIGRATION_REQUIRED:17:61");
   });
 
   test("fails closed without writes when authentic v17 project labels collide during Unicode migration", async () => {
@@ -30600,7 +30601,7 @@ describe("StateStore", () => {
     }
     // The archive contains directory metadata only; this test never opens or
     // grants execution authority to either captured public project root.
-    expectInertSchemaRefusal(paths, "STATE_PROJECT_LABEL_COLLISION", "STATE_SCHEMA_MIGRATION_REQUIRED:17:60");
+    expectInertSchemaRefusal(paths, "STATE_PROJECT_LABEL_COLLISION", "STATE_SCHEMA_MIGRATION_REQUIRED:17:61");
   });
 
   test("migrates an exact v17 writer to the current prepared-response supersession guards", async () => {
@@ -30620,11 +30621,11 @@ describe("StateStore", () => {
     try {
       expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 17 });
       const original = canonicalAuthBudgetSnapshot(inspector);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:17:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:17:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(original);
       const migrated = new StateStore(paths, { now: () => 26_000 });
       stores.push(migrated);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(selectGuards(inspector)).toEqual(expectedGuards);
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       const after = canonicalAuthBudgetSnapshot(inspector);
@@ -30679,7 +30680,7 @@ describe("StateStore", () => {
           display_json: JSON.stringify(expected.get(z.string().parse(row.public_id))),
         })),
       });
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       const after = canonicalAuthBudgetSnapshot(inspector);
       for (const readonly of [false, true]) {
@@ -30705,7 +30706,7 @@ describe("StateStore", () => {
       expect(inspector.query("SELECT result_json FROM mutation_attempts WHERE id=?").get(attempt.id))
         .toEqual({ result_json: JSON.stringify(attempt.result) });
       const before = canonicalAuthBudgetSnapshot(inspector);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:16:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:16:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
 
       const migrated = new StateStore(paths, { now: () => 20_000 });
@@ -30751,7 +30752,7 @@ describe("StateStore", () => {
         .toEqual({ display_json: JSON.stringify(mcp.record.display) });
       expect(await stateFileSuffixesContaining(paths.database, sentinel)).toContain("");
       const before = canonicalAuthBudgetSnapshot(inspector);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:10:60");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:10:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
     } finally { inspector.close(false); }
 
@@ -30768,7 +30769,7 @@ describe("StateStore", () => {
 
     const after = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(after.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(after.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(after.query(
         "SELECT revision,state FROM provider_interaction_transitions WHERE public_id=? ORDER BY revision",
       ).all(interactionId)).toEqual([{ revision: 1, state: "pending" }, { revision: 2, state: "resolution_unknown" }]);
@@ -30811,7 +30812,7 @@ describe("StateStore", () => {
 
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT revision,state FROM provider_interaction_transitions WHERE public_id=? ORDER BY revision",
       ).all(interactionId)).toEqual([{ revision: 1, state: "pending" }]);
@@ -30860,7 +30861,7 @@ describe("StateStore", () => {
         migrated.close();
         stores.splice(stores.indexOf(migrated), 1);
 
-        expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+        expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
         expect(originalQueue.read()).toEqual(originalQueue.before);
         expect(inspector.query("SELECT enqueue_sequence FROM queue_entries ORDER BY enqueue_sequence").all())
           .toEqual([{ enqueue_sequence: 1 }, { enqueue_sequence: 2 }, { enqueue_sequence: 3 }]);
@@ -30906,7 +30907,7 @@ describe("StateStore", () => {
       }).toThrow("STATE_SECURITY_SCRUB_REQUIRED");
       const inspector = new Database(paths.database, { readonly: true, strict: true });
       try {
-        expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+        expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
         expect(inspector.query(
           "SELECT reason,required_at FROM security_scrub_authority WHERE singleton=1",
         ).get()).toEqual({ reason: "mcp_url_redaction", required_at: 20_000 });
@@ -30972,7 +30973,7 @@ describe("StateStore", () => {
     stores.splice(stores.indexOf(migrated), 1);
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT * FROM autorespond_evidence ORDER BY id").all())
         .toEqual(canonical30WorkFixture.evidence.map((row) => ({ ...row, path: "protocol", rule: null, model: null })));
       const beforeReopen = canonicalAuthBudgetSnapshot(inspector);
@@ -31080,7 +31081,7 @@ describe("StateStore", () => {
     expect("providerUpdatedAt" in preserved).toBe(false);
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT version, applied_at FROM migrations ORDER BY version").all()).toEqual([
         { version: 1, applied_at: 1000 },
         { version: 2, applied_at: 2000 },
@@ -31131,7 +31132,7 @@ describe("StateStore", () => {
         { version: 47, applied_at: 2000 },
         { version: 48, applied_at: 2000 },
         { version: 49, applied_at: 2000 },
-        ...Array.from({ length: 11 }, (_, index) => ({ version: index + 50, applied_at: 2000 })),
+        ...Array.from({ length: 12 }, (_, index) => ({ version: index + 50, applied_at: 2000 })),
       ]);
       expect(inspector.query("PRAGMA table_info(sessions)").all()).toContainEqual(expect.objectContaining({ name: "provider_updated_at" }));
       expect(inspector.query("SELECT label,label_key FROM profiles").get()).toEqual({
@@ -31183,7 +31184,7 @@ describe("StateStore", () => {
       }
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       const originalProfile = canonicalAuthBudgetRows(inspector, ["profiles"]);
-      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:2:60");
+      expect(() => { new StateStore(paths, { readonly: true }).close(); }).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:2:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(populated);
 
       const migrated = new StateStore(paths, { now: () => 90_000, resolveMachineTimeZone: () => "UTC" });
@@ -31195,7 +31196,7 @@ describe("StateStore", () => {
       expect(migrated.requireSession(sessionId)).toMatchObject({
         id: sessionId, profileId, title: "V2 retained", preset: "high", state: "recovery_required", revision: 2,
       });
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT * FROM migrations WHERE version<=2 ORDER BY version").all()).toEqual([...observed2Fixture.snapshot.ledger]);
       expect(inspector.query("SELECT applied_at FROM migrations WHERE version=3").get()).toEqual({ applied_at: 90_000 });
       expect(inspector.query("SELECT * FROM desktop_switch_authority").get()).toEqual({
@@ -32114,7 +32115,7 @@ describe("StateStore", () => {
       ).get()).toBeNull();
       const before = canonicalAuthBudgetSnapshot(upstream);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:40:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:40:61");
       expect(canonicalAuthBudgetSnapshot(upstream)).toEqual(before);
     } finally {
       upstream.close(false);
@@ -32133,7 +32134,7 @@ describe("StateStore", () => {
       expect(() => migrated.requireSessionProviderAuthority(captured.sessionId))
         .toThrow("SESSION_PROVIDER_AUTHORITY_QUARANTINED:missing_immutable_runtime_authority");
       expect(migrated.requirePeerSessionPolicy(captured.sessionId)).toMatchObject({ mode: "coordinate", revision: 1 });
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT * FROM migrations WHERE version<=40 ORDER BY version").all())
         .toEqual([...canonical40QueuesFixture.migrations]);
       expect(inspector.query(
@@ -32145,7 +32146,7 @@ describe("StateStore", () => {
         { applied_at: 5_050, version: 44 },
         { applied_at: 5_050, version: 45 },
         { applied_at: 5_050, version: 46 }, { applied_at: 5_050, version: 47 }, { applied_at: 5_050, version: 48 }, { applied_at: 5_050, version: 49 },
-        ...Array.from({ length: 11 }, (_, index) => ({ version: index + 50, applied_at: 5_050 })),
+        ...Array.from({ length: 12 }, (_, index) => ({ version: index + 50, applied_at: 5_050 })),
       ]);
       const after = canonicalAuthBudgetSnapshot(inspector);
       migrated.close();
@@ -32172,7 +32173,7 @@ describe("StateStore", () => {
       const before = canonicalAuthBudgetSnapshot(damaged);
       for (const readonly of [true, false]) {
         expect(() => new StateStore(paths, readonly ? { readonly: true } : {}))
-          .toThrow(readonly ? "STATE_SCHEMA_MIGRATION_REQUIRED:41:60" : "STATE_SCHEMA_V41_TIMESTAMP_PROOF_GUARD_INVALID");
+          .toThrow(readonly ? "STATE_SCHEMA_MIGRATION_REQUIRED:41:61" : "STATE_SCHEMA_V41_TIMESTAMP_PROOF_GUARD_INVALID");
         expect(canonicalAuthBudgetSnapshot(damaged)).toEqual(before);
       }
     } finally {
@@ -33082,12 +33083,14 @@ describe("StateStore", () => {
     });
     expect(second.sessions.map((session) => session.id)).toEqual(expected.slice(1));
     expect(second.nextPosition).toBeNull();
-    expect(() => store.assertPeerSessionInspection({
+    // The migrated Devin session is an ordinary peer target now; a direct
+    // send is still refused because the retained session is not idle.
+    expect(store.assertPeerSessionInspection({
       actorSessionId: actor.id,
       actorTurnId: actor.activeTurnId!,
       targetSessionId: retired.id,
       expectedTargetRevision: retired.revision,
-    })).toThrow("PEER_SESSION_TARGET_STATE_REFUSED");
+    }).provider).toBe("devin");
     expect(() => store.admitPeerSessionAction({
       actorSessionId: actor.id,
       actorTurnId: actor.activeTurnId!,
@@ -33194,53 +33197,40 @@ describe("StateStore", () => {
     let corrupted: ReturnType<typeof canonicalAuthBudgetSnapshot>;
     try {
       const intact = canonicalAuthBudgetSnapshot(retire);
-      const retag = () => retire.query("UPDATE sessions SET provider_v39='devin',preset='ultra',preset_contract=?,canonical_profile_key='devin:gpt-6-astra:provider-default' WHERE id=?")
-        .run(devinPresetContract, target.id);
-      expect(retag).toThrow("RETIRED_PROVIDER_ADMISSION_REFUSED");
-      expect(canonicalAuthBudgetSnapshot(retire)).toEqual(intact);
-      const guard = z.object({ sql: z.string() }).strict().parse(retire.query(
-        "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='retired_provider_session_rebind'",
-      ).get());
       // Deliberately corrupt a current supported row, not historical provider
-      // evidence. Restore the exact guard before exercising readers or effects.
-      retire.transaction(() => {
-        retire.exec("DROP TRIGGER retired_provider_session_rebind");
-        retag();
-        retire.exec(guard.sql);
-      }).immediate();
-      expect(retire.query(
-        "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='retired_provider_session_rebind'",
-      ).get()).toEqual(guard);
+      // evidence. The ordinary authority model must refuse the retagged row.
+      retire.query("UPDATE sessions SET provider_v39='devin',preset='ultra',preset_contract=?,canonical_profile_key='devin:gpt-6-astra:provider-default' WHERE id=?")
+        .run(devinPresetContract, target.id);
+      expect(canonicalAuthBudgetSnapshot(retire)).not.toEqual(intact);
       corrupted = canonicalAuthBudgetSnapshot(retire);
     } finally {
       retire.close(false);
     }
 
-    expect(() => store.assertPeerSessionInspection({
+    // The retagged row now reads as a Devin session, so inspection and
+    // policy bookkeeping still see it; every authority-bearing path refuses
+    // it through the ordinary session/authority consistency join.
+    expect(store.assertPeerSessionInspection({
       actorSessionId: actor.id,
       actorTurnId: actor.activeTurnId!,
       targetSessionId: target.id,
       expectedTargetRevision: target.revision,
-    })).toThrow("PEER_SESSION_TARGET_STATE_REFUSED");
-    expect(() => store.setPeerSessionPolicy({
-      sessionId: target.id,
-      expectedRevision: store.requirePeerSessionPolicy(target.id).revision,
-      mode: "off",
-    })).toThrow("PEER_SESSION_TARGET_STATE_REFUSED");
+    }).provider).toBe("devin");
+    expect(store.requirePeerSessionPolicy(target.id).mode).toBe("coordinate");
     expect(() => store.admitPeerSessionAction(directRequest))
-      .toThrow("PEER_SESSION_TARGET_STATE_REFUSED");
+      .toThrow("SESSION_PROVIDER_AUTHORITY_INCONSISTENT");
     expect(() => store.admitPeerSessionAction(queueRequest))
-      .toThrow("PEER_SESSION_TARGET_STATE_REFUSED");
+      .toThrow("SESSION_PROVIDER_AUTHORITY_INCONSISTENT");
     expect(() => store.admitPeerSessionAction({
       ...directRequest,
       idempotencyKey: peerIdempotencyKey(8_972),
-    })).toThrow("PEER_SESSION_TARGET_STATE_REFUSED");
+    })).toThrow("SESSION_PROVIDER_AUTHORITY_INCONSISTENT");
     expect(() => store.admitPeerSessionAction({
       ...queueRequest,
       idempotencyKey: peerIdempotencyKey(8_973),
-    })).toThrow("PEER_SESSION_TARGET_STATE_REFUSED");
+    })).toThrow("SESSION_PROVIDER_AUTHORITY_INCONSISTENT");
     expect(() => store.beginPeerSessionActionEffect(direct.action.id))
-      .toThrow("PEER_SESSION_TARGET_STATE_REFUSED");
+      .toThrow("SESSION_PROVIDER_AUTHORITY_INCONSISTENT");
     expect(() => store.beginQueueEffect({
       providerAuthority: targetAuthority,
       queueId: queued.queue!.id,
@@ -33258,7 +33248,7 @@ describe("StateStore", () => {
         messageDigest: testDigest(queuedMessage),
         runtimeProfile: codexRuntimeProfile(profile),
       },
-    })).toThrow("PROVIDER_RETIRED:devin");
+    })).toThrow("SESSION_PROVIDER_AUTHORITY_INCONSISTENT");
     expect(store.requirePeerSessionAction(direct.action.id).state).toBe("prepared");
     expect(store.requirePeerSessionAction(queued.action.id).state).toBe("queued");
     expect(store.requireQueue(queued.queue!.id).state).toBe("pending");
@@ -36183,7 +36173,7 @@ describe("StateStore", () => {
         "mutation_effect_evidence", "queue_effect_evidence", "session_events",
       ]);
       expect(() => new StateStore(paths, { readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:39:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:39:61");
       expect(canonicalAuthBudgetSnapshot(inspector)).toEqual(before);
       const migrated = new StateStore(paths, { now: () => migratedAt });
       stores.push(migrated);
@@ -36204,14 +36194,19 @@ describe("StateStore", () => {
         expect(migrated.requirePeerSessionPolicy(session.id)).toMatchObject({
           mode: "coordinate", revision: 1,
         });
+      }
+      // The Devin session's migrated authority is current like any provider;
+      // the unproven codex/claude sessions stay fenced by ordinary authority.
+      expect(migrated.sessionAccountAuthorityMatches(source.session.id, source.profile.id)).toBe(true);
+      for (const session of [source.codex, source.claude]) {
         expect(migrated.sessionAccountAuthorityMatches(session.id, source.profile.id)).toBe(false);
       }
       expect(migrated.latestSessionRuntimeProfile(source.session.id)).toEqual(source.runtime);
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query("SELECT * FROM migrations WHERE version<=39 ORDER BY version").all()).toEqual(ledger);
       expect(inspector.query(
         "SELECT version,applied_at FROM migrations WHERE version>=40 ORDER BY version",
-      ).all()).toEqual(Array.from({ length: 21 }, (_, index) => ({ version: index + 40, applied_at: migratedAt })));
+      ).all()).toEqual(Array.from({ length: 22 }, (_, index) => ({ version: index + 40, applied_at: migratedAt })));
       expect(inspector.query("PRAGMA foreign_key_check").all()).toEqual([]);
       const joined = canonicalAuthBudgetSnapshot(inspector);
       expect(() => migrated.transitionQueue(source.queue.id, "pending", "dispatching")).toThrow();
@@ -36268,7 +36263,7 @@ describe("StateStore", () => {
         ).all()).toEqual(schemaBefore);
         expect(unchanged.query("SELECT * FROM migrations ORDER BY version").all())
           .toEqual(ledgerBefore);
-        expect(unchanged.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+        expect(unchanged.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       } finally {
         unchanged.close(false);
       }
@@ -36364,7 +36359,7 @@ describe("StateStore", () => {
         }
         expect(inspector.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all()).toEqual(schemaBefore);
         expect(inspector.query("SELECT * FROM queue_entries WHERE id=?").get(queued.id)).toEqual(queueBefore);
-        expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+        expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       } finally {
         inspector.close(false);
       }
@@ -36421,9 +36416,9 @@ describe("StateStore", () => {
     const paths = resolveStatePaths({ homeDirectory: home, platform: "darwin" });
     await initializeStatePaths(paths);
     const newer = new Database(paths.database, { create: true, strict: true });
-    newer.exec("PRAGMA user_version = 61");
+    newer.exec("PRAGMA user_version = 62");
     newer.close(false);
     await chmod(paths.database, 0o600);
-    expect(() => new StateStore(paths)).toThrow("STATE_SCHEMA_NEWER:61:60");
+    expect(() => new StateStore(paths)).toThrow("STATE_SCHEMA_NEWER:62:61");
   });
 });

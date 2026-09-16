@@ -139,9 +139,9 @@ const withEffectFixture = async (
     store = undefined;
     database = new Database(paths.database, { create: false, strict: true });
     database.exec("PRAGMA foreign_keys=ON");
-    expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+    expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     expect(database.query("SELECT version FROM migrations ORDER BY version").all())
-      .toEqual(Array.from({ length: 60 }, (_, index) => ({ version: index + 1 })));
+      .toEqual(Array.from({ length: 61 }, (_, index) => ({ version: index + 1 })));
     expect(database.query("SELECT DISTINCT format FROM mutation_effect_evidence_provenance").all())
       .toEqual([{ format: "joined_v1" }]);
     expect(readMutationEffectEvidenceProvenance(database, staged.attempt.id))
@@ -359,7 +359,7 @@ for (const corrupt of [false, true]) {
       expect(database.query("SELECT * FROM mutation_resolutions ORDER BY attempt_id").all())
         .toEqual([...fixture.resolutions]);
       expect(() => new StateStore(paths, { ...options, readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:41:60");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:41:61");
       expect(snapshot(database)).toEqual(original);
       const subject = fixture.scenarios["stop-marked_unresolved"];
       if (corrupt) {
@@ -368,7 +368,7 @@ for (const corrupt of [false, true]) {
       }
       const admittedHistory = snapshot(database);
       store = new StateStore(paths, options);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(database.query("SELECT DISTINCT format FROM mutation_effect_evidence_provenance").all())
         .toEqual([{ format: "canonical41_v1" }]);
       const afterMigration = snapshot(database);

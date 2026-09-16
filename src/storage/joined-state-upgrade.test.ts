@@ -65,9 +65,9 @@ describe("private joined migration candidate", () => {
     const paths = await pathsFor();
     open(paths);
     const before = snapshot(paths.database);
-    expect(before.version).toEqual({ user_version: 60 });
+    expect(before.version).toEqual({ user_version: 61 });
     expect(ledger(before.rows.migrations).map(({ version }) => version))
-      .toEqual(Array.from({ length: 60 }, (_, index) => index + 1));
+      .toEqual(Array.from({ length: 61 }, (_, index) => index + 1));
     expect(before.foreignKeys).toEqual([]);
     open(paths);
     expect(snapshot(paths.database)).toEqual(before);
@@ -113,10 +113,10 @@ describe("private joined migration candidate", () => {
     const before = snapshot(paths.database);
     open(paths);
     const after = snapshot(paths.database);
-    expect(after.version).toEqual({ user_version: 60 });
+    expect(after.version).toEqual({ user_version: 61 });
     expect(after.foreignKeys).toEqual([]);
     const migrated = ledger(after.rows.migrations);
-    expect(migrated.map(({ version }) => version)).toEqual(Array.from({ length: 60 }, (_, index) => index + 1));
+    expect(migrated.map(({ version }) => version)).toEqual(Array.from({ length: 61 }, (_, index) => index + 1));
     for (const entry of ledger(before.rows.migrations)) {
       expect(migrated.find(({ version }) => version === source.mapVersion(entry.version)))
         .toEqual({ version: source.mapVersion(entry.version), applied_at: entry.applied_at });

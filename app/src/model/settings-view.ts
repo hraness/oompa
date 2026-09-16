@@ -493,7 +493,7 @@ export function commandTargetForMachine(
 
 export type ArchivedSessionInput = Readonly<{
   executionDevicePublicId: string;
-  metadata: Readonly<{ archived?: boolean; name: string | null; retiredProvider?: "devin" }> | null;
+  metadata: Readonly<{ archived?: boolean; name: string | null }> | null;
   publicId: string;
   updatedAt: number;
 }>;
@@ -502,7 +502,6 @@ export type ArchivedSessionView = Readonly<{
   executionDevicePublicId: string;
   machineLabel: string | null;
   publicId: string;
-  retiredProvider?: "devin";
   title: string;
   updatedAt: number;
 }>;
@@ -528,8 +527,6 @@ export function archivedSessionRows(
       executionDevicePublicId: session.executionDevicePublicId,
       machineLabel: machineLabels.get(session.executionDevicePublicId) ?? null,
       publicId: session.publicId,
-      ...(session.metadata?.retiredProvider === undefined
-        ? {} : { retiredProvider: session.metadata.retiredProvider }),
       title: session.metadata?.name ?? shortSessionId(session.publicId),
       updatedAt: session.updatedAt,
     }))

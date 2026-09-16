@@ -5,7 +5,7 @@ import {
   parseDeviceCommandPayload,
   type DeviceCommandPayload,
   type DeviceCommandResultPayload,
-  type SupportedPreset,
+  type ModelPreset,
   type NotificationHoursUpdate,
 } from "../oompa/cloud";
 import type { MachineView } from "./settings-view";
@@ -18,16 +18,16 @@ import type { MachineView } from "./settings-view";
  * that adds or drops a field fails here rather than at the machine.
  */
 
-export type PresetChoice = SupportedPreset;
+export type PresetChoice = ModelPreset;
 
 /** The stable Codex Ultra alias; the target daemon owns its exact active binding. */
 export const defaultSessionStartPreset: PresetChoice = "ultra";
 
-export type SessionStartProvider = "codex" | "claude";
+export type SessionStartProvider = "codex" | "claude" | "devin";
 
 export const defaultSessionStartPresetForProvider = (
   provider: SessionStartProvider,
-): PresetChoice => provider === "claude" ? "fable-max" : "ultra";
+): PresetChoice => provider === "claude" ? "fable-max" : provider === "devin" ? "astra" : "ultra";
 
 /**
  * One machine a browser can start a session on, with the account, preset and
@@ -49,7 +49,7 @@ export type SessionStartTarget = Readonly<{
 
 /** The picker names the machine; the provider says what the start will run. */
 export function sessionStartTargetLabel(target: SessionStartTarget): string {
-  const provider = target.provider === "claude" ? "Claude Code" : "Codex";
+  const provider = target.provider === "claude" ? "Claude Code" : target.provider === "devin" ? "Devin" : "Codex";
   const availability = target.machineOnline ? "" : " (offline)";
   return `${target.machineLabel} — ${provider}${availability}`;
 }
@@ -59,7 +59,11 @@ export function sessionStartTargetHint(target: SessionStartTarget): string {
   const availability = target.machineOnline
     ? ""
     : " (offline; it will run when the machine wakes)";
-  const model = target.provider === "claude" ? "Fable Max" : target.preset === "high" ? "Codex High" : "Codex Ultra";
+  const model = target.provider === "claude"
+    ? "Fable Max"
+    : target.provider === "devin"
+      ? "Astra"
+      : target.preset === "high" ? "Codex High" : "Codex Ultra";
   const platform = target.provider === "claude"
     ? " Claude sessions require a Linux custodian; macOS refuses before launch."
     : "";

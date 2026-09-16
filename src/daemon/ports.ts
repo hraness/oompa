@@ -649,6 +649,61 @@ export class UnavailableClaudeRuntime implements ClaudeRuntimePort {
   async close(): Promise<void> {}
 }
 
+/**
+ * The default Devin seam on a machine with no admitted `devin` binary. A
+ * session that names the Devin provider is refused with one clear message
+ * instead of silently falling back to another provider.
+ */
+export class UnavailableDevinRuntime implements DevinRuntimePort {
+  readonly provider = "devin" as const;
+  readonly #pinnedVersion: string;
+
+  /** `pinnedVersion` is the exact `DEVIN_PIN` this build admits. */
+  constructor(pinnedVersion: string) {
+    this.#pinnedVersion = pinnedVersion;
+  }
+
+  #unavailable(): never {
+    throw new ProviderRuntimeUnavailableError(
+      `This daemon has no Devin runtime. Install Devin CLI ${this.#pinnedVersion} exactly, `
+      + "put `devin` on this daemon's PATH, restart the daemon with `oompa daemon restart`, then sign in "
+      + "inside the account's isolated Devin profile.",
+    );
+  }
+  interactionAuthority(): ProviderInteractionAuthority { return this.#unavailable(); }
+  hasLiveSession(input: {
+    authority: ProfileAuthority;
+    providerThreadId: string;
+  }): boolean {
+    void input;
+    return false;
+  }
+  pinnedVersion(): string { return this.#unavailable(); }
+  rebindProfileAuthority(input: {
+    expectedAuthority: ProfileAuthority;
+    nextAuthority: ProfileAuthority;
+  }): void {
+    void input;
+  }
+  readAccount(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  reviewSessionStart(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  discardRuntimeReview(): void {}
+  startSession(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  observeSession(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  readSession(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  endSession(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  reviewTurnStart(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  startTurn(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  steer(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  interrupt(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  inspectInteractionAuthority(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  validateInteractionResolution(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  resolveInteraction(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  validateInteractionTimeout(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  timeoutInteraction(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  async close(): Promise<void> {}
+}
+
 export class UnavailableCloudControl implements CloudControlPort {
   readonly #projectionRecoveryBlocker: CompactProjectionRecoveryBlocker;
 

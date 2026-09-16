@@ -63,11 +63,11 @@ describe("model presets and providers", () => {
   });
 
   test("separates current admission from immutable retired provider history", () => {
-    expect(supportedProviderSchema.options).toEqual(["codex", "claude"]);
-    expect(supportedPresetSchema.options).toEqual(["low", "high", "ultra", "fable-max"]);
+    expect(supportedProviderSchema.options).toEqual(["codex", "claude", "devin"]);
+    expect(supportedPresetSchema.options).toEqual(["low", "high", "ultra", "fable-max", "astra"]);
     expect(providerSchema.parse("devin")).toBe("devin");
     expect(presetSchema.parse("astra")).toBe("astra");
-    expect(() => assertSupportedProvider("devin")).toThrow("PROVIDER_RETIRED:devin");
+    expect(() => assertSupportedProvider("devin")).not.toThrow();
     expect(() => assertSupportedProvider("codex")).not.toThrow();
     expect(() => assertSupportedProvider("claude")).not.toThrow();
   });
@@ -126,6 +126,10 @@ describe("model presets and providers", () => {
       ["fable-max", {
         contract: currentPresetContract,
         requirement: { model: "claude-fable-5-1", effort: "max" },
+      }],
+      ["astra", {
+        contract: currentPresetContract,
+        requirement: { model: "gpt-6-astra", effort: "provider-default" },
       }],
     ]);
     expect(activePresetBinding("astra")).toEqual({

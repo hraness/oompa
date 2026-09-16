@@ -777,22 +777,6 @@ describe("commandTargetForMachine", () => {
 describe("archivedSessionRows", () => {
   const labels = new Map([["dev_a", "studio"]]);
 
-  test("preserves retired-provider authority while keeping archived history visible", () => {
-    expect(archivedSessionRows([{
-      executionDevicePublicId: "dev_a",
-      metadata: { archived: true, name: "Retired conversation", retiredProvider: "devin" },
-      publicId: "sess_retired",
-      updatedAt: now,
-    }], labels)).toEqual([{
-      executionDevicePublicId: "dev_a",
-      machineLabel: "studio",
-      publicId: "sess_retired",
-      retiredProvider: "devin",
-      title: "Retired conversation",
-      updatedAt: now,
-    }]);
-  });
-
   test("keeps only sessions whose decrypted metadata says archived", () => {
     const rows = archivedSessionRows([
       {

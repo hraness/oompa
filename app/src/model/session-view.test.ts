@@ -16,6 +16,7 @@ import {
   interactionReasonCopy,
   isIdleSession,
   orderSessionCards,
+  resolveComposerTarget,
   sessionStateLabel,
   sessionStateTone,
   shortSessionLabel,
@@ -290,6 +291,39 @@ describe("subagentChips", () => {
     const input = [agent("b", { depth: 2 }), agent("a", { depth: 1 })];
     subagentChips(input);
     expect(input.map((entry) => entry.agentId)).toEqual(["b", "a"]);
+  });
+});
+
+describe("resolveComposerTarget", () => {
+  const summaries = [
+    card("idle-selected", { lastActivityAt: 1, state: "done" }),
+    card("busy-selected", { lastActivityAt: 2, state: "working" }),
+    card("freshest", { lastActivityAt: 100, state: "working" }),
+  ];
+
+  test("sends to the selected session when it is idle", () => {
+    expect(resolveComposerTarget(summaries, "idle-selected")?.publicId).toBe("idle-selected");
+  });
+
+  test("falls back to the most recently active session when the selection is working", () => {
+    expect(resolveComposerTarget(summaries, "busy-selected")?.publicId).toBe("freshest");
+  });
+
+  test("falls back to the most recently active session when nothing is selected", () => {
+    expect(resolveComposerTarget(summaries, null)?.publicId).toBe("freshest");
+  });
+
+  test("ignores a selection that is not on the page", () => {
+    expect(resolveComposerTarget(summaries, "missing")?.publicId).toBe("freshest");
+  });
+
+  test("never targets an archived session", () => {
+    const archivedOnly = [card("hidden", { archived: true, lastActivityAt: 500 })];
+    expect(resolveComposerTarget(archivedOnly, "hidden")).toBeNull();
+  });
+
+  test("returns null when there is nothing to send to", () => {
+    expect(resolveComposerTarget([], "anything")).toBeNull();
   });
 });
 

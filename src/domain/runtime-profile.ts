@@ -141,9 +141,9 @@ export const effectiveClaudeRuntimeProfileV1Schema = z.union([
 export type EffectiveClaudeRuntimeProfileV1 = z.infer<typeof effectiveClaudeRuntimeProfileV1Schema>;
 
 /**
- * Historical Devin ACP documents written by schema-v39 builds. This parser
- * preserves their exact public runtime tuple for archival reads and evidence
- * validation; it does not admit another provider effect.
+ * The exact local Devin ACP profile HRA admits. The pinned CLI owns its
+ * authentication and model defaults inside the isolated home; HRA records
+ * only the public runtime/protocol facts it proved before dispatch.
  */
 const effectiveDevinRuntimeProfileFieldsV1 = {
   profileId: profileIdSchema,
@@ -152,7 +152,7 @@ const effectiveDevinRuntimeProfileFieldsV1 = {
   preset: z.literal("astra"),
   model: z.string().trim().min(1).max(200),
   reasoningEffort: z.literal("provider-default"),
-  devinVersion: z.literal("3000.6.14"),
+  devinVersion: z.string().regex(/^\d{1,5}\.\d{1,5}\.\d{1,5}$/u),
   protocolVersion: z.literal(1),
 } as const;
 

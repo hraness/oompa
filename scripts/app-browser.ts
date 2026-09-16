@@ -50,7 +50,7 @@ export function browserFailureDetails(value: unknown, depth = 0): BrowserFailure
   };
 }
 type Profile = Readonly<{ name: string; width: number; height: number; coarse: boolean; reduced: boolean; forced: boolean; rtl: boolean; colorScheme?: "dark" | "light" }>;
-const fixtureViews = ["signin", "enrollment", "grid", "session", "session-long", "retired", "settings", "primitives"] as const;
+const fixtureViews = ["signin", "enrollment", "grid", "session", "session-long", "settings", "primitives"] as const;
 const productViews = ["overview", "conversation", "question", "settings"] as const;
 type ProductView = typeof productViews[number];
 const siteRouteLabels = ["home", "privacy", "preview", "docs", "docs-start", "docs-web", "docs-sessions", "docs-reference", "docs-status"] as const;
@@ -1888,7 +1888,7 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             assert.ok(await page.getByRole("button", { name: "Start", exact: true }).isEnabled());
             assert.ok(await page.getByText(/Automatic effort: Ultra\./u).isVisible());
           }
-          if (view === "session" || view === "session-long" || view === "retired") {
+          if (view === "session" || view === "session-long") {
             assert.ok(await page.getByRole("heading", { name: "Browser fixture session", exact: true }).isVisible());
             // Older responses fold to one summary line; only the newest stays open.
             assert.ok(await page.getByText(view === "session-long"
@@ -1905,21 +1905,16 @@ export async function runAppBrowser(rootDirectory: string, runDirectory: string,
             });
             assert.deepEqual(gutter, profile.rtl ? { left: "0px", right: "20px" } : { left: "20px", right: "0px" }, "Markdown list gutter did not follow inline start");
             for (const name of ["Attach a file", "Message this session", "Stop the turn"]) {
-              assert.equal(await page.getByLabel(name, { exact: true }).isDisabled(), view === "retired");
+              assert.equal(await page.getByLabel(name, { exact: true }).isDisabled(), false);
             }
             assert.equal(await page.getByLabel("Message this session", { exact: true }).evaluate((element) => element.tagName), "TEXTAREA");
             await page.getByRole("button", { name: /^Session actions for /u }).click();
             const settingsItem = page.getByRole("menuitem", { name: "Approvals and provider", exact: true });
             await settingsItem.waitFor({ state: "visible" });
-            if (view === "retired") {
-              assert.ok(await settingsItem.isDisabled(), "Retired session still offers its settings sheet");
-              await page.keyboard.press("Escape");
-            } else {
-              await settingsItem.click();
-              await page.getByRole("dialog").waitFor({ state: "visible" });
-              await page.keyboard.press("Escape");
-              await page.getByRole("dialog").waitFor({ state: "hidden" });
-            }
+            await settingsItem.click();
+            await page.getByRole("dialog").waitFor({ state: "visible" });
+            await page.keyboard.press("Escape");
+            await page.getByRole("dialog").waitFor({ state: "hidden" });
             if (view === "session-long") {
               const quote = await page.locator("blockquote").first().evaluate((element) => {
                 const css = getComputedStyle(element);

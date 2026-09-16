@@ -220,11 +220,13 @@ describe("public content contract", () => {
       `Bun ${packageJson.engines.bun}`,
       `runtime: Codex ${packageJson.dependencies["@openai/codex"]}`,
       `runtime: Claude Code ${publicPins.claude}`,
+      `runtime: Devin CLI ${publicPins.devin}`,
     ]);
     expect(publicPins).toEqual({
       bun: packageJson.engines.bun,
       claude: "2.1.260",
       codex: packageJson.dependencies["@openai/codex"],
+      devin: "3000.10.27",
     });
     for (const badge of publicContent.badges) {
       expect(badge.image).toMatch(/^https:\/\/img\.shields\.io\//u);
@@ -234,6 +236,7 @@ describe("public content contract", () => {
     expect(publicContent.badges[4]?.image).toBe("https://img.shields.io/badge/Bun-1.3.14-14151a");
     expect(publicContent.badges[5]?.image).toBe("https://img.shields.io/badge/runtime-Codex%200.153.2-0b5fa5");
     expect(publicContent.badges[6]?.image).toBe("https://img.shields.io/badge/runtime-Claude%20Code%202.1.260-6f42c1");
+    expect(publicContent.badges[7]?.image).toBe("https://img.shields.io/badge/runtime-Devin%20CLI%203000.10.27-5936b4");
     expect(renderSiteHtml()).not.toContain("img.shields.io");
   });
 
@@ -313,10 +316,10 @@ describe("public content contract", () => {
       "causal cycles, and a ninth hop",
       "120 new peer actions per actor and per project in a rolling hour",
       "25,000-action project cap fails closed",
-      "oompa session start <account> [--project <project>] [--provider <codex|claude>] [--preset <low|high|ultra|fable-max>] [--fast]",
+      "oompa session start <account> [--project <project>] [--provider <codex|claude|devin>] [--preset <low|high|ultra|fable-max|astra>] [--fast] [--idempotency-key <uuid> [--preset-contract <1|2>]]",
       "oompa session peer-policy get <session> [--json]",
       "oompa session peer-policy set <session> <off|inspect|coordinate> --revision <n> [--json]",
-      "oompa session preset <session> <low|high|ultra|fable-max>",
+      "oompa session preset <session> <low|high|ultra|fable-max|astra>",
       "oompa session switch <session> --provider <codex|claude> [--preset <low|high|ultra|fable-max>] [--account <account>]",
       "oompa session export <session> [--format <trajectory|json>] [--out <path>]",
     ];
@@ -644,16 +647,24 @@ describe("public content contract", () => {
     }
   });
 
-  test("removes active Devin claims and documents preserved historical data", () => {
-    const markdown = renderDocumentationMarkdown("/docs/start/");
-    const html = htmlVisibleText(renderDocumentationHtml("/docs/start/"));
-    for (const surface of [markdown, html]) {
-      expect(surface).toContain("Devin support has been removed");
-      expect(surface).toContain("Existing Devin history is read-only");
-      expect(surface).not.toContain("devin acp");
-      expect(surface).not.toContain("oompa account login personal --provider devin");
-      expect(surface).not.toContain("|devin");
-      expect(surface).not.toContain("|astra");
+  test("publishes the exact Devin runtime, login, and usage boundaries", () => {
+    const markdown = renderDocumentationMarkdown("/docs/start/", "/docs/sessions/", "/docs/status/");
+    const html = htmlVisibleText(renderDocumentationHtml("/docs/start/", "/docs/sessions/", "/docs/status/"));
+    const claims = [
+      "oompa account login personal --provider devin",
+      "--manual-token-flow",
+      "devin auth login",
+      "devin auth status",
+      "devin acp --model gpt-6-astra",
+      "Devin effects also run on both platforms",
+      "Devin ACP session usage reports current context occupancy and capacity",
+      "cumulative provider cost only when Devin supplies it",
+      "never applies a Codex reset credit to Devin",
+      "never sends concurrent prompts to one Devin session",
+    ];
+    for (const claim of claims) {
+      expect(markdown).toContain(claim);
+      expect(html).toContain(claim);
     }
   });
 
@@ -840,11 +851,14 @@ describe("public content contract", () => {
       "never retains, returns, projects, or uploads the identity or usage fields",
       "Codex and Claude Code personal-session adoption status: whether discovery is enabled and bounded pending, adopted, and fenced counts.",
       "Candidate identities and records are never included.",
+      "Devin has no personal-home adoption surface.",
+      "Devin account identity and allowance are not projected.",
+      "provider-supplied session context and cost facts in the neutral session stream",
       "For an explicitly requested Codex web login, the provider HTTPS verification URL and separate one-time user code.",
       "encrypts both to the account key before upload",
       "deletes the hosted handoff on that read or after five minutes",
       "OAuth access or refresh tokens; authorization codes; PKCE verifiers; provider cookies; or the private device code.",
-      "Raw Codex app-server or Claude Code stream requests or responses.",
+      "Raw Codex app-server, Claude Code stream, or Devin ACP requests or responses.",
       "Personal-home adoption candidate identities or records, personal-runtime bindings, process identities, schedule-source metadata, provider-home provenance, provider-account authority hashes, or the automation id, firing time, and instructions from an exact Codex Desktop heartbeat envelope. Such an envelope is replaced with generic protected text before session content is projected.",
       "Raw reasoning, hidden chain of thought, or approval secrets.",
       "Observation-only interaction IDs, kinds, states, revisions, blocking status, and bounded safe summaries.",
@@ -899,6 +913,8 @@ describe("public content contract", () => {
       expect(surface).toContain("curl with HTTPS and TLS 1.2 support");
       expect(surface).toContain("support macOS and Linux");
       expect(surface).toContain("Codex effects run on both platforms");
+      expect(surface).toContain("Devin effects also run on both platforms");
+      expect(surface).toContain("Devin CLI reports exactly 3000.10.27");
       expect(surface).toContain("Claude Code effects run on Linux only");
       expect(surface).toContain("refuses new Claude Code effects on macOS pending authenticated isolated-Keychain and detached-read acceptance");
       expect(surface).toContain(OOMPA_INSTALL_PREFLIGHT_SOURCE_URL);

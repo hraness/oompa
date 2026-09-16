@@ -1,5 +1,5 @@
 import type { DeviceCommandPayload } from "./payloads";
-import { supportedProviderSchema, type Provider } from "../domain/presets";
+import type { Provider } from "../domain/presets";
 
 /*
  * The guards that stand between a browser and this machine. Every one of them
@@ -88,9 +88,6 @@ export function deviceCommandGuardDecision(
   if (!input.requestingDeviceActive) return refused("REQUESTING_DEVICE_INACTIVE");
 
   const payload = input.payload;
-  if (payload.kind === "session_start" && !supportedProviderSchema.safeParse(payload.provider).success) {
-    return refused("DEVICE_COMMAND_PROVIDER_UNSUPPORTED");
-  }
   if (
     (payload.kind === "account_login_start" || payload.kind === "account_login_status")
     && !input.accountLinkingAllowed

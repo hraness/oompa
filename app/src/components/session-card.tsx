@@ -169,11 +169,9 @@ export function SessionCard({
   const title = model.title ?? shortSessionLabel(publicId);
   const lastActivityAt = Math.max(model.lastActivityAt, head.updatedAt);
   const archived = metadata.archived;
-  const retired = metadata.retiredProvider === "devin";
 
   const summary = useMemo<SessionCardSummary>(() => ({
     archived,
-    ...(retired ? { retiredProvider: "devin" as const } : {}),
     attention: model.attention,
     lastActivityAt,
     metadataRevision: head.metadataRevision,
@@ -188,7 +186,6 @@ export function SessionCard({
     model.state,
     publicId,
     title,
-    retired,
   ]);
 
   useEffect(() => { onSummary(summary); }, [onSummary, summary]);
@@ -214,7 +211,6 @@ export function SessionCard({
     payload: RemoteCommandPayload,
     pending: string,
   ) => {
-    if (retired) return;
     setBusy(true);
     setNotice(pending);
     void submit({
@@ -225,10 +221,9 @@ export function SessionCard({
       .then(() => { setNotice(null); })
       .catch((failure: unknown) => { setNotice(failureMessage(failure)); })
       .finally(() => { setBusy(false); });
-  }, [head.executionDevicePublicId, publicId, retired, submit]);
+  }, [head.executionDevicePublicId, publicId, submit]);
 
   const send = useCallback(async (payload: RemoteCommandPayload): Promise<string | null> => {
-    if (retired) return null;
     setSending(true);
     setNotice(null);
     try {
@@ -243,7 +238,7 @@ export function SessionCard({
     } finally {
       setSending(false);
     }
-  }, [head.executionDevicePublicId, publicId, retired, submit]);
+  }, [head.executionDevicePublicId, publicId, submit]);
 
   const copyId = useCallback(() => {
     // `clipboard-write` is not denied by the app's permissions policy, but a
@@ -255,9 +250,7 @@ export function SessionCard({
   }, [publicId]);
 
   const providerCommand = useCommandState(providerCommandId);
-  const providerDisabledReason = retired
-    ? "Devin support is retired; this session is read-only."
-    : providerSwitchDisabledReason({
+  const providerDisabledReason = providerSwitchDisabledReason({
         sending,
         supported: providerSwitchSupported(),
         turnActive: model.turnActive,
@@ -270,7 +263,7 @@ export function SessionCard({
   // text, which is factual rather than a sentence invented on the reader's
   // behalf. The daemon refuses an empty message, so something has to be there.
   const outgoing = typed.length > 0 ? typed : defaultMessageForAttachments(attachments);
-  const canSend = !retired && !sending && !attach.busy && outgoing.length > 0;
+  const canSend = !sending && !attach.busy && outgoing.length > 0;
 
   const sendMessage = () => {
     if (!canSend) return;
@@ -316,13 +309,12 @@ export function SessionCard({
       onSelect: () => { ordering.onMove(publicId, "right"); },
     },
     {
-      disabled: retired,
       id: "settings",
       label: "Approvals and provider",
       onSelect: () => { setSettingsOpen(true); },
     },
     {
-      disabled: busy || retired,
+      disabled: busy,
       id: "rename",
       label: "Rename",
       onSelect: () => {
@@ -331,7 +323,7 @@ export function SessionCard({
       },
     },
     {
-      disabled: busy || retired,
+      disabled: busy,
       id: "archive",
       label: "Archive",
       onSelect: () => { run({ archived: true, kind: "archive_session" }, "Archiving."); },
@@ -383,9 +375,6 @@ export function SessionCard({
         </div>
       </div>
 
-      {retired ? (
-        <p {...stylex.props(sessionCardStyles.quiet)}>Devin retired · read-only</p>
-      ) : null}
       <SubagentChips sessionTitle={title} subagents={model.subagents} />
       <ScheduledTasksBadge sessionPublicId={publicId} />
 
@@ -399,7 +388,7 @@ export function SessionCard({
       />
 
       <div {...stylex.props(sessionCardStyles.composer)}>
-        {interaction === null || retired ? null : (
+        {interaction === null ? null : (
           <InteractionPanel
             commandPublicId={decisionCommandId}
             interaction={interaction}
@@ -449,7 +438,7 @@ export function SessionCard({
           />
           <Button
             aria-label="Attach a file"
-            disabled={retired}
+            
             onClick={() => { pickerRef.current?.click(); }}
             size="icon"
             variant="ghost"
@@ -459,7 +448,7 @@ export function SessionCard({
           </Button>
           <ComposerTextarea
             aria-label="Message this session"
-            disabled={retired}
+            disabled={sending}
             onChange={setMessage}
             onPaste={attach.onPaste}
             onSubmit={sendMessage}
@@ -469,7 +458,7 @@ export function SessionCard({
           {model.turnActive ? (
             <Button
               aria-label="Stop the turn"
-              disabled={sending || retired}
+              disabled={sending}
               onClick={() => { void send({ kind: "stop" }); }}
               size="icon"
               variant="secondary"
@@ -497,7 +486,7 @@ export function SessionCard({
         <div {...stylex.props(sessionCardStyles.menuOptions)}>
           {approvalOptions.map(([value, label]) => (
             <ChoiceRow
-              disabled={retired}
+              
               key={value}
               label={label}
               onSelect={() => {

@@ -189,7 +189,6 @@ export const providerObservationSchema = z.discriminatedUnion("state", [
       "account_signed_out",
       "authority_retired",
       "provider_platform_unavailable",
-      "provider_retired",
       "resume_unavailable",
     ]),
   }).strict(),

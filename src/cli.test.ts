@@ -45,6 +45,10 @@ import {
   type ClaudeLoginSignal,
   type ClaudeLoginSignalSource,
 } from "./claude/index";
+import {
+  DEVIN_MODEL,
+  DEVIN_PIN,
+} from "./devin/index";
 import { ShellTerminalCoordinator } from "./cli/shell-terminal";
 import {
   CloudDaemonJournalRecoveryBlocker,
@@ -104,6 +108,15 @@ const cliClaudeRuntime = {
   version: CLAUDE_PIN,
 } as const;
 
+const cliDevinRuntime = {
+  argv: ["/test/devin", "acp", "--model", DEVIN_MODEL] as const,
+  build: "bcbe88c7",
+  executablePath: "/test/devin",
+  model: DEVIN_MODEL,
+  version: DEVIN_PIN,
+  versionOutput: `devin ${DEVIN_PIN} (bcbe88c7)`,
+} as const;
+
 class CliClaudeLoginSignalSource implements ClaudeLoginSignalSource {
   readonly listeners = new Map<ClaudeLoginSignal, Set<() => void>>();
 
@@ -150,7 +163,7 @@ const installPrivateTask48State = (databasePath: string): void => {
 // An install written by a newer Oompa build than this one. No migration exists for
 // it, so every entry point must refuse instead of guessing.
 // Keep this expectation independent of the implementation's schema constant.
-const expectedStateSchemaVersion = 60;
+const expectedStateSchemaVersion = 61;
 const advanceStateSchema = (databasePath: string): void => {
   const database = new Database(databasePath, { create: false, strict: true });
   try {
@@ -3837,32 +3850,133 @@ describe("CLI entry point", () => {
     }
   });
 
-  test("rejects retired Devin commands before daemon calls or credential-directory changes", async () => {
-    const { installation, runRoot } = await upgradeFixture("retired-provider");
-    const credentialDirectory = join(installation.paths.profiles, `acct_${"d".repeat(32)}`, "devin-home");
-    const credentialSentinel = join(credentialDirectory, "provider-owned-sentinel");
-    let daemonCalls = 0;
+  test("runs Devin's pinned foreground login in all five isolated directories", async () => {
+    const { installation, runRoot } = await upgradeFixture("devin-account-login");
+    const accountId = `acct_${"d".repeat(32)}` as const;
+    const attemptId = `attempt_${"e".repeat(32)}` as const;
+    const idempotencyKey = "00000000-0000-4000-8000-000000000321";
+    const calls: LocalCommand[] = [];
+    let preflights = 0;
+    let loginDirectories: Readonly<{
+      home: string;
+      configHome: string;
+      dataHome: string;
+      cacheHome: string;
+      stateHome: string;
+    }> | undefined;
+    const captured = capture();
     try {
-      await mkdir(credentialDirectory, { recursive: true, mode: 0o700 });
-      await writeFile(credentialSentinel, "untouched", { mode: 0o600 });
-      for (const argv of [
-        ["account", "login", "personal", "--provider", "devin"],
-        ["session", "start", "personal", "--provider", "devin"],
-        ["session", "switch", "s", "--provider", "devin"],
-        ["remote", "provider", "s", "devin"],
-      ]) {
-        const captured = capture();
-        expect(await main([...argv, "--json"], captured.output, {
-          installation,
-          callDaemon: async () => { daemonCalls += 1; throw new Error("No daemon call is permitted."); },
-        })).toBe(2);
-        expect(JSON.parse(captured.read().stdout)).toMatchObject({
-          ok: false, version: 1, error: { code: "INVALID_INPUT" },
-        });
-        expect(captured.read().stderr).toBe("");
+      expect(await main([
+        "account",
+        "login",
+        "Personal",
+        "--provider",
+        "devin",
+        "--manual-token-flow",
+        "--idempotency-key",
+        idempotencyKey,
+      ], captured.output, {
+        installation,
+        interactive: true,
+        isTerminalDescriptor: () => true,
+        callDaemon: async (command) => {
+          calls.push(command);
+          if (command.kind === "account.show") {
+            return {
+              data: {
+                account: { id: accountId, label: "Personal" },
+                authentication: { provider: "devin", signedIn: false },
+                nextCommand: `hra account login ${accountId} --provider devin`,
+                providerGeneration: 7,
+                usage: {
+                  allowance: "unknown",
+                  reason: "Devin exposes no account allowance or reset window.",
+                  source: "devin_acp",
+                },
+              },
+              ok: true as const,
+              requestId: crypto.randomUUID(),
+              version: 1 as const,
+            };
+          }
+          if (command.kind === "account.devin-login.prepare") {
+            return {
+              data: {
+                account: { id: accountId, label: "Personal" },
+                authentication: { provider: "devin", signedIn: false },
+                login: {
+                  status: "launch_granted",
+                  attemptId,
+                  idempotencyKey,
+                  providerGeneration: 7,
+                },
+              },
+              ok: true as const,
+              requestId: crypto.randomUUID(),
+              version: 1 as const,
+            };
+          }
+          if (command.kind !== "account.devin-login.complete") throw new Error("Unexpected command.");
+          return {
+            data: {
+              account: { id: accountId, label: "Personal" },
+              authentication: { provider: "devin", signedIn: true },
+              login: {
+                status: "signed_in",
+                attemptId,
+                idempotencyKey,
+                providerGeneration: 7,
+              },
+            },
+            ok: true as const,
+            requestId: crypto.randomUUID(),
+            version: 1 as const,
+          };
+        },
+        runDevinForegroundLogin: async ({ directories, manualTokenFlow, stdio }) => {
+          loginDirectories = directories;
+          expect(manualTokenFlow).toBe(true);
+          expect(stdio).toEqual({ stderr: 2, stdin: 0, stdout: 1 });
+          return { state: "joined", exitCode: 0, interruptedBy: null };
+        },
+        resolveDevinRuntime: async () => {
+          preflights += 1;
+          return cliDevinRuntime;
+        },
+      })).toBe(0);
+      expect(calls).toEqual([
+        { account: "Personal", kind: "account.show", provider: "devin" },
+        {
+          account: "Personal",
+          idempotencyKey,
+          kind: "account.devin-login.prepare",
+          manualTokenFlow: true,
+        },
+        {
+          account: accountId,
+          attemptId,
+          idempotencyKey,
+          kind: "account.devin-login.complete",
+          outcome: { state: "joined", exitCode: 0, interruptedBy: null },
+          providerGeneration: 7,
+        },
+      ]);
+      expect(loginDirectories).toEqual({
+        home: join(installation.paths.profiles, accountId, "devin-home"),
+        configHome: join(installation.paths.profiles, accountId, "devin-config"),
+        dataHome: join(installation.paths.profiles, accountId, "devin-data"),
+        cacheHome: join(installation.paths.profiles, accountId, "devin-cache"),
+        stateHome: join(installation.paths.profiles, accountId, "devin-state"),
+      });
+      expect(preflights).toBe(2);
+      if (loginDirectories === undefined) throw new Error("Devin login did not receive directories.");
+      for (const directory of Object.values(loginDirectories)) {
+        expect((await lstat(directory)).mode & 0o077).toBe(0);
       }
-      expect(daemonCalls).toBe(0);
-      expect(await readFile(credentialSentinel, "utf8")).toBe("untouched");
+      expect(captured.read()).toEqual({
+        stderr: "",
+        stdout: "Devin is signed in for Personal.\n",
+      });
     } finally {
       await rm(runRoot, { force: true, recursive: true });
     }

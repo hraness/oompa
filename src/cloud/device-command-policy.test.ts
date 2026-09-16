@@ -51,18 +51,19 @@ describe("device command guards", () => {
     });
   });
 
-  test("refuses a stale Devin start even when its historical account is signed in", () => {
-    const devinStart = {
-      ...sessionStart,
+  test("admits a Devin Astra start only for the matching signed-in Devin account", () => {
+    const devinStart = payload({
+      accountPublicId: sessionStart.accountPublicId,
+      kind: sessionStart.kind,
       preset: "astra",
       projectPublicId: sessionStart.projectPublicId,
       prompt: sessionStart.prompt,
       provider: "devin",
-    } as unknown as DeviceCommandPayload;
+    });
     expect(deviceCommandGuardDecision(input({
       accounts: [{ provider: "devin", publicId: "account_primary", status: "signed_in" }],
       payload: devinStart,
-    }))).toEqual({ code: "DEVICE_COMMAND_PROVIDER_UNSUPPORTED", kind: "refused" });
+    }))).toMatchObject({ kind: "admitted", notifyFirstSessionStart: true });
     expect(deviceCommandGuardDecision(input({
       accounts: [{ provider: "codex", publicId: "account_primary", status: "signed_in" }],
       payload: devinStart,

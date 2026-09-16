@@ -80,8 +80,7 @@ function Fixture() {
     case "enrollment": return <EnrollmentScreen />;
     case "grid": return <GridScreen />;
     case "session":
-    case "session-long":
-    case "retired": return <SingleCard />;
+    case "session-long": return <SingleCard />;
     case "settings": return <SettingsScreen onBack={() => undefined} />;
     case "primitives": return <Primitives />;
     case null:

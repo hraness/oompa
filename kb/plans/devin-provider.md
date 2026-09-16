@@ -58,7 +58,12 @@ instant, not an ACU balance.
 
 ### Phase 3. Lifting refusals with append-only migrations
 
-- **Status:** Not started.
+- **Status:** Devin readmission implemented on `codex/devin-provider-20260915`
+  on top of the Phase 2 adapter: parser, storage, service, cloud-payload and
+  browser admission return under ordinary authority guards, and schema 61
+  drops the retired-provider refusal triggers while retaining historical rows
+  byte-for-byte. The `devin_usage_panel` snapshot source is not wired and
+  remains open.
 - **Scope:** parser, storage admission guards, service, cloud payloads and
   browser selectors admit Devin again; usage snapshots gain a `devin_usage_panel`
   source recorded with the exact CLI version line and the `unknown` reason when

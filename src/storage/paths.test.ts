@@ -41,7 +41,7 @@ describe("Oompa v1 local namespace", () => {
     expect(paths.root).toBe("/workspace/oompa-user/.local/state/hra-control-plane-v1");
   });
 
-  test("does not create retired provider directories or alter existing provider-owned files", async () => {
+  test("isolates Devin HOME and every XDG root inside one private profile", async () => {
     const home = await realpath(await mkdtemp(join(tmpdir(), "oompa-devin-profile-")));
     const paths = resolveStatePaths({ homeDirectory: home, platform: "darwin" });
     await initializeStatePaths(paths);
@@ -50,14 +50,13 @@ describe("Oompa v1 local namespace", () => {
     const initialized = await initializeProfilePaths(paths, profileId);
 
     expect(initialized).toEqual(expected);
-    expect((await readdir(initialized.root)).sort())
-      .toEqual(["claude-config", "codex-home", "desktop-user-data"]);
-    const legacyDirectory = join(initialized.root, "devin-home");
-    await mkdir(legacyDirectory, { mode: 0o700 });
-    const legacySentinel = join(legacyDirectory, "provider-owned-sentinel");
-    await writeFile(legacySentinel, "retained provider-owned state", { mode: 0o600 });
-    await initializeProfilePaths(paths, profileId);
-    expect(await readFile(legacySentinel, "utf8")).toBe("retained provider-owned state");
+    expect(initialized).toMatchObject({
+      devinHome: join(initialized.root, "devin-home"),
+      devinConfigDir: join(initialized.root, "devin-config"),
+      devinDataDir: join(initialized.root, "devin-data"),
+      devinCacheDir: join(initialized.root, "devin-cache"),
+      devinStateDir: join(initialized.root, "devin-state"),
+    });
     for (const path of Object.values(initialized)) {
       const metadata = await lstat(path);
       expect(metadata.isDirectory()).toBe(true);
