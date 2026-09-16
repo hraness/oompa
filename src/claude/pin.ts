@@ -104,5 +104,5 @@ export const CLAUDE_PIN_REFUSED_EFFORTS = Object.freeze(["ultracode"] as const);
  */
 export const PINNED_CLAUDE_MATRIX_DIGESTS = Object.freeze({
   controlRequest: "c704bbb67dfa5a7e91d2cf1ac32bfdfb159aa3661b7a78ca18d333b51025965f",
-  streamEvent: "649d2a4b314f6adada59667a4a7c4edf2c1ad51e77e959c1426ec9ea02a978aa",
+  streamEvent: "d294f601338b3626edab3aa0a623db60b8ff84f4481139f202e09839ed058389",
 } as const);

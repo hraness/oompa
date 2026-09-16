@@ -1402,6 +1402,18 @@ export class PinnedCodexRuntimeManager implements CodexRuntimePort {
     });
   }
 
+  async compact(input: { authority: ProfileAuthority; providerThreadId: string; signal: AbortSignal }): Promise<void> {
+    await this.#admit(async () => {
+      if (input.signal.aborted) throw input.signal.reason;
+      const running = await this.#running(input.authority);
+      await this.#ensureSessionObserved(running, input.providerThreadId);
+      // The request resolves on provider acceptance; the applied outcome
+      // arrives separately as a `thread/compacted` notification or a
+      // `contextCompaction` item completion.
+      await running.client.compactThread(input.providerThreadId);
+    });
+  }
+
   async rename(input: { authority: ProfileAuthority; providerThreadId: string; name: string; signal: AbortSignal }): Promise<void> {
     await this.#admit(async () => {
       if (input.signal.aborted) throw input.signal.reason;
@@ -2807,6 +2819,10 @@ export class PinnedCodexRuntimeManager implements CodexRuntimePort {
               const factInvalidatesStartProjection = value.value.type === "turnStarted"
                 || value.value.type === "turnCompleted"
                 || value.value.type === "threadNameUpdated"
+                || (
+                  value.value.type === "threadCompaction"
+                  && value.value.outcome === "completed"
+                )
                 || (
                   value.value.type === "threadStatusChanged"
                   && value.value.status.type !== "idle"

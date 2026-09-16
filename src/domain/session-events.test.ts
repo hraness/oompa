@@ -186,6 +186,52 @@ describe("session events", () => {
     })).toThrow();
   });
 
+  test("bounds compaction events to closed enums, exact integers, and one nullable turn identifier", () => {
+    const outcomes = ["requested", "completed", "failed"] as const;
+    const triggers = ["manual", "policy", "provider"] as const;
+    for (const outcome of outcomes) {
+      for (const trigger of triggers) {
+        expect(sessionEventBodySchema.parse({
+          type: "compaction",
+          outcome,
+          trigger,
+          turnId: null,
+        })).toMatchObject({ type: "compaction", outcome, trigger, turnId: null });
+      }
+    }
+    const completed = sessionEventBodySchema.parse({
+      type: "compaction",
+      outcome: "completed",
+      trigger: "provider",
+      strategy: "native",
+      preTokens: 120_000,
+      postTokens: 4_096,
+      turnId: publicProviderId("turn-compacted"),
+    });
+    expect(completed).toMatchObject({ strategy: "native", preTokens: 120_000 });
+    for (const malformed of [
+      { outcome: "unknown" },
+      { trigger: "automatic" },
+      { strategy: "x".repeat(65) },
+      { preTokens: -1 },
+      { preTokens: 1.5 },
+      { preTokens: Number.MAX_SAFE_INTEGER + 1 },
+      { postTokens: -0.5 },
+      { turnId: "turn-raw-provider-identifier" },
+      { turnId: "x".repeat(201) },
+      { error: "provider free text" },
+      { payload: { arbitrary: "provider payload" } },
+    ]) {
+      expect(sessionEventBodySchema.safeParse({
+        type: "compaction",
+        outcome: "completed",
+        trigger: "provider",
+        turnId: null,
+        ...malformed,
+      }).success).toBe(false);
+    }
+  });
+
   test("accepts a revisioned session state and rejects an out-of-range or overlong reason", () => {
     const parsed = sessionEventBodySchema.parse({
       type: "session_state",

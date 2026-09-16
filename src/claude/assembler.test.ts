@@ -431,3 +431,193 @@ describe("Claude delta assembler", () => {
     ]);
   });
 });
+
+describe("Claude compaction facts", () => {
+  const statusLine = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+    session_id: "s",
+    subtype: "status",
+    type: "system",
+    ...overrides,
+  });
+
+  test("assembles the captured compaction sequence, one fact per signal", async () => {
+    const assembler = new ClaudeDeltaAssembler();
+    const facts = await fixtureFacts("stream-json-compaction-2.1.270", assembler);
+    expect(facts).toEqual([
+      {
+        claudeVersion: "2.1.270",
+        model: "claude-fable-5-1",
+        permissionMode: "default",
+        providerSessionId: "5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a",
+        type: "sessionBootstrapped",
+      },
+      { outcome: "started", type: "compaction" },
+      {
+        outcome: "completed",
+        postTokens: 2_091,
+        preTokens: 25_920,
+        trigger: "manual",
+        type: "compaction",
+      },
+      // The post-compact init re-announces the same provider session.
+      {
+        claudeVersion: "2.1.270",
+        model: "claude-fable-5-1",
+        permissionMode: "default",
+        providerSessionId: "5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a",
+        type: "sessionBootstrapped",
+      },
+      // A second, failed compaction is a fresh episode.
+      { outcome: "started", type: "compaction" },
+      {
+        errorCode: "Not enough messages to compact.",
+        outcome: "failed",
+        type: "compaction",
+      },
+    ]);
+  });
+
+  test("emits a single started per episode and deduplicates terminal signals", () => {
+    const assembler = new ClaudeDeltaAssembler();
+    bootstrap(assembler);
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({ status: "compacting" }))))
+      .toEqual([{ outcome: "started", type: "compaction" }]);
+    // A refreshed compacting status is the same episode, not a new start.
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({ status: "compacting" }))))
+      .toEqual([]);
+    // A bare status clear carries no outcome.
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({ status: null })))).toEqual([]);
+    // The provider verdict lands once, in either order relative to a boundary.
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_result: "success",
+      status: null,
+    })))).toEqual([{ outcome: "completed", type: "compaction" }]);
+    expect(assembler.apply(parseClaudeStreamLine({
+      compactMetadata: { preTokens: 40, trigger: "manual" },
+      session_id: "s",
+      subtype: "compact_boundary",
+      type: "system",
+    }))).toEqual([]);
+  });
+
+  test("records a failed verdict's reason only as a bounded error code", () => {
+    const assembler = new ClaudeDeltaAssembler();
+    bootstrap(assembler);
+    assembler.apply(parseClaudeStreamLine(statusLine({ status: "compacting" })));
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_error: `Reason ${"x".repeat(600)}`,
+      compact_result: "failed",
+      status: null,
+    })))).toEqual([{
+      errorCode: `Reason ${"x".repeat(121)}`,
+      outcome: "failed",
+      type: "compaction",
+    }]);
+    // A repeated verdict adds nothing.
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_error: "again",
+      compact_result: "failed",
+      status: null,
+    })))).toEqual([]);
+  });
+
+  test("reduces an unrecognized result code to a bounded failure", () => {
+    const assembler = new ClaudeDeltaAssembler();
+    bootstrap(assembler);
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_result: "partial",
+      status: null,
+    })))).toEqual([{ errorCode: "partial", outcome: "failed", type: "compaction" }]);
+    // The same outcome word is still deduplicated within the episode.
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_error: "rolled back",
+      compact_result: "failed",
+      status: null,
+    })))).toEqual([]);
+  });
+
+  test("surfaces a contradictory late verdict rather than hiding drift", () => {
+    const assembler = new ClaudeDeltaAssembler();
+    bootstrap(assembler);
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_result: "success",
+      status: null,
+    })))).toEqual([{ outcome: "completed", type: "compaction" }]);
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_error: "rolled back",
+      compact_result: "failed",
+      status: null,
+    })))).toEqual([{ errorCode: "rolled back", outcome: "failed", type: "compaction" }]);
+  });
+
+  test("records a provider-initiated outcome even when no start was observed", () => {
+    const assembler = new ClaudeDeltaAssembler();
+    bootstrap(assembler);
+    expect(assembler.apply(parseClaudeStreamLine({
+      compact_result: "success",
+      session_id: "s",
+      subtype: "compact_result",
+      type: "system",
+    }))).toEqual([{ outcome: "completed", type: "compaction" }]);
+  });
+
+  test("admits compaction between turns and during a provider-driven mid-turn episode", () => {
+    const assembler = new ClaudeDeltaAssembler();
+    bootstrap(assembler);
+    expect(assembler.activeTurnId).toBeNull();
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({ status: "compacting" }))))
+      .toEqual([{ outcome: "started", type: "compaction" }]);
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_result: "success",
+      status: null,
+    })))).toEqual([{ outcome: "completed", type: "compaction" }]);
+    // An auto-compaction can arrive while a turn is in flight.
+    assembler.beginTurn("turn-1");
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({ status: "compacting" }))))
+      .toEqual([{ outcome: "started", type: "compaction" }]);
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({
+      compact_result: "success",
+      status: null,
+    })))).toEqual([{ outcome: "completed", type: "compaction" }]);
+  });
+
+  test("drops a dangling episode so the next compaction announces itself", () => {
+    const assembler = new ClaudeDeltaAssembler();
+    bootstrap(assembler);
+    assembler.apply(parseClaudeStreamLine(statusLine({ status: "compacting" })));
+    // No verdict arrived; a new turn abandons the dangling episode.
+    assembler.beginTurn("turn-1");
+    expect(assembler.apply(parseClaudeStreamLine(statusLine({ status: "compacting" }))))
+      .toEqual([{ outcome: "started", type: "compaction" }]);
+  });
+
+  test("fences compaction signals to the provider session they name", () => {
+    const assembler = new ClaudeDeltaAssembler();
+    bootstrap(assembler, "session-one");
+    expect(assembler.apply(parseClaudeStreamLine({
+      session_id: "session-two",
+      status: "compacting",
+      subtype: "status",
+      type: "system",
+    }))).toEqual([{ event: "system/status/session_mismatch", type: "protocolNotice" }]);
+    expect(assembler.apply(parseClaudeStreamLine({
+      compact_result: "failed",
+      session_id: "session-two",
+      subtype: "compact_result",
+      type: "system",
+    }))).toEqual([{ event: "system/compact_result/session_mismatch", type: "protocolNotice" }]);
+    expect(assembler.apply(parseClaudeStreamLine({
+      compactMetadata: { trigger: "auto" },
+      session_id: "session-two",
+      subtype: "compact_boundary",
+      type: "system",
+    }))).toEqual([{ event: "system/compact_boundary/session_mismatch", type: "protocolNotice" }]);
+    // No episode was opened by the mismatched signals.
+    expect(assembler.apply(parseClaudeStreamLine({
+      session_id: "session-one",
+      status: "compacting",
+      subtype: "status",
+      type: "system",
+    }))).toEqual([{ outcome: "started", type: "compaction" }]);
+  });
+});

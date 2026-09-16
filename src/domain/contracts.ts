@@ -544,6 +544,9 @@ export const localCommandSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session.queue"), session: selectorSchema, message: messageSchema, attachments: attachmentReferenceListSchema.optional(), idempotencyKey: idempotencyKeySchema }).strict(),
   z.object({ kind: z.literal("session.steer"), session: selectorSchema, message: messageSchema, attachments: legacyAttachmentReferenceListSchema.optional(), idempotencyKey: idempotencyKeySchema }).strict(),
   z.object({ kind: z.literal("session.stop"), session: selectorSchema, idempotencyKey: idempotencyKeySchema }).strict(),
+  // The provider's native compaction is the only dispatched effect; strategy
+  // selection stays out of this command.
+  z.object({ kind: z.literal("session.compact"), session: selectorSchema, idempotencyKey: idempotencyKeySchema }).strict(),
   z.object({ kind: z.literal("session.rename"), session: selectorSchema, name: titleSchema, idempotencyKey: idempotencyKeySchema }).strict(),
   z.object({ kind: z.literal("session.archive"), session: selectorSchema, archived: z.boolean() }).strict(),
   z.object({

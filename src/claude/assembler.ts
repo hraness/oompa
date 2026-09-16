@@ -83,6 +83,21 @@ export type ClaudeFact =
     }
   | { readonly type: "tokenUsageUpdated"; readonly turnId: string; readonly usage: ClaudeUsage }
   | {
+      /**
+       * One provider-native compaction signal. `started` is emitted once per
+       * compaction episode when `status: "compacting"` first arrives;
+       * `completed`/`failed` are each emitted at most once per episode, from
+       * `compact_result` or a `compact_boundary` transcript marker. Bounded
+       * outcome vocabulary only — never provider free text.
+       */
+      readonly type: "compaction";
+      readonly outcome: "started" | "completed" | "failed";
+      readonly errorCode?: string;
+      readonly trigger?: string;
+      readonly preTokens?: number;
+      readonly postTokens?: number;
+    }
+  | {
       readonly type: "rateLimitObserved";
       readonly turnId: string;
       readonly observationRevision: number;
@@ -137,6 +152,17 @@ const safeLabel = (value: string, bytes: number): string =>
   boundClaudeText(sanitizeClaudeText(value), bytes);
 
 /**
+ * One compaction episode's emitted terminal outcomes. The set's presence is
+ * what deduplicates a `compact_boundary` plus `compact_result` pair (and a
+ * repeated `status: "compacting"` refresh) into a single `started` and at
+ * most one fact per outcome; a fresh `compacting` status after a settled
+ * episode opens the next episode.
+ */
+type CompactionEpisode = {
+  readonly outcomes: Set<"completed" | "failed">;
+};
+
+/**
  * Turns a stream of parsed Claude stream-json events into Oompa facts. It owns
  * exactly one concern: which turn, item, and subagent a line belongs to.
  *
@@ -148,6 +174,7 @@ export class ClaudeDeltaAssembler {
   #providerSessionId: string | null = null;
   #interrupted = false;
   #nextQuotaObservationRevision = 1;
+  #compaction: CompactionEpisode | null = null;
   readonly #quotaEventRevisions = new Map<string, UsageEventRevision>();
   readonly #subagents = new Map<string, SubagentState>();
   readonly #subagentsByToolUse = new Map<string, string>();
@@ -176,6 +203,11 @@ export class ClaudeDeltaAssembler {
     this.#activeTurnId = turnId;
     this.#interrupted = false;
     this.#nextQuotaObservationRevision = 1;
+    // A compaction that announced `compacting` but reported no outcome before
+    // the next turn is a dangling observation, not an open episode.
+    if (this.#compaction !== null && this.#compaction.outcomes.size === 0) {
+      this.#compaction = null;
+    }
     this.#quotaEventRevisions.clear();
     this.#subagents.clear();
     this.#subagentsByToolUse.clear();
@@ -314,6 +346,42 @@ export class ClaudeDeltaAssembler {
       }
       case "control_cancel_request":
         return [{ requestId: event.requestId, type: "interactionCanceled" }];
+      case "status": {
+        const gate = this.#sessionGate("system/status", event.sessionId);
+        if (gate !== null) return gate;
+        const facts: ClaudeFact[] = [];
+        if (event.status === "compacting") {
+          if (this.#compaction === null || this.#compaction.outcomes.size > 0) {
+            this.#compaction = { outcomes: new Set() };
+            facts.push({ outcome: "started", type: "compaction" });
+          }
+        }
+        if (event.compactResult !== null) {
+          facts.push(...this.#compactionOutcome(event.compactResult, event.compactError));
+        }
+        return facts;
+      }
+      case "compact_result": {
+        const gate = this.#sessionGate("system/compact_result", event.sessionId);
+        if (gate !== null) return gate;
+        return this.#compactionOutcome(event.compactResult, event.compactError);
+      }
+      case "compact_boundary": {
+        const gate = this.#sessionGate("system/compact_boundary", event.sessionId);
+        if (gate !== null) return gate;
+        // A boundary record is itself the applied-compaction signal; its
+        // token fields ride along when it is the episode's first completion.
+        const episode = (this.#compaction ??= { outcomes: new Set() });
+        if (episode.outcomes.has("completed")) return [];
+        episode.outcomes.add("completed");
+        return [{
+          outcome: "completed",
+          type: "compaction",
+          ...(event.trigger === null ? {} : { trigger: event.trigger }),
+          ...(event.preTokens === null ? {} : { preTokens: event.preTokens }),
+          ...(event.postTokens === null ? {} : { postTokens: event.postTokens }),
+        }];
+      }
       case "rate_limit": {
         const turnId = this.#activeTurnId;
         if (turnId === null) {
@@ -409,6 +477,51 @@ export class ClaudeDeltaAssembler {
       case "ignored":
         return [];
     }
+  }
+
+  /**
+   * Session-correlated compaction signals carry `session_id`; a line that
+   * names a different provider session is a bounded notice, while a line
+   * that omits it is tolerated like the other session-scoped events are not
+   * (status envelopes are advisory, so absence is not an identity claim).
+   */
+  #sessionGate(label: string, sessionId: string | null): readonly ClaudeFact[] | null {
+    if (
+      sessionId !== null
+      && this.#providerSessionId !== null
+      && sessionId !== this.#providerSessionId
+    ) {
+      return [{ event: `${label}/session_mismatch`, type: "protocolNotice" }];
+    }
+    return null;
+  }
+
+  /**
+   * `compact_result` is the provider's own outcome word: `"success"` is the
+   * only completed spelling, and every other bounded code — including the
+   * documented `"failed"` — is a failure. `compact_error` is provider free
+   * text, so it survives only as a sanitized, bounded `errorCode`; an
+   * unrecognized result code itself becomes that token.
+   */
+  #compactionOutcome(
+    result: string,
+    error: string | null,
+  ): readonly ClaudeFact[] {
+    const episode = (this.#compaction ??= { outcomes: new Set() });
+    const outcome = result === "success" ? "completed" : "failed";
+    if (episode.outcomes.has(outcome)) return [];
+    episode.outcomes.add(outcome);
+    if (outcome === "completed") return [{ outcome, type: "compaction" }];
+    const errorCode = error !== null
+      ? boundClaudeText(sanitizeClaudeText(error), 128)
+      : result === "failed"
+        ? undefined
+        : result;
+    return [{
+      outcome,
+      type: "compaction",
+      ...(errorCode === undefined ? {} : { errorCode }),
+    }];
   }
 
   #quotaRevision(

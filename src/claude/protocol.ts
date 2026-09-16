@@ -48,9 +48,12 @@ export const PINNED_CLAUDE_STREAM_MATRIX = Object.freeze({
   rate_limit_event: "reduced",
   result: "routed",
   stream_event: "routed",
+  "system/compact_boundary": "routed",
+  "system/compact_result": "routed",
   "system/hook_response": "ignored",
   "system/hook_started": "ignored",
   "system/init": "routed",
+  "system/status": "routed",
   "system/task_notification": "routed",
   "system/task_progress": "routed",
   "system/task_started": "routed",
@@ -477,6 +480,38 @@ export type ClaudeStreamEvent =
       readonly sessionId: string;
       readonly quota: ClaudeRateLimitObservation;
     }
+  | {
+      /**
+       * A `system/status` line. The pinned runtime reports `status:
+       * "compacting"` while a compaction runs and clears it with `status:
+       * null`; the same envelope can carry the `compact_result` /
+       * `compact_error` outcome fields (verified on 2.1.270).
+       */
+      readonly type: "status";
+      readonly sessionId: string | null;
+      readonly status: string | null;
+      readonly compactResult: string | null;
+      readonly compactError: string | null;
+    }
+  | {
+      /** A dedicated `system/compact_result` line, the other spelling 2.1.x emits. */
+      readonly type: "compact_result";
+      readonly sessionId: string | null;
+      readonly compactResult: string;
+      readonly compactError: string | null;
+    }
+  | {
+      /**
+       * A `system/compact_boundary` line: the transcript boundary a completed
+       * compaction wrote. Token and trigger metadata is advisory; the event
+       * itself is the completion signal.
+       */
+      readonly type: "compact_boundary";
+      readonly sessionId: string | null;
+      readonly trigger: string | null;
+      readonly preTokens: number | null;
+      readonly postTokens: number | null;
+    }
   | { readonly type: "control_cancel_request"; readonly requestId: string }
   | { readonly type: "ignored"; readonly event: string }
   | { readonly type: "protocol_notice"; readonly event: string };
@@ -803,6 +838,76 @@ const parseSystemEvent = (value: UnknownRecord, subtype: string): ClaudeStreamEv
         toolUseId: string(value.tool_use_id, "Claude tool use id", 512),
         type: "task_notification",
       };
+    // The compaction signals below degrade to a bounded notice rather than a
+    // thrown fault: a malformed advisory on a live session must never take
+    // the stream down.
+    case "status": {
+      try {
+        return {
+          compactError:
+            optionalString(value.compact_error, "Claude compact error", 2_048) ?? null,
+          compactResult:
+            optionalProviderCode(value.compact_result, "Claude compact result", 64) ?? null,
+          sessionId: optionalString(value.session_id, "Claude session id", 128) ?? null,
+          status: optionalProviderCode(value.status, "Claude status", 128) ?? null,
+          type: "status",
+        };
+      } catch (error) {
+        if (error instanceof ClaudeError) {
+          return { event: "system/status/invalid", type: "protocol_notice" };
+        }
+        throw error;
+      }
+    }
+    case "compact_result": {
+      try {
+        return {
+          compactError:
+            optionalString(value.compact_error, "Claude compact error", 2_048) ?? null,
+          compactResult: providerCode(value.compact_result, "Claude compact result", 64),
+          sessionId: optionalString(value.session_id, "Claude session id", 128) ?? null,
+          type: "compact_result",
+        };
+      } catch (error) {
+        if (error instanceof ClaudeError) {
+          return { event: "system/compact_result/invalid", type: "protocol_notice" };
+        }
+        throw error;
+      }
+    }
+    case "compact_boundary": {
+      try {
+        // Transcript records spell this `compactMetadata`; stream-json output
+        // has also been captured with `compact_metadata`, and the token
+        // fields themselves appear in both casings across 2.1.x builds.
+        const metadata =
+          optionalRecord(value.compactMetadata, "Claude compact metadata")
+          ?? optionalRecord(value.compact_metadata, "Claude compact metadata")
+          ?? {};
+        return {
+          postTokens: optionalNonnegativeSafeInteger(
+            metadata.postTokens ?? metadata.post_tokens,
+            "Claude post-compaction tokens",
+          ) ?? null,
+          preTokens: optionalNonnegativeSafeInteger(
+            metadata.preTokens ?? metadata.pre_tokens,
+            "Claude pre-compaction tokens",
+          ) ?? null,
+          sessionId: optionalString(
+            value.session_id ?? value.sessionId,
+            "Claude session id",
+            128,
+          ) ?? null,
+          trigger: optionalProviderCode(metadata.trigger, "Claude compact trigger", 64) ?? null,
+          type: "compact_boundary",
+        };
+      } catch (error) {
+        if (error instanceof ClaudeError) {
+          return { event: "system/compact_boundary/invalid", type: "protocol_notice" };
+        }
+        throw error;
+      }
+    }
     default:
       return { event: `system/${subtype}`, type: "protocol_notice" };
   }

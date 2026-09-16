@@ -1029,6 +1029,10 @@ const stoppedReceiptSchema = z.discriminatedUnion("stopped", [
   z.object({ stopped: z.literal(false), activeTurnId: z.null() }).strict(),
 ]);
 const renamedReceiptSchema = z.object({ renamed: z.literal(true) }).strict();
+// The request's durable receipt is the provider's acceptance, not the applied
+// outcome: the provider reports that separately as a `compaction` session
+// event through its own fact stream.
+const compactedReceiptSchema = z.object({ requested: z.literal(true) }).strict();
 
 const digestText = (value: string): string => createHash("sha256").update(value).digest("hex");
 const projectedMessageTextIsComplete = (
@@ -1259,6 +1263,7 @@ type RemoteSessionCommand = Extract<LocalCommand, { kind:
   | "session.queue"
   | "session.steer"
   | "session.stop"
+  | "session.compact"
   | "session.rename"
   | "session.preset"
   | "session.switch"
@@ -1400,7 +1405,7 @@ type ClaudeInputFactEffect =
       kind: "mutation";
       attemptId: MutationAttemptRecord["id"];
       idempotencyKey: string;
-      operation: "session.send" | "session.steer" | "session.stop";
+      operation: "session.send" | "session.steer" | "session.stop" | "session.compact";
     }>
   | Readonly<{
       kind: "queue";
@@ -2826,6 +2831,7 @@ export class OompaService {
           );
         }
         case "session.stop": { const session = this.#store.requireSession(command.session); return await this.#serializeSessionAuthority(session, async () => this.#stop(session.id, command.idempotencyKey, context.signal)); }
+        case "session.compact": { const session = this.#store.requireSession(command.session); return await this.#serializeSessionAuthority(session, async () => this.#compact(session.id, command.idempotencyKey, context.signal)); }
         case "session.rename": { const session = this.#store.requireSession(command.session); return await this.#serializeSessionAuthority(session, async () => this.#rename(session.id, command.name, command.idempotencyKey, context.signal)); }
         case "session.recover": return await this.#resolveSessionRecoveryCommand(
           command.session,
@@ -3708,6 +3714,7 @@ export class OompaService {
         case "session.queue": return await this.#queue(session.id, command.message, command.idempotencyKey, context.signal, undefined, "human", command.attachments ?? []);
         case "session.steer": return await this.#steer(session.id, command.message, command.idempotencyKey, context.signal, undefined, "human", command.attachments ?? []);
         case "session.stop": return await this.#stop(session.id, command.idempotencyKey, context.signal);
+        case "session.compact": return await this.#compact(session.id, command.idempotencyKey, context.signal);
         case "session.rename": return await this.#rename(session.id, command.name, command.idempotencyKey, context.signal);
         case "session.preset": return {
           session: this.#store.updateSessionMetadata({
@@ -9801,6 +9808,18 @@ export class OompaService {
         activeTurnId: fact.status.type === "active" ? session.activeTurnId ?? null : null,
       };
       case "threadDeleted": return null;
+      // A provider in-progress signal opens the same arc an Oompa dispatch
+      // would: `requested` under the provider trigger. No free text or
+      // provider payload is ever projected, only the closed outcome, the
+      // bounded turn identity, and exact token counts.
+      case "threadCompaction": return {
+        type: "compaction",
+        outcome: fact.outcome === "started" ? "requested" : fact.outcome,
+        trigger: "provider",
+        turnId: fact.turnId,
+        ...(fact.preTokens === undefined ? {} : { preTokens: fact.preTokens }),
+        ...(fact.postTokens === undefined ? {} : { postTokens: fact.postTokens }),
+      };
       // A `subAgentActivity` marker item announces the same activity on both
       // its started and its completed notification, so the projection is the
       // same body twice at most. Every consumer folds by agent id, so the
@@ -20926,6 +20945,77 @@ export class OompaService {
     }
   }
 
+  // A manual compaction is one bound provider request. The receipt records
+  // provider acceptance; the applied outcome arrives separately as the
+  // provider's own `threadCompaction` fact, which the projection renders as a
+  // `compaction` session event. An uncertain attempt reconciles against that
+  // same event stream, never a replay.
+  async #compact(selector: string, idempotencyKey: string | undefined, signal: AbortSignal): Promise<unknown> {
+    const session = this.#requireBoundSession(selector);
+    const profile = this.#store.requireProfile(session.profileId);
+    this.#assertProviderReady(profile, this.#sessionProviderAuthority(session), { session });
+    const providerAuthority = this.#sessionProviderAuthority(session);
+    const runtimeAuthority = this.#sessionAuthority(session);
+    const observedProviderConnectionId = this.#requireLiveProviderObservation(
+      await this.#ensureSessionObservedLocked(session.id, signal),
+    );
+    const key = idempotencyKey ?? randomUUID();
+    const execution = { replayed: false };
+    await this.#effect({ kind: "session.compact", authorityId: session.id, authorityGeneration: providerAuthority.processGeneration, request: {}, idempotencyKey: key, providerAuthorities: [{ role: "primary", authority: providerAuthority, provenance: "session_compact" }], onReplay: () => { execution.replayed = true; }, effect: async (attemptId) => {
+      await this.#assertPersonalSessionAccountAuthority(session, profile, signal, true);
+      return await this.#withClaudeInputFacts({
+        session, authority: runtimeAuthority, connectionId: observedProviderConnectionId,
+        effect: { kind: "mutation", attemptId, idempotencyKey: key, operation: "session.compact" },
+      }, async () => {
+      await this.#fencedEffect(async () => {
+        this.#assertObservedProviderConnection(session.id, observedProviderConnectionId);
+        await this.#runtimeForSession(session).compact({ authority: runtimeAuthority, providerThreadId: session.providerThreadId, signal });
+      });
+      await this.#assertSessionAccountAuthorityAfterProviderEffect(session, profile, signal);
+      return { requested: true as const };
+      });
+    }, beginEffect: async (attemptId) => {
+      const baseline = await this.#readExactSessionProjection(session, profile, false, signal);
+      // Both providers admit compaction only between turns; refusing here
+      // keeps a queued provider rejection from counting as an accepted effect.
+      if (baseline.activeTurnId !== undefined) {
+        throw new CommandFailure("CONFLICT", "The session has a turn in flight; compaction is admitted only between turns.");
+      }
+      const stream = this.#store.eventStreamPosition(session.id);
+      await this.#assertPersonalSessionAccountAuthority(session, profile, signal, true);
+      this.#assertObservedProviderConnection(session.id, observedProviderConnectionId);
+      this.#store.beginSessionMutationEffect({
+        attemptId,
+        sessionId: session.id,
+        profileGeneration: providerAuthority.processGeneration,
+        providerAuthority,
+        evidence: {
+          kind: "session.compact",
+          providerThreadId: session.providerThreadId,
+          baseline: this.#providerBaseline(baseline),
+          streamEpoch: stream.streamEpoch,
+          streamSequence: stream.observedThroughSequence,
+        },
+      });
+    }, receipt: (value) => compactedReceiptSchema.parse(value), restore: (value) => compactedReceiptSchema.parse(value), onAmbiguous: () => this.#quarantineSession(session.id) });
+    // A same-key replay returns the stored receipt without a second dispatch;
+    // it must not append a second request event either.
+    if (execution.replayed) return { requested: true, session: this.#store.requireSession(session.id), idempotencyKey: key };
+    try {
+      this.#appendSessionEvent(runtimeAuthority, session.id, observedProviderConnectionId, {
+        type: "compaction",
+        outcome: "requested",
+        trigger: "manual",
+        turnId: null,
+      });
+      return { requested: true, session: this.#store.requireSession(session.id), idempotencyKey: key };
+    } catch (error: unknown) {
+      await this.#daemonAuthority.assertCurrent();
+      this.#quarantineSession(session.id);
+      throw new CommandFailure("RECOVERY_REQUIRED", "The provider accepted compaction, but its local request event could not be committed; the session is quarantined.", { cause: error instanceof Error ? error.name : "error" });
+    }
+  }
+
   async #rename(selector: string, name: string, idempotencyKey: string | undefined, signal: AbortSignal): Promise<unknown> {
     const session = this.#requireBoundSession(selector);
     this.#requireCodexSession(session, "renaming a provider thread");
@@ -22430,6 +22520,42 @@ export class OompaService {
         evidence: { kind: evidence.kind, clientMessageId: evidence.clientMessageId, turnId, providerUpdatedAt: projection.providerUpdatedAt },
         message: match.text,
       };
+    }
+    if (evidence.kind === "session.compact") {
+      // A compaction request leaves no projection-native trace: its durable
+      // provider proof is the session event stream. The dispatch itself writes
+      // `requested` under `manual` or `policy` only after provider acceptance,
+      // and the provider's `threadCompaction` fact projects `requested`,
+      // `completed`, or `failed` under `provider`. Any `compaction` event
+      // after the captured position therefore proves the request was
+      // processed; none of them is ever a replay.
+      const stream = this.#store.eventStreamPosition(sessionId);
+      if (
+        stream.streamEpoch !== evidence.streamEpoch
+        || evidence.streamSequence > stream.observedThroughSequence
+      ) return null;
+      let after: number | null = evidence.streamSequence;
+      for (;;) {
+        const page = this.#store.listSessionEvents({ sessionId, afterSequence: after });
+        const found = page.events.find((event) => event.body.type === "compaction");
+        if (found !== undefined && found.body.type === "compaction") {
+          return {
+            receipt: { requested: true },
+            evidence: {
+              kind: evidence.kind,
+              providerThreadId: evidence.providerThreadId,
+              streamEpoch: evidence.streamEpoch,
+              streamSequence: evidence.streamSequence,
+              observedSequence: found.sequence,
+              observedOutcome: found.body.outcome,
+              observedTrigger: found.body.trigger,
+            },
+          };
+        }
+        const last = page.events.at(-1);
+        if (last === undefined || last.sequence >= page.observedThroughSequence) return null;
+        after = last.sequence;
+      }
     }
     const strictlyNewer = evidence.providerTimestampUnit === "unix_milliseconds_v1"
       && projection.providerTimestampUnit === "unix_milliseconds_v1"

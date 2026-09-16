@@ -3909,6 +3909,10 @@ export type MutationEffectEvidence =
   | { kind: "session.send"; providerThreadId: string; baseline: SessionProviderBaseline; clientMessageId: string; messageDigest: string; runtimeProfile?: ReviewedRuntimeProfile | undefined; messageActor?: SessionMessageActor | undefined }
   | { kind: "session.steer"; providerThreadId: string; baseline: SessionProviderBaseline; activeTurnId: string | null; clientMessageId: string; messageDigest: string; messageActor?: SessionMessageActor | undefined }
   | { kind: "session.stop"; providerThreadId: string; providerTimestampUnit?: "unix_milliseconds_v1" | undefined; baseline: SessionProviderBaseline; activeTurnId: string | null }
+  // A compaction request's only durable provider trace is the session event
+  // stream: the proof baseline is the exact stream epoch and high-water
+  // sequence captured before dispatch, not a provider timestamp.
+  | { kind: "session.compact"; providerThreadId: string; baseline: SessionProviderBaseline; streamEpoch: string; streamSequence: number }
   | { kind: "session.rename"; providerThreadId: string; providerTimestampUnit?: "unix_milliseconds_v1" | undefined; baseline: SessionProviderBaseline; requestedName: string }
   | { kind: "session.start"; projectId: ProjectId; clientMessageId: string | null; messageDigest: string | null; presetContract?: PresetContract | undefined; runtimeProfile?: ReviewedRuntimeProfile | undefined; conversationAutomationCapability?: typeof SESSION_CONVERSATION_AUTOMATION_CAPABILITY | undefined }
   | { kind: "session.switch"; daemonGeneration?: number | undefined; requestedAccountId: ProfileId | null; requestedPreset: Preset | null; sourceProfileId: ProfileId; sourceProcessGeneration: number; sourceProvider: Provider; sourceProviderThreadId: string; sourcePreset: Preset; targetProfileId: ProfileId; targetProcessGeneration: number; targetProvider: Provider; targetProviderAccountKey?: string | undefined; targetHostCapabilities?: SessionProviderSwitchHostCapabilities | undefined; targetPreset: Preset; presetContract?: PresetContract | undefined; transcriptDigest: string; seedDigest: string; seedIncludedRecords: number; seedOmittedRecords: number; seedRetentionGapReason?: SessionEventGapReason | undefined; runtimeProfile: ReviewedRuntimeProfile }
@@ -11173,6 +11177,7 @@ const backfillSchemaVersion40ProviderAccounts = (
     "session.send",
     "session.steer",
     "session.stop",
+    "session.compact",
     "session.rename",
     "session.switch",
     "session.queue",
@@ -11891,7 +11896,7 @@ const assertProviderAccountAuthority = (database: Database): void => {
          ON q.scope_kind='mutation' AND q.scope_id=m.id
        WHERE m.kind IN (
          'account.login','account.logout','account.login-cancel',
-         'session.start','session.send','session.steer','session.stop','session.rename','session.queue'
+         'session.start','session.send','session.steer','session.stop','session.compact','session.rename','session.queue'
        ) AND a.attempt_id IS NULL AND q.scope_id IS NULL`,
     ).get(),
   );
@@ -26959,7 +26964,7 @@ export class StateStore {
          LEFT JOIN mutation_resolutions resolution ON resolution.attempt_id=mutation.id
          WHERE mutation.authority_id=?
            AND mutation.kind IN (
-             'session.send','session.steer','session.stop','session.rename',
+             'session.send','session.steer','session.stop','session.compact','session.rename',
              'session.queue','session.switch'
            )
            AND mutation.state IN ('prepared','effect_started','ambiguous')
@@ -43403,7 +43408,7 @@ export class StateStore {
         transcript: SessionUserMessageIntentInput & Readonly<{ providerConnectionId: string }>;
       }>
     | Readonly<{
-        evidence: Extract<MutationEffectEvidence, { kind: "session.stop" | "session.rename" }>;
+        evidence: Extract<MutationEffectEvidence, { kind: "session.stop" | "session.compact" | "session.rename" }>;
         message?: never;
         transcript?: never;
       }>
@@ -46505,6 +46510,7 @@ export class StateStore {
             "session.send",
             "session.steer",
             "session.stop",
+            "session.compact",
             "session.rename",
             "session.queue",
             "session.switch",
@@ -46583,7 +46589,7 @@ export class StateStore {
           }
         }
         let authorityResolved = false;
-        if (["session.send", "session.steer", "session.stop", "session.rename"].includes(kind)) {
+        if (["session.send", "session.steer", "session.stop", "session.compact", "session.rename"].includes(kind)) {
           const parsedSession = sessionIdSchema.safeParse(authorityId);
           const primary = providerAuthorities.find((value) => value.role === "primary");
           if (
@@ -51834,7 +51840,7 @@ export class StateStore {
            AND NOT ${sessionSendOwnedSql("mutation_attempts.id", "mutation_attempts.idempotency_key", "mutation_attempts.request_format")}
            AND kind IN (
              'session.start','session.send','session.steer','session.stop',
-             'session.rename','session.queue','session.switch'
+             'session.compact','session.rename','session.queue','session.switch'
            )
            AND EXISTS(
              SELECT 1 FROM mutation_provider_authorities evidence
@@ -52109,7 +52115,7 @@ export class StateStore {
         `UPDATE mutation_attempts
          SET state='cancelled',updated_at=MAX(updated_at,?)
          WHERE state='prepared'
-           AND kind IN ('session.send','session.steer','session.stop','session.rename')
+           AND kind IN ('session.send','session.steer','session.stop','session.compact','session.rename')
            AND NOT ${sessionSendOwnedSql("mutation_attempts.id", "mutation_attempts.idempotency_key", "mutation_attempts.request_format")}
            AND EXISTS(
              SELECT 1 FROM mutation_provider_authorities evidence

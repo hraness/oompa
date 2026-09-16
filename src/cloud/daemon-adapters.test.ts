@@ -109,6 +109,7 @@ class FakeCodex implements CodexRuntimePort {
   startTurn(): Promise<never> { return Promise.reject(new Error("unused")); }
   steer(): Promise<void> { return Promise.reject(new Error("unused")); }
   interrupt(): Promise<void> { return Promise.reject(new Error("unused")); }
+  compact(): Promise<void> { return Promise.reject(new Error("unused")); }
   rename(): Promise<void> { return Promise.reject(new Error("unused")); }
   inspectTurn(): Promise<unknown> { return Promise.reject(new Error("unused")); }
   inspectInteractionAuthority(): ReturnType<CodexRuntimePort["inspectInteractionAuthority"]> { return Promise.reject(new Error("unused")); }
@@ -675,6 +676,7 @@ class FakeClaude implements ClaudeRuntimePort {
   startTurn(): Promise<never> { return Promise.reject(this.#unused()); }
   steer(): Promise<void> { return Promise.reject(this.#unused()); }
   interrupt(): Promise<void> { return Promise.reject(this.#unused()); }
+  compact(): Promise<void> { return Promise.reject(this.#unused()); }
   inspectInteractionAuthority(): ReturnType<ClaudeRuntimePort["inspectInteractionAuthority"]> { return Promise.reject(this.#unused()); }
   validateInteractionResolution(): Promise<{ responseDigest: string }> { return Promise.reject(this.#unused()); }
   resolveInteraction(): Promise<{ responseWritten: true }> { return Promise.reject(this.#unused()); }

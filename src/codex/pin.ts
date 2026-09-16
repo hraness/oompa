@@ -38,5 +38,5 @@ export const PINNED_CODEX_SCHEMA_DIGESTS = Object.freeze({
  */
 export const PINNED_CODEX_MATRIX_DIGESTS = Object.freeze({
   serverRequest: "74bf24af6ccbddde69cff0c2a6ac8b8aef183b58f42b22c27edd553430ce94a3",
-  notification: "c5beba46ff6f854b70e4daac2b143d0a6d401086e1085c6ceb340384f5fc0414",
+  notification: "767f8d43ca0a192b7303f160b8864583a888d8fe28c32b6880087af81dd62cdb",
 } as const);

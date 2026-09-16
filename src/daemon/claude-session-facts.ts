@@ -374,6 +374,20 @@ export class ClaudeSessionFactTranslator {
         };
       case "protocolNotice":
         return { connectionId, method: fact.event, type: "protocolNotice" };
+      // A provider compaction episode maps onto the shared `threadCompaction`
+      // fact. Claude binds no turn to the episode, and its own trigger label
+      // and error code stay provider-private — the neutral timeline owns
+      // trigger attribution and carries outcomes and token counts only.
+      case "compaction":
+        return {
+          connectionId,
+          outcome: fact.outcome,
+          threadId,
+          turnId: null,
+          type: "threadCompaction",
+          ...(fact.preTokens === undefined ? {} : { preTokens: fact.preTokens }),
+          ...(fact.postTokens === undefined ? {} : { postTokens: fact.postTokens }),
+        };
       // The turn summary's exact runtime and result text reach the projection
       // through `readSession`, not the event stream; the rate-limit line names
       // no Codex usage counter Oompa could refresh.

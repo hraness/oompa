@@ -244,6 +244,7 @@ class WorkRuntime implements CodexRuntimePort {
   listPlugins(): Promise<never> { return this.#closed(); }
   listSessions(): Promise<never> { return this.#closed(); }
   interrupt(): Promise<never> { return this.#closed(); }
+  compact(): Promise<never> { return this.#closed(); }
   rename(): Promise<never> { return this.#closed(); }
   inspectTurn(): Promise<never> { return this.#closed(); }
   inspectInteractionAuthority(): Promise<never> { return this.#closed(); }
