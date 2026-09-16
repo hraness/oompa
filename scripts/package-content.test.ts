@@ -8,7 +8,7 @@ import manifest from "../package.json";
 import {
   assertPackageContent,
   assertPackageContentAt,
-  packageCandidateNotice,
+  packageAdmissionNotice,
   packageDaemonNotice,
   packageDescription,
   packageInstallCommand,
@@ -30,14 +30,13 @@ describe("independently authored package content", () => {
   });
 
   test("retains release admission, startup, privacy, and command-order contracts", () => {
-    expect(readme).toContain("Local CLI v0.8.4 is a release candidate, not an admitted artifact");
-    expect(readme).toContain("The v0.8.4 candidate is not yet admitted.");
-    expect(readme).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts");
-    expect(readme).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.3");
-    expect(readme).toContain("https://github.com/hraness/oompa/actions/runs/35066335703");
-    expect(readme).toContain(packageCandidateNotice);
-    expect(readme.indexOf(packageCandidateNotice)).toBeLessThan(readme.indexOf(packageInstallCommand));
-    expect(readme.indexOf("Local CLI v0.8.4 is a release candidate, not an admitted artifact")).toBeLessThan(readme.indexOf(packageInstallCommand));
+    expect(readme).toContain("Local CLI v0.8.4 passed immutable GitHub and exact-byte npm release admission.");
+    expect(readme).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts");
+    expect(readme).toContain("https://github.com/hraness/oompa/releases/tag/v0.8.4");
+    expect(readme).toContain("https://github.com/hraness/oompa/actions/runs/35136703343");
+    expect(readme).toContain(packageAdmissionNotice);
+    expect(readme.indexOf(packageAdmissionNotice)).toBeLessThan(readme.indexOf(packageInstallCommand));
+    expect(readme.indexOf("Local CLI v0.8.4 passed immutable GitHub and exact-byte npm release admission.")).toBeLessThan(readme.indexOf(packageInstallCommand));
     expect(readme.indexOf(packageInstallPrerequisite)).toBeLessThan(readme.indexOf(packageInstallCommand));
     expect(readme.indexOf(packageInstallCommand)).toBeLessThan(readme.indexOf("\noompa doctor --offline\n"));
     expect(readme).toContain(packageDaemonNotice);
@@ -59,17 +58,16 @@ describe("independently authored package content", () => {
   });
 
   test("rejects omitted, reordered, or falsely admitted command prerequisites", () => {
-    for (const prerequisite of [packageCandidateNotice, packageInstallPrerequisite, packageDaemonNotice]) {
+    for (const prerequisite of [packageAdmissionNotice, packageInstallPrerequisite, packageDaemonNotice]) {
       expect(() => assertPackageContent(manifest, readme.replace(prerequisite, "")))
         .toThrow("missing its technical identity");
       expect(() => assertPackageContent(manifest, readme.replace(prerequisite, "") + prerequisite + "\n"))
         .toThrow("before its prerequisite");
     }
     for (const claim of [
-      "Install and verify the admitted v0.8.4 CLI artifact",
-      "v0.8.4 artifacts admitted", "v0.8.4 is the fully admitted public artifact",
-      "The v0.8.4 CLI artifact and its exact-byte npm mirror passed release admission",
-      "The v0.8.3 candidate is not yet admitted", "The v0.8.3 npm mirror is not admitted",
+      "Install and verify the admitted v0.8.3 CLI artifact",
+      "v0.8.3 artifacts admitted", "v0.8.3 is the fully admitted public artifact",
+      "The v0.8.4 candidate is not yet admitted", "The v0.8.4 npm mirror is not admitted",
       "Daemon rollout is available", "Hosted command writers are enabled",
       "The v0.7.1 candidate is not yet admitted",
     ]) expect(() => assertPackageContent(manifest, readme + claim + "\n")).toThrow("conflicting release claim");
@@ -77,11 +75,10 @@ describe("independently authored package content", () => {
 
   test("requires the current exact GitHub and npm admission evidence", () => {
     for (const required of [
-      "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts",
-      "https://github.com/hraness/oompa/releases/tag/v0.8.3",
-      "https://github.com/hraness/oompa/actions/runs/35066335703",
-      "Local CLI v0.8.4 is a release candidate, not an admitted artifact",
-      "The v0.8.4 candidate is not yet admitted.",
+      "https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts",
+      "https://github.com/hraness/oompa/releases/tag/v0.8.4",
+      "https://github.com/hraness/oompa/actions/runs/35136703343",
+      "Local CLI v0.8.4 passed immutable GitHub and exact-byte npm release admission.",
     ]) {
       expect(() => assertPackageContent(manifest, readme.replaceAll(required, "")))
         .toThrow("missing its technical identity");
@@ -120,7 +117,7 @@ describe("independently authored package content", () => {
       await writeFile(join(root, "package.json"), JSON.stringify(manifest));
       await writeFile(join(root, "README.md"), readme);
       await assertPackageContentAt(root);
-      const rejected = readme.replace(packageCandidateNotice, "");
+      const rejected = readme.replace(packageAdmissionNotice, "");
       await writeFile(join(root, "README.md"), rejected);
       await expect(assertPackageContentAt(root)).rejects.toThrow("missing its technical identity");
       expect(await readFile(join(root, "README.md"), "utf8")).toBe(rejected);
