@@ -17,6 +17,7 @@ const routes = [
   "index.html", "privacy/index.html", "preview/index.html",
   "docs/index.html", "docs/start/index.html", "docs/web/index.html",
   "docs/sessions/index.html", "docs/reference/index.html", "docs/status/index.html",
+  "pr/index.html",
 ] as const;
 const docsRoutes = ["/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/"] as const;
 const hash = (bytes: Uint8Array | string): string => createHash("sha256").update(bytes).digest("hex");
@@ -167,6 +168,11 @@ export function captureSiteDocuments(value: unknown): ReadonlyMap<string, string
     assert.equal(typeof descriptor.value, "string", "Documentation renderer must return HTML strings");
     documents.set(`${route.slice(1)}index.html`, descriptor.value as string);
   }
+  const renderPr: unknown = Object.getOwnPropertyDescriptor(renderers, "renderPrHtml")?.value;
+  assert.ok(typeof renderPr === "function", "Captured Puerto Rico renderer export changed");
+  const prHtml = (renderPr as (content: undefined) => unknown)(undefined);
+  assert.equal(typeof prHtml, "string", "Puerto Rico renderer must return an HTML string");
+  documents.set("pr/index.html", prHtml as string);
   assert.deepEqual([...documents.keys()], [...routes]);
   return documents;
 }

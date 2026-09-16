@@ -15,6 +15,7 @@ import { docsClasses } from "./docs.stylex.ts";
 
 import {
   findSection,
+  OOMPA_MAILING_TURNSTILE_SITEKEY_ENV,
   publicContent,
   type ContentBlock,
   type ContentSection,
@@ -22,7 +23,9 @@ import {
   type PublicContent,
 } from "./content.ts";
 
-const escapeHtml = (value: string): string =>
+export { OOMPA_MAILING_TURNSTILE_SITEKEY_ENV };
+
+export const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -33,7 +36,7 @@ const escapeHtml = (value: string): string =>
 const defaultPalette = getDesignPaletteTheme("paper", "light");
 const previewPalette = getDesignPaletteTheme("catppuccin", "dark");
 const previewPaletteAttributes = `class="${escapeHtml(previewPalette.className)}" data-palette="catppuccin" data-theme="dark"`;
-const paletteAttributes = `class="${escapeHtml(defaultPalette.className)}" data-hraness-theme="paper" data-palette="paper" data-theme="light"`;
+export const paletteAttributes = `class="${escapeHtml(defaultPalette.className)}" data-hraness-theme="paper" data-palette="paper" data-theme="light"`;
 const classes = (hook: string, ...slots: readonly SitePresentationSlot[]): string =>
   [hook, sitePresentationClasses(...slots)].filter(Boolean).join(" ");
 
@@ -47,10 +50,20 @@ export const oompaMailingListConfig = (): HranessMailingListConfig => ({
   kind: "signup",
 });
 
-export const renderOompaSiteFooter = (): string => renderHranessSiteFooter({
-  mailingList: oompaMailingListConfig(),
-  support: {"id": "hra", "name": "Oompa", "valueProposition": "Support ongoing development of local tools for coordinating your agents.", "updates": true},
-});
+const turnstileSitekeyPattern = /^[A-Za-z0-9_-]{10,128}$/u;
+
+export const renderOompaSiteFooter = (
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string => {
+  const footer = renderHranessSiteFooter({
+    mailingList: oompaMailingListConfig(),
+    support: {"id": "hra", "name": "Oompa", "valueProposition": "Support ongoing development of local tools for coordinating your agents.", "updates": true},
+  });
+  const sitekey = environment[OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]?.trim();
+  return sitekey !== undefined && turnstileSitekeyPattern.test(sitekey)
+    ? `${footer}\n<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
+    : footer;
+};
 
 export const renderAskAiAboutThis = (canonicalUrl: string): string =>
   renderToStaticMarkup(createElement(AskAiAboutThis, {
@@ -132,7 +145,7 @@ const renderSection = (
   )).join("\n  ")}
 </section>`;
 
-const renderHead = (
+export const renderHead = (
   content: PublicContent,
   options: {
     readonly canonicalPath: string;

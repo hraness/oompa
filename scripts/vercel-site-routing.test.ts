@@ -86,7 +86,7 @@ function proveHeaders(value: Configuration, pathname: string, policyIndex: numbe
   return result;
 }
 
-const pages = ["/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/", "/privacy/", "/preview/"] as const;
+const pages = ["/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/", "/privacy/", "/preview/", "/pr/"] as const;
 const wellKnown = ["/.well-known/security.txt", "/.well-known/hra.json"] as const;
 
 describe("compiled Vercel site routing", () => {

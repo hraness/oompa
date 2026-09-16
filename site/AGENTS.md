@@ -4,10 +4,10 @@
 - `vendor/marketing-preset/` is the immutable shared editorial CSS, licensed Instrument Serif, and field-texture snapshot. `scripts/marketing-preset.ts` admits its exact source paths and hashes before the existing compiler captures its assets.
 - `content.ts` owns the website's public content contract. Root `README.md` and the package description are independently authored package inputs, not website outputs.
 - `docs-content.ts` owns the task-oriented guide registry, canonical Markdown exports, detailed reference ownership, and individual editorial admission records.
-- `template.ts` renders the homepage, privacy page, and six documentation routes.
-- `marketing.tsx` composes public design-kit server components; `render.ts` is the captured build-time entry for all nine HTML routes.
+- `template.ts` renders the homepage, privacy page, and six documentation routes. The `/pr/` route renders its committed snapshot through `pr-template.ts` instead.
+- `marketing.tsx` composes public design-kit server components; `render.ts` is the captured build-time entry for all ten HTML routes. `pr-template.ts` renders the committed `pr/data/` snapshot into the `/pr/` crisis board with `pr.stylex.ts` recipes.
 - `product-preview.tsx` renders inert real-UI frames and their accessible parent controls. `product-scenes.ts` is their closed public scene catalog; Direct itself stays in the separately built fixture app.
-- `site-entry.ts` progressively enhances scene selection, enlargement, local guide search, and moved reference fragments without authentication or persistence.
+- `site-entry.ts` progressively enhances scene selection, enlargement, local guide search, `/pr/` signal filtering, and moved reference fragments without authentication or persistence.
 - `wonka-artifact.tsx` and the `wonka-*` recipes add the homepage's decorative hat and story seals. The bounded WebGL renderer progressively replaces the static print and stops rendering at rest.
 - `appearance-menu.tsx` reexports the pure native header menu owned alongside its static recipe in `app/src/components/appearance-menu*`. The shared app appearance bootstrap drives it; the preview remains a fixed, inert Catppuccin dark surface.
 - `presentation.stylex.ts` and `marketing.stylex.ts` own local component recipes. `foundation.ts` is the build-only CSS entry; `foundation.css` joins approved document foundations and public fonts, without importing legacy component styles. The empty entry chunk stays private.

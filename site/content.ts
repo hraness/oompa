@@ -5,6 +5,12 @@ import { buildOompaGlobalInstallCommand } from "../src/install-preflight";
 
 export type EndpointAvailability = "beta-not-yet-live" | "live" | "release-ready";
 
+/** Public Cloudflare Turnstile site key that gates the shared footer's mailing
+ * form on Vercel Production. The key is public by design; the value is ambient
+ * build input so sealed renders embed or omit the script tag deterministically. */
+export const OOMPA_MAILING_TURNSTILE_SITEKEY_ENV =
+  "NEXT_PUBLIC_HRANESS_MAILING_TURNSTILE_SITEKEY" as const;
+
 export interface PublicEndpoints {
   readonly betaTag: EndpointAvailability;
   readonly githubRepository: EndpointAvailability;
@@ -289,6 +295,7 @@ export const siteDocumentPaths: readonly string[] = [
   "/docs/reference/",
   "/docs/status/",
   "/privacy/",
+  "/pr/",
 ];
 
 export const publicReleaseState: "live" | "release-ready" | "staged" = "live";

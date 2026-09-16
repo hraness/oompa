@@ -163,6 +163,7 @@ const siteRoutes = [
   { path: "docs/sessions/index.html", pathname: "/docs/sessions/", heading: "h1", label: "docs-sessions" },
   { path: "docs/reference/index.html", pathname: "/docs/reference/", heading: "h1", label: "docs-reference" },
   { path: "docs/status/index.html", pathname: "/docs/status/", heading: "h1", label: "docs-status" },
+  { path: "pr/index.html", pathname: "/pr/", heading: "h1", label: "pr" },
 ] as const;
 const siteMarkdownPaths = new Set(siteRoutes.filter(({ pathname }) => pathname.startsWith("/docs/")).map(({ path }) => path.replace(/\.html$/u, ".md")));
 const productPreviewCsp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'";
@@ -184,6 +185,7 @@ const sitePresetAttributions = [
 const sitePublicSupport = [
   "analytics.js", "appearance.js", "site.js", "favicon.svg", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
   ".well-known/security.txt", ".well-known/hra.json",
+  "pr/data/snapshot.json", "pr/data/history.json",
   "fonts/nebula-sans/LICENSE.txt", "fonts/nebula-sans/PROVENANCE.md",
   "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md",
   ...sitePresetAttributions.map(([path]) => path),
@@ -229,9 +231,10 @@ export function siteProductionCsp(value: unknown): Readonly<{ siteCsp: string; p
     assert.deepEqual(csp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("font-src")), ["font-src 'self'"]);
   }
   assert.deepEqual(previewCsp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("script-src")), ["script-src 'none'"]);
-  assert.deepEqual(siteCsp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("frame-src")), ["frame-src 'self'"]);
+  assert.deepEqual(siteCsp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("script-src")), ["script-src 'self' https://challenges.cloudflare.com"]);
+  assert.deepEqual(siteCsp.split(";").map((part) => part.trim()).filter((part) => part.startsWith("frame-src")), ["frame-src 'self' https://challenges.cloudflare.com"]);
   const productCsp = productionCsp(value, "/examples/app/:path(.*)");
-  assert.equal(productCsp, `${productPreviewCsp}; frame-ancestors 'self'`, "Product example CSP drifted");
+  assert.equal(productCsp, `${productPreviewCsp}; frame-ancestors 'self' https://hraness.com`, "Product example CSP drifted");
   const rows = record(value).headers;
   assert.ok(Array.isArray(rows));
   const headers = record(rows.map(record).find((row) => row.source === "/examples/app/:path(.*)")).headers;

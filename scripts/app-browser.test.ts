@@ -205,6 +205,7 @@ function staticSiteFixture(sanitized = false) {
   const files = new Map<string, Buffer>([
     ["index.html", html], ["privacy/index.html", html], ["preview/index.html", inertHtml],
     ...docsRoutes.map((path) => [`${path}/index.html`, html] as const),
+    ["pr/index.html", html],
     ...productFixture(),
     [foundation, Buffer.from(css)], ["stylex.css", Buffer.from("@layer components.hraness-stylex{.x123{font-size:40px}}")],
     ...fontPaths.map((path, index) => [path, Buffer.from(`public:${fontNames[index]}`)] as const),
@@ -212,7 +213,7 @@ function staticSiteFixture(sanitized = false) {
     ...attributions.map(([path, source]) => [path, preset.get(source)!] as const),
     ...["analytics.js", "appearance.js", "site.js", "favicon.svg", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
       ".well-known/security.txt", ".well-known/hra.json", "fonts/nebula-sans/LICENSE.txt", "fonts/nebula-sans/PROVENANCE.md",
-      "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md", ...docsRoutes.map((path) => `${path}/index.md`)].map((path) => [path, Buffer.from(`support:${path}`)] as const),
+      "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md", "pr/data/snapshot.json", "pr/data/history.json", ...docsRoutes.map((path) => `${path}/index.md`)].map((path) => [path, Buffer.from(`support:${path}`)] as const),
   ]);
   return { files, publicFonts, preset, foundation, fontPaths, texturePaths, attributions, css, html };
 }
@@ -243,9 +244,9 @@ describe("static site graph acceptance", () => {
   });
 
   test("keeps inert preview and opaque product policies distinct with exact credential-free CORS", () => {
-    const siteCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'self'; frame-src 'self'";
+    const siteCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com";
     const previewCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'none'";
-    const productPreviewCsp = `${exampleCsp}; frame-ancestors 'self'`;
+    const productPreviewCsp = `${exampleCsp}; frame-ancestors 'self' https://hraness.com`;
     const config = (site: string, preview: string) => ({ headers: [
       { source: "/((?!preview/?$|examples/app(?:/|$)).*)", headers: [{ key: "Content-Security-Policy", value: site }] },
       { source: "/preview/", headers: [{ key: "Content-Security-Policy", value: preview }] },
@@ -283,7 +284,7 @@ describe("static site graph acceptance", () => {
       expect(graph.fonts).toEqual([...fixture.fontPaths].sort());
       expect(graph.textures).toEqual([...fixture.texturePaths].sort());
       expect(graph.routes.map(({ pathname }) => pathname)).toEqual([
-        "/", "/privacy/", "/preview/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/",
+        "/", "/privacy/", "/preview/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/", "/pr/",
       ]);
       expect(graph.routes[1].heading).toBe("#privacy-heading");
       for (const path of graph.fonts) {

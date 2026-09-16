@@ -82,7 +82,9 @@ describe("oompa.app analytics boundary", () => {
       ["/docs", "docs_index"], ["/docs/start", "guide"], ["/docs/web", "guide"],
       ["/docs/sessions", "guide"], ["/docs/reference", "reference"], ["/docs/status", "status"],
     ] as const;
-    expect(oompaPostHogSite.routes.map(({ path }) => path)).toEqual(["/", "/privacy", ...pages.map(([path]) => path)]);
+    expect(oompaPostHogSite.routes.map(({ path }) => path)).toEqual(["/", "/privacy", ...pages.map(([path]) => path), "/pr"]);
+    expect(classifyAnalyticsRoute(oompaPostHogSite, "https://oompa.app/pr/?utm_source=private#signals"))
+      .toMatchObject({ canonical_path: "/pr", page_kind: "status_board", content_group: "public" });
     for (const [path, kind] of pages) {
       expect(classifyAnalyticsRoute(oompaPostHogSite, `https://oompa.app${path}/?token=private#local-account`)).toMatchObject({
         canonical_path: path, page_kind: kind, content_group: "documentation",
