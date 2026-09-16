@@ -43,6 +43,7 @@ The plan is complete when:
 ## Verified provider facts
 
 - Pinned `@openai/codex` 0.153.2 binary contains `ClientRequest::ThreadCompactStart` / `ThreadCompactStartParams` and emits `thread/compacted` notifications (already in the notification table as `"ignored"` at `src/codex/protocol.ts:211`).
+- Generated schema (`codex app-server generate-json-schema`, v2 surface): `ThreadCompactStartParams = { threadId: string }`; `thread/compacted` params are `ContextCompactedNotification = { threadId, turnId }`, marked **deprecated** — the current signal is a `ThreadItem` of type `"contextCompaction"` arriving through the normal item stream. Route the deprecated notification AND make sure `contextCompaction` items degrade gracefully (bounded notice or a compaction fact), never an unhandled-shape fault.
 - Claude Code 2.1.270 stream-json accepts a `user` line whose text is `/compact`: it emits `status: "compacting"`, a `compact_result` system fact, and a post-compact `init` — no restart or argv change needed. On a nearly empty session it returns `compact_result: "failed"` with `compact_error` — a normal outcome, not a protocol error.
 - Claude `steer()` requires an active turn (`src/claude/client.ts:343`); `/compact` for an idle session is a fresh user-line write and needs a path that does not require `activeTurnId`.
 
