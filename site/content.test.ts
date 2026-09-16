@@ -36,6 +36,7 @@ import {
   renderPrivacyHtml,
   renderSiteHtml,
 } from "./template.ts";
+import { renderPrHtml } from "./pr-template.ts";
 
 const htmlText = (value: string): string => value
   .replaceAll("&", "&amp;")
@@ -1441,7 +1442,7 @@ describe("public content contract", () => {
   });
 
   test("provides keyboard and landmark structure without inline presentation", () => {
-    for (const html of [renderSiteHtml(), ...docsPages.map((page) => renderDocsHtml(page))]) {
+    for (const html of [renderSiteHtml(), ...docsPages.map((page) => renderDocsHtml(page)), renderPrHtml()]) {
       expect(html.match(/<h1\b/g)).toHaveLength(1);
       const skipLink = oneElement(html, 'a.skip-link[href="#content"]');
       expect(skipLink.textContent).toBe("Skip to content");
@@ -1471,7 +1472,7 @@ describe("public content contract", () => {
       renderSitemapXml(),
     ];
 
-    expect(siteDocumentPaths).toEqual(["/", ...docsPaths, "/privacy/"]);
+    expect(siteDocumentPaths).toEqual(["/", ...docsPaths, "/privacy/", "/pr/"]);
     for (const route of retiredRoutes) {
       for (const document of publicDocuments) {
         expect(document).not.toContain(route);
