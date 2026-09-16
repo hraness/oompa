@@ -469,6 +469,13 @@ describe("session metadata archive", () => {
     expect(parseSessionMetadataPayload({ archived: "yes", name: "Session", note: null })).toBeNull();
     expect(parseSessionMetadataPayload({ archived: true, name: "Session", note: null, extra: 1 })).toBeNull();
   });
+
+  test("accepts the closed historical retirement marker without dropping legacy metadata", () => {
+    const retired = { archived: true, name: "Past work", note: null, retiredProvider: "devin" as const };
+    expect(parseSessionMetadataPayload(retired)).toEqual(retired);
+    expect(parseSessionMetadataPayload({ ...retired, retiredProvider: "codex" })).toBeNull();
+    expect(parseSessionMetadataPayload({ ...retired, retiredProvider: true })).toBeNull();
+  });
 });
 
 function registryFixture() {

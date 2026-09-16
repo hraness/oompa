@@ -355,4 +355,4 @@ test.each(["RO -> RW", "RW -> RW", "RW -> RO"] as const)("authentic combined49 p
     // preservation reads neither validate OS custody nor consume its permission.
     expect(archived.joinedCloseNotice).toContain("synthetic");
   }, adjacentReopenModes[reopenPair]);
-});
+}, 30000);

@@ -580,6 +580,7 @@ export function parseDeviceCommandResultPayload(
 
 export type SessionMetadataPayload = Readonly<{
   archived?: boolean;
+  retiredProvider?: "devin";
   name: string | null;
   note: string | null;
 }>;
@@ -953,9 +954,11 @@ export function parseSessionMetadataPayload(value: unknown): SessionMetadataPayl
   // `archived` is an additive optional key: a payload written before session
   // archive existed still parses, and an absent key means "not archived".
   const archived = Object.hasOwn(value, "archived");
+  const retiredProvider = Object.hasOwn(value, "retiredProvider");
   if (
-    !hasExactKeys(value, archived ? ["archived", "name", "note"] : ["name", "note"])
+    !hasExactKeys(value, ["name", "note", ...(archived ? ["archived"] : []), ...(retiredProvider ? ["retiredProvider"] : [])])
     || (archived && typeof value.archived !== "boolean")
+    || (retiredProvider && value.retiredProvider !== "devin")
   ) return null;
   if (
     value.name !== null
@@ -974,6 +977,7 @@ export function parseSessionMetadataPayload(value: unknown): SessionMetadataPayl
   ) return null;
   return {
     ...(archived ? { archived: value.archived as boolean } : {}),
+    ...(retiredProvider ? { retiredProvider: "devin" as const } : {}),
     name: value.name,
     note: value.note,
   };
