@@ -31,7 +31,6 @@
 - Update the active plan in `kb/plans/` as work changes. Do not call a phase complete without the acceptance evidence named there.
 - Preserve public independence. Do not include private paths, credentials, private package dependencies, internal project names, or unpublished provenance.
 
-## Cost discipline
 
 - `costs.json` at the repository root is the checked registry of every product data surface: store, kind (`authoritative` | `derived` | `telemetry`), retention class (`ephemeral` | `ttl:<ISO-8601>` | `account` | `tombstone` | `persistent`), owner module, and budget. A new table, bucket, stream, dynamic route, blob, or provider meter fails `check:cost-surfaces` until it registers.
 - Bound every input before storage or provider I/O: request bytes, row counts, page sizes, batch sizes, retry counts, and event payloads. Unbounded input is a contract violation.
