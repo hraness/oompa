@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process */
 // check-cost-surfaces — uniform cost-discipline gate for Hraness product repos.
 // Dependency-free; runs under Bun or Node 18+.
 //
