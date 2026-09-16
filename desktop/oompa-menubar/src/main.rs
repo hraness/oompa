@@ -20,10 +20,22 @@ use desktop_foundation::browser::{BrowserOpener, BrowserStatus};
 use desktop_foundation::outputs::OutputsSection;
 use desktop_foundation::{
     AccessibilityMetadata, DispatchOutcome, Host, MenuItem, MenuModel, MenuNode, Options,
-    RenderError,
+    RenderError, RgbaIcon,
 };
 
 const SESSION_LIMIT: u32 = 8;
+
+/// Orange-circle status mark. macOS renders `MARK_TITLE` as native colored
+/// emoji text; icon-only trays use this pre-rendered 32px Twemoji bitmap
+/// (U+1F7E0, CC-BY 4.0 — https://twemoji.twitter.com).
+const MARK_TITLE: &str = "\u{1f7e0}";
+fn mark_icon() -> RgbaIcon {
+    RgbaIcon {
+        rgba: include_bytes!("../icons/mark.rgba").to_vec(),
+        width: 32,
+        height: 32,
+    }
+}
 const UPDATES_URL: &str = "https://account.hraness.com/support?product=hra&source=desktop#updates";
 const SUPPORT_URL: &str = "https://account.hraness.com/support?product=hra&source=desktop#support";
 
@@ -112,12 +124,13 @@ impl Host for OompaHost {
                     hint: Some("Exit the Oompa menu bar companion".to_owned()),
                 }),
         ));
-        MenuModel {
-            title: Some("Oompa".to_owned()),
+        let mut model = MenuModel {
             tooltip: Some(tooltip),
-            icon: None,
             nodes,
-        }
+            ..MenuModel::default()
+        };
+        model.mark(MARK_TITLE, Some(mark_icon()));
+        model
     }
 
     fn dispatch_result(&self, id: &str) -> DispatchOutcome {
@@ -302,5 +315,31 @@ mod invitation_tests {
         assert_eq!(host.browser.status(), BrowserStatus::Idle);
         assert!(matches!(host.dispatch_result("unknown.action"), DispatchOutcome::Rejected));
         assert_eq!(host.browser.status(), BrowserStatus::Idle);
+    }
+}
+
+#[cfg(test)]
+mod mark_tests {
+    use super::*;
+
+    #[test]
+    fn status_mark_is_the_orange_circle_emoji_with_bundled_tray_art() {
+        let host = OompaHost {
+            daemon: Daemon {
+                socket: "/dev/null/absent.sock".into(),
+                capability: "/dev/null/absent.capability".into(),
+            },
+            outputs: OutputsSection::new("/dev/null/absent-outputs"),
+            browser: BrowserOpener::new(),
+        };
+        let model = host.snapshot();
+        model.validate().expect("valid model");
+        if cfg!(target_os = "macos") {
+            assert_eq!(model.title.as_deref(), Some("\u{1f7e0}"));
+            assert!(model.icon.is_none());
+        } else {
+            let icon = model.icon.expect("icon tray art");
+            assert_eq!(icon.rgba.len(), 32 * 32 * 4);
+        }
     }
 }
