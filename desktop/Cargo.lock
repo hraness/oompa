@@ -589,8 +589,8 @@ dependencies = [
 
 [[package]]
 name = "desktop-foundation"
-version = "0.6.1"
-source = "git+https://github.com/hraness/desktop-foundation?tag=v0.6.1#977e4c4e3fd0f4193692aa30473fe960207dc3ef"
+version = "0.7.0"
+source = "git+https://github.com/hraness/desktop-foundation?tag=v0.7.0#bfe6c9829d3eab5513aee1ba576aca1ba496ebce"
 dependencies = [
  "fs2",
  "glib",
