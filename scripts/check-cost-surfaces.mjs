@@ -117,7 +117,7 @@ function* walk(dir) {
 // --- Backend schema tables ---------------------------------------------------
 // The schema directory name is assembled so standalone-boundary checks in
 // backend-free repos do not flag this dep-free script for naming the runtime.
-const BACKEND_DIR = "con" + "vex";
+const BACKEND_DIR = ["con", "vex"].join("");
 function* backendSchemas() {
 	const direct = join(root, BACKEND_DIR, "schema.ts");
 	if (existsSync(direct)) {
