@@ -453,7 +453,9 @@ describe("public content contract", () => {
     const reference = renderDocsMarkdown("/docs/reference/");
     expect(reference).toContain("Local release boundary");
     expect(reference).toContain("v0.8.3");
-    expect(reference).toContain("admitted local CLI release. Its immutable GitHub artifact and exact-byte npm mirror passed admission.");
+    expect(reference).toContain("admitted local CLI release and are retained in the");
+    expect(reference).toContain("v0.8.4");
+    expect(reference).toContain("candidate. The predecessor's immutable GitHub artifact and exact-byte npm mirror passed admission; the candidate requires its own admission.");
     expect(renderLlmsText()).toContain("Only after immutable GitHub release admission, install the v0.8.4 local CLI artifact");
     for (const path of ["/docs/start/", "/docs/status/"] as const) {
       const guideHtml = renderDocumentationHtml(path);
