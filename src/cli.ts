@@ -2293,6 +2293,16 @@ const stateErrorShortCode = (error: unknown): string | null => {
   return match === null ? null : match[1] ?? null;
 };
 
+// The leading uppercase code of a migration failure, such as
+// `CODEX_USAGE_UPLOAD_AUTHORITY_INVALID`. Integrity scans raise these outside
+// the `STATE_` family, and the bare code names the refused invariant without
+// exposing a path, a stack, or any row content.
+const localStateFailureShortCode = (error: unknown): string | null => {
+  if (!(error instanceof Error)) return null;
+  const match = /^([A-Z][A-Z0-9_]{2,79})(?::|$)/u.exec(error.message);
+  return match === null ? null : match[1] ?? null;
+};
+
 const stateSchemaNewerFailure = (mismatch: StateSchemaMismatch): CommandFailure =>
   new CommandFailure(
     "RECOVERY_REQUIRED",
@@ -2351,9 +2361,12 @@ function migrateLocalStateSchema(paths: StatePaths): void {
   } catch (error: unknown) {
     const mismatch = stateSchemaMismatch(error);
     if (mismatch !== null && mismatch.kind === "newer") throw stateSchemaNewerFailure(mismatch);
+    const failure = localStateFailureShortCode(error);
     throw new CommandFailure(
       "RECOVERY_REQUIRED",
-      "Oompa could not migrate local state to the schema this build requires. Inspect it before starting the daemon.",
+      failure === null
+        ? "Oompa could not migrate local state to the schema this build requires. Inspect it before starting the daemon."
+        : `Oompa could not migrate local state to the schema this build requires (${failure}). Inspect it before starting the daemon.`,
       { nextCommand: "oompa doctor --offline" },
     );
   }
