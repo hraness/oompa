@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import fixture from "./usage-panel.fixture.json";
-import { DEVIN_MODEL, DEVIN_PIN } from "./pin.ts";
+import { DEVIN_PIN } from "./pin.ts";
 import type { PinnedDevinRuntime } from "./runtime.ts";
 import { readDevinUsagePanel, type DevinTerminalProcess, type DevinTerminalProcessFactory } from "./usage-driver.ts";
 
@@ -10,8 +10,6 @@ const runtime: PinnedDevinRuntime = {
   version: DEVIN_PIN,
   build: "bcbe88c7",
   versionOutput: fixture.cliVersionOutput,
-  model: DEVIN_MODEL,
-  argv: ["/opt/devin/bin/devin", "acp", "--model", DEVIN_MODEL],
 };
 
 const panel = fixture.cases.real_max_weekly_only.text;

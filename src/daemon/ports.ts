@@ -3,7 +3,7 @@ import type { Preset, PresetRequirement, Provider } from "../domain/presets";
 import type { ProviderAccountId } from "../domain/provider-accounts";
 import type {
   EffectiveClaudeRuntimeProfile,
-  EffectiveDevinRuntimeProfile,
+  EffectiveDevinRuntimeProfileV2,
   EffectiveRuntimeProfile,
 } from "../domain/runtime-profile";
 import type { AccountRateLimitResetOutcome } from "../domain/usage-metrics";
@@ -49,8 +49,6 @@ export type RuntimeStartReviewOf<Profile> = {
 export type RuntimeStartReview = RuntimeStartReviewOf<EffectiveRuntimeProfile>;
 
 export type ClaudeRuntimeStartReview = RuntimeStartReviewOf<EffectiveClaudeRuntimeProfile>;
-
-export type DevinRuntimeStartReview = RuntimeStartReviewOf<EffectiveDevinRuntimeProfile>;
 
 export type CodexAccountProjection = {
   signedIn: boolean;
@@ -214,7 +212,7 @@ export type CodexSessionPage = {
  * listing) stays on that provider's own port. `Profile` is the reviewed
  * runtime-profile document the provider proves before it runs.
  *
- * D4/W3 seam: Codex, Claude Code, and Devin each implement this interface,
+ * D4/W3 seam: Codex and Claude Code each implement this interface,
  * and the daemon selects one per session by the session's recorded provider.
  */
 export interface SessionRuntimePort<Profile> {
@@ -375,26 +373,45 @@ export interface ClaudeRuntimePort extends SessionRuntimePort<EffectiveClaudeRun
   ): ProviderInteractionAuthority;
 }
 
+export type DevinRuntimeStartReview = RuntimeStartReviewOf<EffectiveDevinRuntimeProfileV2>;
+
+/** Bounded Oompa observation; Devin exposes no admitted stable account identity. */
+export type DevinAccountReadinessProjection = {
+  readiness: "signed_in" | "signed_out" | "unverified";
+  observedAt: number;
+};
+
 /**
  * The Devin implementation of the neutral seam. Devin owns authentication and
- * native sessions inside its isolated XDG home; HRA observes only signed-in
- * state and the bounded ACP facts required by the neutral session timeline.
+ * native sessions inside its isolated home; Oompa observes only signed-in
+ * readiness and the bounded ACP facts required by the neutral session
+ * timeline. The daemon does not select this port yet: `kb/plans/devin-provider.md`
+ * Phase 3 lifts the retired-provider refusals that keep it unwired.
  */
-export interface DevinRuntimePort extends SessionRuntimePort<EffectiveDevinRuntimeProfile> {
+export interface DevinRuntimePort extends SessionRuntimePort<EffectiveDevinRuntimeProfileV2> {
   readonly provider: "devin";
-  readAccount(input: { authority: ProfileAuthority; signal: AbortSignal }): Promise<CodexAccountProjection>;
+  readAccount(input: { authority: ProfileAuthority; signal: AbortSignal }): Promise<DevinAccountReadinessProjection>;
+  pinnedVersion(): string;
+  /**
+   * Rekeys idle live Devin sessions after the durable provider-generation
+   * commit. Active or ambiguously retained children are rejected rather than
+   * carried across authority.
+   */
   rebindProfileAuthority(input: {
-    profileId: ProfileId;
-    expectedGeneration: number;
-    nextGeneration: number;
+    expectedAuthority: ProfileAuthority;
+    nextAuthority: ProfileAuthority;
   }): void;
   /** Current-daemon execution authority used before scheduled work becomes durable. */
   hasLiveSession?(input: {
     authority: ProfileAuthority;
     providerThreadId: string;
   }): boolean;
-  pinnedVersion(): string;
-  interactionAuthority(providerThreadId: string, requestId: string): ProviderInteractionAuthority;
+  /** The exact durable authority one pending ACP permission request binds. */
+  interactionAuthority(
+    authority: ProfileAuthority,
+    providerThreadId: string,
+    requestId: string,
+  ): ProviderInteractionAuthority;
 }
 
 export interface CodexRuntimePort extends SessionRuntimePort<EffectiveRuntimeProfile> {
@@ -632,11 +649,16 @@ export class UnavailableClaudeRuntime implements ClaudeRuntimePort {
   async close(): Promise<void> {}
 }
 
-/** Fails closed when the exact pinned Devin CLI is absent or incompatible. */
+/**
+ * The default Devin seam on a machine with no admitted `devin` binary. A
+ * session that names the Devin provider is refused with one clear message
+ * instead of silently falling back to another provider.
+ */
 export class UnavailableDevinRuntime implements DevinRuntimePort {
   readonly provider = "devin" as const;
   readonly #pinnedVersion: string;
 
+  /** `pinnedVersion` is the exact `DEVIN_PIN` this build admits. */
   constructor(pinnedVersion: string) {
     this.#pinnedVersion = pinnedVersion;
   }
@@ -644,14 +666,26 @@ export class UnavailableDevinRuntime implements DevinRuntimePort {
   #unavailable(): never {
     throw new ProviderRuntimeUnavailableError(
       `This daemon has no Devin runtime. Install Devin CLI ${this.#pinnedVersion} exactly, `
-      + "put `devin` on this daemon's PATH, restart the daemon with `hra daemon restart`, then sign in "
+      + "put `devin` on this daemon's PATH, restart the daemon with `oompa daemon restart`, then sign in "
       + "inside the account's isolated Devin profile.",
     );
   }
   interactionAuthority(): ProviderInteractionAuthority { return this.#unavailable(); }
+  hasLiveSession(input: {
+    authority: ProfileAuthority;
+    providerThreadId: string;
+  }): boolean {
+    void input;
+    return false;
+  }
   pinnedVersion(): string { return this.#unavailable(); }
+  rebindProfileAuthority(input: {
+    expectedAuthority: ProfileAuthority;
+    nextAuthority: ProfileAuthority;
+  }): void {
+    void input;
+  }
   readAccount(): Promise<never> { return Promise.reject(this.#unavailable()); }
-  rebindProfileAuthority(): void {}
   reviewSessionStart(): Promise<never> { return Promise.reject(this.#unavailable()); }
   discardRuntimeReview(): void {}
   startSession(): Promise<never> { return Promise.reject(this.#unavailable()); }

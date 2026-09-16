@@ -9,6 +9,7 @@ import {
   DevinAcpClient,
   DevinError,
   boundedDevinPrompt,
+  devinAcpArgv,
   readDevinAuthStatus,
   resolvePinnedDevinRuntime,
   sanitizeDevinText,
@@ -35,22 +36,26 @@ import {
   type Preset,
   type PresetRequirement,
 } from "../domain/presets.ts";
+import { devinProviderAccountIdSchema } from "../domain/provider-accounts.ts";
 import {
-  effectiveDevinRuntimeProfileSchema,
-  type EffectiveDevinRuntimeProfile,
+  effectiveDevinRuntimeProfileV2Schema,
+  type EffectiveDevinRuntimeProfileV2,
 } from "../domain/runtime-profile.ts";
 import type { CodexFact, CodexTurnStatus } from "../codex/protocol.ts";
 import {
   CodexSessionObservationError,
-  type CodexAccountProjection,
   type CodexProjectedMessage,
   type CodexSessionObservation,
   type CodexSessionProjection,
   type CodexTurnSummary,
+  type DevinAccountReadinessProjection,
   type DevinRuntimePort,
   type DevinRuntimeStartReview,
   type ProfileAuthority,
 } from "./ports.ts";
+
+type EffectiveDevinRuntimeProfile = EffectiveDevinRuntimeProfileV2;
+const effectiveDevinRuntimeProfileSchema = effectiveDevinRuntimeProfileV2Schema;
 
 const PROJECTED_MESSAGE_LIMIT = 256;
 const PROJECTED_TURN_LIMIT = 128;
@@ -133,8 +138,6 @@ const projectedText = (value: string): Pick<CodexProjectedMessage, "text" | "omi
 const authorityMatches = (left: ProfileAuthority, right: ProfileAuthority): boolean =>
   left.id === right.id
   && left.generation === right.generation
-  && left.codexHome === right.codexHome
-  && left.desktopUserData === right.desktopUserData
   && left.provider === right.provider
   && left.providerAccountId === right.providerAccountId
   && left.bindingGeneration === right.bindingGeneration;
@@ -161,7 +164,7 @@ const permissionName = (fact: Extract<DevinFact, { type: "permissionRequested" }
 const permissionRequestDigest = (
   fact: Extract<DevinFact, { type: "permissionRequested" }>,
 ): string => createHash("sha256")
-  .update("hra:devin-interaction-authority:v1\0", "utf8")
+  .update("oompa:devin-interaction-authority:v2\0", "utf8")
   .update(JSON.stringify({
     options: fact.options.map((option) => ({ kind: option.kind, optionId: option.optionId })),
     requestId: fact.requestId,
@@ -171,7 +174,7 @@ const permissionRequestDigest = (
   .digest("hex");
 
 const permissionResponseDigest = (outcome: DevinPermissionOutcome): string => createHash("sha256")
-  .update("hra:devin-interaction-response:v1\0", "utf8")
+  .update("oompa:devin-interaction-response:v2\0", "utf8")
   .update(JSON.stringify(outcome), "utf8")
   .digest("hex");
 
@@ -303,7 +306,7 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
     this.#readAuthStatus = input.readAuthStatus ?? readDevinAuthStatus;
     this.#resolveRuntime = input.resolveRuntime ?? resolvePinnedDevinRuntime;
     this.#processFactory = input.processFactory ?? ((launch) => spawnBunDevinAcpProcess({
-      argv: launch.runtime.argv,
+      argv: devinAcpArgv(launch.runtime),
       directories: launch.directories,
       projectRoot: launch.projectRoot,
     }));
@@ -333,6 +336,76 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
     return this.#resolvedRuntime.version;
   }
 
+  rebindProfileAuthority(input: {
+    expectedAuthority: ProfileAuthority;
+    nextAuthority: ProfileAuthority;
+  }): void {
+    this.#assertOpen();
+    const { expectedAuthority, nextAuthority } = input;
+    if (
+      expectedAuthority.provider !== "devin"
+      || !Number.isSafeInteger(expectedAuthority.generation)
+      || expectedAuthority.generation < 1
+      || !Number.isSafeInteger(nextAuthority.generation)
+      || nextAuthority.generation !== expectedAuthority.generation + 1
+      || !authorityMatches({ ...expectedAuthority, generation: nextAuthority.generation }, nextAuthority)
+    ) {
+      throw new DevinError(
+        "INVALID_INPUT",
+        "A Devin authority rebind must advance exactly one safe generation.",
+      );
+    }
+    this.#assertCurrent(nextAuthority);
+    const sessions = [...this.#sessions.values()]
+      .filter((session) => session.authority.id === expectedAuthority.id);
+    const reviews = [...this.#reviews.values()]
+      .filter((review) => review.authority.id === expectedAuthority.id);
+    const unbound = [...this.#unbound]
+      .filter((session) => session.authority.id === expectedAuthority.id);
+    for (const session of sessions) {
+      if (
+        !authorityMatches(session.authority, expectedAuthority)
+        && !authorityMatches(session.authority, nextAuthority)
+      ) {
+        throw new DevinError(
+          "AUTHORITY_STALE",
+          "A live Devin process belongs to an unexpected account generation.",
+        );
+      }
+      if (session.activeTurnId !== undefined || session.status === "active") {
+        throw new DevinError(
+          "AUTHORITY_STALE",
+          "An active Devin turn cannot be rebound to another account generation.",
+        );
+      }
+      if (session.closeState !== "open") {
+        throw new DevinError(
+          "AUTHORITY_STALE",
+          "Devin session cleanup is unresolved during account generation rotation.",
+        );
+      }
+    }
+    for (const review of reviews) {
+      if (
+        !authorityMatches(review.authority, expectedAuthority)
+        && !authorityMatches(review.authority, nextAuthority)
+      ) {
+        throw new DevinError(
+          "AUTHORITY_STALE",
+          "A Devin runtime review belongs to an unexpected account generation.",
+        );
+      }
+    }
+    if (unbound.length > 0) {
+      throw new DevinError(
+        "AUTHORITY_STALE",
+        "An unadmitted Devin child cannot cross an account generation rotation.",
+      );
+    }
+    for (const session of sessions) session.authority = { ...nextAuthority };
+    for (const review of reviews) review.authority = { ...nextAuthority };
+  }
+
   hasLiveSession(input: {
     authority: ProfileAuthority;
     providerThreadId: string;
@@ -346,66 +419,35 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
       && this.#isCurrent(input.authority);
   }
 
-  rebindProfileAuthority(input: {
-    profileId: ProfileAuthority["id"];
-    expectedGeneration: number;
-    nextGeneration: number;
-  }): void {
-    this.#assertOpen();
-    if (
-      !Number.isSafeInteger(input.expectedGeneration)
-      || input.expectedGeneration < 0
-      || input.nextGeneration !== input.expectedGeneration + 1
-    ) {
-      throw new DevinError(
-        "INVALID_INPUT",
-        "A Devin authority rebind must advance exactly one safe generation.",
-      );
-    }
-    const sessions = [...this.#sessions.values(), ...this.#unbound]
-      .filter((session) => session.authority.id === input.profileId);
-    const reviews = [...this.#reviews.values()]
-      .filter((review) => review.authority.id === input.profileId);
-    for (const authority of [
-      ...sessions.map((session) => session.authority),
-      ...reviews.map((review) => review.authority),
-    ]) {
-      if (
-        authority.generation !== input.expectedGeneration
-        && authority.generation !== input.nextGeneration
-      ) {
-        throw new DevinError(
-          "AUTHORITY_STALE",
-          "A live Devin process belongs to an unexpected account generation.",
-        );
-      }
-    }
-    const rebind = (authority: ProfileAuthority): ProfileAuthority => ({
-      ...authority,
-      generation: input.nextGeneration,
-    });
-    for (const session of sessions) session.authority = rebind(session.authority);
-    for (const review of reviews) review.authority = rebind(review.authority);
-    const rebound = sessions[0]?.authority ?? reviews[0]?.authority;
-    if (rebound !== undefined) this.#assertCurrent(rebound);
-  }
-
   async readAccount(input: {
     authority: ProfileAuthority;
     signal: AbortSignal;
-  }): Promise<CodexAccountProjection> {
-    this.#assertLaunchAuthority(input.authority, input.signal);
+  }): Promise<DevinAccountReadinessProjection> {
+    this.#assertAccountReadAuthority(input.authority, input.signal);
+    // Directory custody is not an account observation: failures here must stay
+    // actionable instead of being flattened into unknown authentication.
     const directories = await this.#directoriesFor(input.authority);
-    this.#assertLaunchAuthority(input.authority, input.signal);
-    const runtime = await this.#admitRuntime(directories, input.signal);
-    this.#assertLaunchAuthority(input.authority, input.signal);
-    const account = await this.#readAuthStatus({
-      directories,
-      runtime,
-      signal: input.signal,
-    });
-    this.#assertLaunchAuthority(input.authority, input.signal);
-    return { signedIn: account.signedIn };
+    this.#assertAccountReadAuthority(input.authority, input.signal);
+    let readiness: DevinAccountReadinessProjection["readiness"];
+    try {
+      const runtime = await this.#admitRuntime(input.signal);
+      this.#assertAccountReadAuthority(input.authority, input.signal);
+      const account = await this.#readAuthStatus({
+        directories,
+        runtime,
+        signal: input.signal,
+      });
+      readiness = account.signedIn ? "signed_in" : "signed_out";
+    } catch (error: unknown) {
+      this.#assertAccountReadAuthority(input.authority, input.signal);
+      if (!(error instanceof DevinError)
+        || !["RUNTIME_MISMATCH", "PROTOCOL_ERROR", "PROTOCOL_LIMIT"].includes(error.code)) {
+        throw error;
+      }
+      readiness = "unverified";
+    }
+    this.#assertAccountReadAuthority(input.authority, input.signal);
+    return { observedAt: this.#now(), readiness };
   }
 
   async reviewSessionStart(input: {
@@ -679,10 +721,14 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
     for (const permission of pending) this.#reportInteractionSettled(session, permission);
   }
 
-  interactionAuthority(providerThreadId: string, requestId: string): ProviderInteractionAuthority {
-    const session = this.#sessions.get(providerThreadId);
-    const pending = session?.permissions.get(requestId);
-    if (session === undefined || pending === undefined) {
+  interactionAuthority(
+    authority: ProfileAuthority,
+    providerThreadId: string,
+    requestId: string,
+  ): ProviderInteractionAuthority {
+    const session = this.#requireSession(authority, providerThreadId);
+    const pending = session.permissions.get(requestId);
+    if (pending === undefined) {
       throw new DevinError("PROTOCOL_ERROR", "That Devin permission request is no longer pending.");
     }
     return pending.authority;
@@ -819,13 +865,13 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
     if (input.fast) {
       throw new DevinError(
         "UNSUPPORTED_CAPABILITY",
-        "Devin ACP has no HRA fast service tier; start without `--fast`.",
+        "Devin ACP has no Oompa fast service tier; start without `--fast`.",
       );
     }
     const projectRoot = canonicalProjectRoot(input.projectRoot);
     const directories = await this.#directoriesFor(input.authority);
     this.#assertLaunchAuthority(input.authority, input.signal);
-    const runtime = await this.#admitRuntime(directories, input.signal);
+    const runtime = await this.#admitRuntime(input.signal);
     this.#assertLaunchAuthority(input.authority, input.signal);
     const profile = effectiveDevinRuntimeProfileSchema.parse({
       devinVersion: runtime.version,
@@ -854,26 +900,25 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
     return review;
   }
 
-  async #admitRuntime(
-    directories: DevinDirectories,
-    signal: AbortSignal,
-  ): Promise<PinnedDevinRuntime> {
+  async #admitRuntime(signal: AbortSignal): Promise<PinnedDevinRuntime> {
     let runtime: PinnedDevinRuntime;
     try {
-      runtime = await this.#resolveRuntime({ directories, signal } satisfies ResolvePinnedDevinRuntimeOptions);
+      runtime = await this.#resolveRuntime({ signal } satisfies ResolvePinnedDevinRuntimeOptions);
     } catch (error: unknown) {
       const detail = error instanceof DevinError ? error.message : "it could not be admitted";
       throw new DevinError(
         "RUNTIME_MISMATCH",
-        `HRA cannot start Devin on this machine: ${detail}. Install Devin CLI ${DEVIN_PIN} exactly, `
+        `Oompa cannot start Devin on this machine: ${detail}. Install Devin CLI ${DEVIN_PIN} exactly, `
         + "put `devin` on this daemon's PATH, then sign in inside the account's isolated Devin profile.",
         { cause: error },
       );
     }
-    if (runtime.argv[0] !== runtime.executablePath) {
+    // The resolver already admitted the exact pin; the executable path is the
+    // one remaining launch precondition an injected resolver could violate.
+    if (!isAbsolute(runtime.executablePath)) {
       throw new DevinError(
         "RUNTIME_MISMATCH",
-        `HRA requires Devin CLI ${DEVIN_PIN} with model ${DEVIN_MODEL}.`,
+        `Oompa requires Devin CLI ${DEVIN_PIN} with model ${DEVIN_MODEL} at an absolute path.`,
       );
     }
     this.#resolvedRuntime = runtime;
@@ -913,11 +958,11 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
       this.#assertLaunchAuthority(input.authority, input.signal);
       const directories = await this.#directoriesFor(input.authority);
       this.#assertLaunchAuthority(input.authority, input.signal);
-      const runtime = await this.#admitRuntime(directories, input.signal);
+      const runtime = await this.#admitRuntime(input.signal);
       const profile = effectiveDevinRuntimeProfileSchema.parse({
         devinVersion: runtime.version,
         isolatedHome: true,
-        model: runtime.model,
+        model: DEVIN_MODEL,
         observedAt: this.#now(),
         preset: "astra",
         processGeneration: input.authority.generation,
@@ -1264,7 +1309,7 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
         case "once": desired = "allow_once"; break;
         case "session": throw new DevinError(
           "UNSUPPORTED_CAPABILITY",
-          "Devin's always-allow choice persists at provider scope, so HRA cannot grant session scope.",
+          "Devin's always-allow choice persists at provider scope, so Oompa cannot grant session scope.",
         );
         case "decline": desired = "reject_once"; break;
         case "cancel": desired = "cancelled"; break;
@@ -1277,7 +1322,7 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
       if (resolution.scope === "session") {
         throw new DevinError(
           "UNSUPPORTED_CAPABILITY",
-          "Devin's always-allow choice persists at provider scope, so HRA cannot grant session scope.",
+          "Devin's always-allow choice persists at provider scope, so Oompa cannot grant session scope.",
         );
       }
       desired = "allow_once";
@@ -1516,9 +1561,9 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
       itemId: fact.toolCall.toolCallId,
       method: PERMISSION_METHOD,
       processGeneration: session.authority.generation,
+      profileId: session.authority.id,
       provider: session.authority.provider,
       providerAccountId: session.authority.providerAccountId,
-      profileId: session.authority.id,
       requestDigest: permissionRequestDigest(fact),
       requestId: { type: "string", value: fact.requestId },
       threadId: session.providerThreadId,
@@ -1537,7 +1582,7 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
       blocking: true,
       display: {
         // ACP allow_always persists in Devin itself; it is not bounded to this
-        // HRA session and therefore cannot be represented as session scope.
+        // Oompa session and therefore cannot be represented as session scope.
         allowsSessionScope: false,
         kind: "permission_approval",
         reason: fact.toolCall.title,
@@ -1818,6 +1863,14 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
     this.#assertCurrent(authority);
   }
 
+  #assertAccountReadAuthority(authority: ProfileAuthority, signal: AbortSignal): void {
+    signal.throwIfAborted();
+    this.#assertOpen();
+    // A readiness observation may inspect a never-started account without
+    // advancing its durable process fence. Session effects still require >0.
+    this.#assertCurrent(authority, true);
+  }
+
   #assertNoUnboundChild(): void {
     if (this.#unbound.size > 0) {
       throw new DevinError(
@@ -1833,8 +1886,14 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
     }
   }
 
-  #assertCurrent(authority: ProfileAuthority): void {
-    if (!this.#isCurrent(authority)) {
+  #assertCurrent(authority: ProfileAuthority, allowInitialGeneration = false): void {
+    if (authority.provider !== this.provider
+      || !devinProviderAccountIdSchema.safeParse(authority.providerAccountId).success
+      || !Number.isSafeInteger(authority.bindingGeneration)
+      || authority.bindingGeneration < 1
+      || !Number.isSafeInteger(authority.generation)
+      || authority.generation < (allowInitialGeneration ? 0 : 1)
+      || !this.#isCurrent(authority)) {
       throw new DevinError("AUTHORITY_STALE", "The Devin account authority changed.");
     }
   }

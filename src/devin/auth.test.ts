@@ -9,22 +9,20 @@ import {
   type DevinLoginSignalSource,
 } from "./auth";
 import { DevinError } from "./errors";
-import { DEVIN_MODEL, DEVIN_PIN } from "./pin";
+import { DEVIN_PIN } from "./pin";
 import type { DevinDirectories } from "./process";
 import type { PinnedDevinRuntime } from "./runtime";
 
 const directories: DevinDirectories = {
-  home: "/var/hra/devin/home",
-  configHome: "/var/hra/devin/config",
-  dataHome: "/var/hra/devin/data",
-  cacheHome: "/var/hra/devin/cache",
-  stateHome: "/var/hra/devin/state",
+  home: "/var/oompa/devin/home",
+  configHome: "/var/oompa/devin/config",
+  dataHome: "/var/oompa/devin/data",
+  cacheHome: "/var/oompa/devin/cache",
+  stateHome: "/var/oompa/devin/state",
 };
 const runtime: PinnedDevinRuntime = {
-  argv: ["/opt/devin", "acp", "--model", DEVIN_MODEL],
   build: "bcbe88c7",
   executablePath: "/opt/devin",
-  model: DEVIN_MODEL,
   version: DEVIN_PIN,
   versionOutput: `devin ${DEVIN_PIN} (bcbe88c7)`,
 };

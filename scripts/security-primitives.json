@@ -82,7 +82,7 @@
     "assertCurrent": 3
   },
   "src/daemon/devin-runtime-adapter.ts": {
-    "assertCurrent": 4
+    "assertCurrent": 5
   },
   "src/daemon/local-transport.ts": {
     "timingSafeEqual": 1,
@@ -108,9 +108,6 @@
   },
   "src/devin/index.ts": {
     "safeEnvironmentKeys": 1
-  },
-  "src/devin/process.ts": {
-    "safeEnvironmentKeys": 2
   },
   "src/devin/protocol.ts": {
     "redactCompleteSensitiveText": 1

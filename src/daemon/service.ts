@@ -268,6 +268,7 @@ import {
   type CodexRuntimePort,
   type CodexSessionObservation,
   type CodexSessionProjection,
+  type DevinAccountReadinessProjection,
   type DevinRuntimePort,
   type ProfileAuthority,
   type RuntimeStartReviewOf,
@@ -2256,21 +2257,25 @@ export class OompaService {
         profileId: profile.id,
         provider,
         expectedBindingGeneration: before.bindingGeneration,
-        readiness: observed.signedIn ? "signed_in" : "signed_out",
+        readiness: observed.readiness,
+        observedAt: observed.observedAt,
       });
       profile = this.#store.requireProfileById(profile.id);
       providerAuthority = this.#providerAuthority(profile, provider);
-      if (!observed.signedIn) {
+      if (observed.readiness !== "signed_in") {
         const nextCommand = `oompa account login ${profile.id} --provider devin`;
         throw new CommandFailure(
-          "INTERACTION_REQUIRED",
-          `Sign in with \`${nextCommand}\` before using this account's Devin runtime.`,
+          observed.readiness === "unverified" ? "UNAVAILABLE" : "INTERACTION_REQUIRED",
+          observed.readiness === "unverified"
+            ? "Devin authentication status could not be verified before a new session effect. "
+              + `Install Devin CLI ${DEVIN_PIN} exactly, ensure \`devin\` is on this daemon's PATH, `
+              + "and verify authentication inside this account's isolated Devin profile before retrying."
+            : `Sign in with \`${nextCommand}\` before using this account's Devin runtime.`,
           {
             accountSelector: profile.id,
             provider,
-            readiness: "signed_out",
-            accountState: "signed_out",
-            nextCommand,
+            readiness: observed.readiness,
+            ...(observed.readiness === "signed_out" ? { accountState: "signed_out", nextCommand } : {}),
           },
         );
       }
@@ -3616,9 +3621,13 @@ export class OompaService {
                 await this.#claude.readAccount({ authority, signal: input.signal }));
               return { signedIn: readiness.readiness === "unverified"
                 ? null : readiness.readiness === "signed_in" };
-            }            case "devin":
-              return await this.#fencedEffect(async () =>
+            }
+            case "devin": {
+              const readiness = await this.#fencedEffect(async () =>
                 await this.#devin.readAccount({ authority, signal: input.signal }));
+              return { signedIn: readiness.readiness === "unverified"
+                ? null : readiness.readiness === "signed_in" };
+            }
           }
         })();
         input.signal.throwIfAborted();
@@ -10644,7 +10653,7 @@ export class OompaService {
     }));
   }
 
-  async #readDevinAccount(profile: ProfileRecord, signal: AbortSignal): Promise<CodexAccountProjection> {
+  async #readDevinAccount(profile: ProfileRecord, signal: AbortSignal): Promise<DevinAccountReadinessProjection> {
     await this.#daemonAuthority.assertCurrent();
     return await this.#fencedEffect(async () => await this.#devin.readAccount({
       authority: authorityFor(this.#paths, profile, this.#providerAuthority(profile, "devin")),
@@ -10694,7 +10703,11 @@ export class OompaService {
         throw new CommandFailure("CONFLICT", "The original login provider authority changed before authentication observation.");
       }
       if (provider === "devin") {
-        return (await this.#devin.readAccount({ authority, signal })).signedIn;
+        const observed = await this.#devin.readAccount({ authority, signal });
+        if (observed.readiness === "unverified") {
+          throw new CommandFailure("UNAVAILABLE", "Devin authentication status could not be verified; the exact login remains unsettled.");
+        }
+        return observed.readiness === "signed_in";
       }
       const observed = await this.#claude.readAccount({ authority, signal });
       if (observed.readiness === "unverified") {
@@ -10765,14 +10778,17 @@ export class OompaService {
     const account = await this.#readDevinAccount(profile, signal);
     return {
       account: this.#publicIsolatedProviderAccount(profile),
-      authentication: { provider: "devin", signedIn: account.signedIn },
+      authentication: {
+        provider: "devin",
+        signedIn: account.readiness === "unverified" ? null : account.readiness === "signed_in",
+      },
       providerGeneration: profile.processGeneration,
       usage: {
         allowance: "unknown",
         reason: "Devin ACP reports context and optional cumulative session cost, but exposes no account allowance or reset window.",
         source: "devin_acp",
       },
-      ...(account.signedIn
+      ...(account.readiness === "signed_in"
         ? {}
         : { nextCommand: `oompa account login ${profile.id} --provider devin` }),
     };
@@ -10880,7 +10896,10 @@ export class OompaService {
       );
     }
     const observed = await this.#readDevinAccount(profile, signal);
-    if (observed.signedIn) {
+    if (observed.readiness === "unverified") {
+      throw new CommandFailure("UNAVAILABLE", "Devin authentication status could not be verified; no login launch was granted.");
+    }
+    if (observed.readiness === "signed_in") {
       if (prior?.state === "prepared") {
         if (!this.#store.transitionMutation(prior.id, "prepared", "cancelled", {
           provider: "devin",
@@ -11011,9 +11030,12 @@ export class OompaService {
     if (priorReceipt?.success === true) {
       signedIn = priorReceipt.data.signedIn;
     } else if (command.outcome.state === "not_started") {
+      // The launch helper proved no child/effect existed. Settle from the
+      // recorded signed-out baseline without making this no-effect completion
+      // depend on a fallible provider status probe.
       signedIn = false;
     } else {
-      signedIn = (await this.#readDevinAccount(profile, signal)).signedIn;
+      signedIn = await this.#readForegroundLoginSignedIn(profile, attempt, "devin", signal);
     }
     try {
       this.#store.settleDevinLoginMutation({
@@ -22786,7 +22808,7 @@ export class OompaService {
           );
         }
         const account = await this.#readDevinAccount(profile, signal);
-        if (account.signedIn) {
+        if (account.readiness === "signed_in") {
           return {
             profileId: profile.id,
             processGeneration: profile.processGeneration,
@@ -22796,13 +22818,17 @@ export class OompaService {
         }
         const nextCommand = `oompa account login ${profile.id} --provider devin`;
         throw new CommandFailure(
-          "INTERACTION_REQUIRED",
-          `Sign in with \`${nextCommand}\` before using this account's Devin runtime.`,
+          account.readiness === "unverified" ? "UNAVAILABLE" : "INTERACTION_REQUIRED",
+          account.readiness === "unverified"
+            ? "Devin authentication status could not be verified before a new provider effect. "
+              + `Install Devin CLI ${DEVIN_PIN} exactly, ensure \`devin\` is on this daemon's PATH, `
+              + "and verify authentication inside this account's isolated Devin profile before retrying."
+            : `Sign in with \`${nextCommand}\` before using this account's Devin runtime.`,
           {
             accountSelector: profile.id,
-            accountState: "signed_out",
-            nextCommand,
             provider,
+            readiness: account.readiness,
+            ...(account.readiness === "signed_out" ? { accountState: "signed_out", nextCommand } : {}),
           },
         );
       }

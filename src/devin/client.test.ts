@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import type { AnyMessage } from "@agentclientprotocol/sdk";
-
 import { DevinAcpClient } from "./client";
 import type { DevinAcpProcess } from "./process";
 import type { DevinFact } from "./protocol";
 
 type JsonRecord = Record<string, unknown>;
+/** One JSON-RPC frame the fake agent writes; Oompa owns the framing now. */
+type AnyMessage = JsonRecord;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 

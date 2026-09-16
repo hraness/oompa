@@ -1,17 +1,6 @@
 import { isAbsolute, normalize } from "node:path";
 
-import {
-  methods,
-  ndJsonStream,
-  PROTOCOL_VERSION,
-  type AnyMessage,
-  type InitializeRequest,
-  type LoadSessionRequest,
-  type NewSessionRequest,
-  type PromptRequest,
-  type RequestPermissionResponse,
-} from "@agentclientprotocol/sdk";
-
+import { OOMPA_VERSION } from "../version.ts";
 import { DevinError } from "./errors.ts";
 import { DEVIN_ACP_PROTOCOL_VERSION } from "./pin.ts";
 import type { DevinAcpProcess } from "./process.ts";
@@ -21,6 +10,7 @@ import {
   boundedDevinRequestKey,
   boundedDevinSessionId,
   DEVIN_ACP_MAX_FRAME_BYTES,
+  DEVIN_ACP_METHODS,
   devinRequestKey,
   parseDevinInboundMessage,
   parseDevinInitializeResponse,
@@ -112,7 +102,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 /**
- * The SDK intentionally recovers from malformed NDJSON. HRA's provider seam is
+ * Oompa owns its NDJSON framing. The provider seam is
  * stricter: it withholds each line until its byte bound, UTF-8, JSON, and ACP
  * v1 no-batch shape have been checked.
  */
@@ -187,8 +177,25 @@ export function boundedDevinAcpInput(
       pending = new Uint8Array();
     },
   });
-  return source.pipeThrough(transform);
+  return source.pipeThrough(transform, { preventCancel: true });
 }
+
+/** One outbound JSON-RPC 2.0 frame. Oompa writes exactly one object per line. */
+type AnyMessage = Readonly<Record<string, unknown>> & { readonly jsonrpc: "2.0" };
+
+/**
+ * Decodes the already-bounded, already-validated NDJSON frames that
+ * `boundedDevinAcpInput` emits into JSON values. The bound stage has proved
+ * each line is UTF-8, JSON and one object, so this stage never throws on
+ * shape; it exists only so the reader sees values rather than bytes.
+ */
+const decodeFrames = (): TransformStream<Uint8Array, unknown> => new TransformStream({
+  transform(frame, controller) {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(frame).trim();
+    if (text.length === 0) return;
+    controller.enqueue(JSON.parse(text) as unknown);
+  },
+});
 
 const canonicalCwd = (value: string): string => {
   const cwd = boundedDevinCwd(value);
@@ -201,8 +208,8 @@ const canonicalCwd = (value: string): string => {
 export class DevinAcpClient {
   readonly #process: DevinAcpProcess;
   readonly #onFact: DevinAcpClientOptions["onFact"];
-  readonly #writer: WritableStreamDefaultWriter<AnyMessage>;
-  readonly #reader: ReadableStreamDefaultReader<AnyMessage>;
+  readonly #writer: WritableStreamDefaultWriter<Uint8Array>;
+  readonly #reader: ReadableStreamDefaultReader<unknown>;
   readonly #pending = new Map<string, PendingRequest>();
   readonly #canceledRequests = new Set<string>();
   readonly #permissions = new Map<string, PendingPermission>();
@@ -233,10 +240,6 @@ export class DevinAcpClient {
   #exitResolved = false;
 
   constructor(options: DevinAcpClientOptions) {
-    const sdkProtocolVersion: number = PROTOCOL_VERSION;
-    if (sdkProtocolVersion !== DEVIN_ACP_PROTOCOL_VERSION) {
-      throw new DevinError("RUNTIME_MISMATCH", "the installed ACP SDK does not implement v1");
-    }
     const maximumFrameBytes = boundedPositiveInteger(
       options.maximumFrameBytes ?? DEVIN_ACP_MAX_FRAME_BYTES,
       "Devin ACP frame limit",
@@ -279,16 +282,15 @@ export class DevinAcpClient {
     );
     this.#process = options.process;
     this.#onFact = options.onFact;
-    const stream = ndJsonStream(
-      options.process.stdin,
-      boundedDevinAcpInput(
-        options.process.stdout,
-        maximumFrameBytes,
-        (byteLength) => this.#reserveFrame(byteLength),
-      ),
-    );
-    this.#writer = stream.writable.getWriter();
-    this.#reader = stream.readable.getReader();
+    this.#writer = options.process.stdin.getWriter();
+    // A frame-validation failure must not cancel the child's stdout pipe: the
+    // process is reaped through terminate/force and its exit remains the one
+    // authoritative signal, exactly as with the previous framing layer.
+    this.#reader = boundedDevinAcpInput(
+      options.process.stdout,
+      maximumFrameBytes,
+      (byteLength) => this.#reserveFrame(byteLength),
+    ).pipeThrough(decodeFrames(), { preventCancel: true }).getReader();
     this.#closed = new Promise((resolve, reject) => {
       this.#resolveClosed = resolve;
       this.#rejectClosed = reject;
@@ -333,17 +335,17 @@ export class DevinAcpClient {
     if (this.#initialization !== null || this.#initializing) {
       throw new DevinError("INVALID_INPUT", "Devin ACP client initialization is already active");
     }
-    const params: InitializeRequest = {
+    const params = {
       clientCapabilities: {
         fs: { readTextFile: false, writeTextFile: false },
         terminal: false,
       },
-      clientInfo: { name: "hra", version: "0.6.0" },
+      clientInfo: { name: "oompa", version: OOMPA_VERSION },
       protocolVersion: DEVIN_ACP_PROTOCOL_VERSION,
     };
     this.#initializing = true;
     try {
-      const result = await this.#request(methods.agent.initialize, params, null, options.signal);
+      const result = await this.#request(DEVIN_ACP_METHODS.initialize, params, null, options.signal);
       const initialization = Object.freeze(
         this.#parseResponse(() => parseDevinInitializeResponse(result)),
       );
@@ -356,8 +358,8 @@ export class DevinAcpClient {
 
   async newSession(options: DevinNewSessionOptions): Promise<string> {
     this.#assertInitialized();
-    const params: NewSessionRequest = { cwd: canonicalCwd(options.cwd), mcpServers: [] };
-    const result = await this.#request(methods.agent.session.new, params, null, options.signal);
+    const params = { cwd: canonicalCwd(options.cwd), mcpServers: [] };
+    const result = await this.#request(DEVIN_ACP_METHODS.sessionNew, params, null, options.signal);
     const sessionId = this.#parseResponse(() => parseDevinNewSessionResponse(result));
     if (this.#sessions.has(sessionId)) {
       throw this.#terminalProtocolFailure("Devin returned a duplicate session id");
@@ -372,12 +374,12 @@ export class DevinAcpClient {
       throw new DevinError("UNSUPPORTED_CAPABILITY", "Devin did not advertise session/load");
     }
     const sessionId = boundedDevinSessionId(options.sessionId);
-    const params: LoadSessionRequest = {
+    const params = {
       cwd: canonicalCwd(options.cwd),
       mcpServers: [],
       sessionId,
     };
-    const result = await this.#request(methods.agent.session.load, params, sessionId, options.signal);
+    const result = await this.#request(DEVIN_ACP_METHODS.sessionLoad, params, sessionId, options.signal);
     this.#parseResponse(() => parseDevinLoadSessionResponse(result));
     this.#sessions.add(sessionId);
   }
@@ -388,13 +390,13 @@ export class DevinAcpClient {
     if (this.#activePrompts.size > 0) {
       throw new DevinError("INVALID_INPUT", "Devin does not support concurrent prompts");
     }
-    const params: PromptRequest = {
+    const params = {
       prompt: [{ text: boundedDevinPrompt(options.text), type: "text" }],
       sessionId,
     };
     this.#activePrompts.add(sessionId);
     try {
-      const result = await this.#request(methods.agent.session.prompt, params, sessionId, options.signal);
+      const result = await this.#request(DEVIN_ACP_METHODS.sessionPrompt, params, sessionId, options.signal);
       const stopReason = this.#parseResponse(() => parseDevinPromptResponse(result));
       await this.#emit({ sessionId, stopReason, type: "turnStopped" });
       return stopReason;
@@ -411,7 +413,7 @@ export class DevinAcpClient {
         await this.#resolvePermission(requestId, { outcome: "cancelled" });
       }
     }
-    await this.#notify(methods.agent.session.cancel, { sessionId });
+    await this.#notify(DEVIN_ACP_METHODS.sessionCancel, { sessionId });
   }
 
   resolvePermission(options: DevinResolvePermissionOptions): Promise<void> {
@@ -486,7 +488,7 @@ export class DevinAcpClient {
     for (const sessionId of this.#activePrompts) {
       await this.#write({
         jsonrpc: "2.0",
-        method: methods.agent.session.cancel,
+        method: DEVIN_ACP_METHODS.sessionCancel,
         params: { sessionId },
       }, true).catch(() => undefined);
     }
@@ -552,7 +554,7 @@ export class DevinAcpClient {
     };
     const scheduleCancel = (dispatched: Promise<void>): void => {
       void dispatched.then(
-        () => this.#notify(methods.protocol.cancelRequest, { requestId: id }),
+        () => this.#notify(DEVIN_ACP_METHODS.cancelRequest, { requestId: id }),
         () => undefined,
       ).catch(() => undefined);
     };
@@ -597,7 +599,7 @@ export class DevinAcpClient {
       || this.#queuedBytes + byteLength > this.#maximumQueuedBytes
     ) {
       // The input transform is serial, so at most one frame can wait here.
-      // Reserving before the SDK reads the frame prevents its eager parser
+      // Reserving before the frame is decoded prevents the reader
       // from retaining unbounded output behind a slow fact consumer.
       await new Promise<void>((resolve, reject) => {
         this.#frameCapacityWaiter = { reject, resolve };
@@ -635,7 +637,7 @@ export class DevinAcpClient {
       throw new DevinError("PROCESS_EXITED", "Devin ACP client is closed");
     }
     try {
-      await this.#writer.write(message);
+      await this.#writer.write(new TextEncoder().encode(`${JSON.stringify(message)}\n`));
     } catch (error: unknown) {
       const failure = new DevinError("PROCESS_EXITED", "Devin ACP transport write failed", {
         cause: error,
@@ -696,7 +698,7 @@ export class DevinAcpClient {
       return;
     }
     if (message.kind === "notification") {
-      if (message.method === methods.client.session.update) {
+      if (message.method === DEVIN_ACP_METHODS.sessionUpdate) {
         for (const fact of parseDevinSessionUpdate(message.params)) await this.#emit(fact);
       } else {
         await this.#emit({
@@ -708,7 +710,7 @@ export class DevinAcpClient {
       }
       return;
     }
-    if (message.method === methods.client.session.requestPermission) {
+    if (message.method === DEVIN_ACP_METHODS.requestPermission) {
       const fact = parseDevinPermissionRequest(message.id, message.params);
       const requestId = fact.requestId;
       if (this.#permissions.has(requestId)) {
@@ -752,7 +754,7 @@ export class DevinAcpClient {
       throw new DevinError("INVALID_INPUT", "Devin permission request is no longer pending");
     }
     const validated = validateDevinPermissionOutcome(outcome, permission.options);
-    const result: RequestPermissionResponse = { outcome: validated };
+    const result = { outcome: validated };
     // Consume before the first await so a concurrent decision, timeout, or
     // cancellation cannot dispatch a second response for this wire request.
     // A failed write closes the transport, so this decision is never replayed.

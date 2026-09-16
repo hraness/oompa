@@ -1,7 +1,13 @@
 import { isAbsolute, normalize } from "node:path";
 
 import { DevinError } from "./errors.ts";
+import { devinEnvironment } from "./runtime.ts";
 
+/**
+ * The isolated home a managed Devin profile runs in. Every directory is owned
+ * by the profile root, so the provider's credentials, caches and state never
+ * touch the operator's personal Devin home.
+ */
 export interface DevinDirectories {
   /** The whole HOME seen by Devin. */
   readonly home: string;
@@ -31,21 +37,6 @@ export type DevinAcpProcessFactory = (
   options: SpawnDevinAcpProcessOptions,
 ) => DevinAcpProcess;
 
-/** Ambient provider credentials, proxies, and config paths never cross this list. */
-export const DEVIN_SAFE_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
-  "HOME",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-  "LOGNAME",
-  "PATH",
-  "SHELL",
-  "TMPDIR",
-  "USER",
-  "XDG_CONFIG_HOME",
-  "XDG_DATA_HOME",
-]);
-
 const assertAbsoluteNormalized = (value: string, label: string): string => {
   if (
     new TextEncoder().encode(value).byteLength > 4 * 1024
@@ -72,18 +63,22 @@ export function validateDevinDirectories(input: DevinDirectories): DevinDirector
   return Object.freeze(directories);
 }
 
+/**
+ * The allowlisted ambient environment with every home-resolving variable
+ * replaced by the profile's isolated directories. Ambient provider
+ * credentials, proxies and configuration paths never cross the allowlist in
+ * `runtime.ts`; the operator's own HOME and XDG values are overridden here so
+ * a managed child cannot reach the personal Devin credentials file.
+ */
 export function isolatedDevinEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
   input: DevinDirectories,
 ): Record<string, string> {
   const directories = validateDevinDirectories(input);
-  const result: Record<string, string> = Object.create(null) as Record<string, string>;
-  for (const [key, value] of Object.entries(environment)) {
-    if (DEVIN_SAFE_ENVIRONMENT_KEYS.has(key) && value !== undefined) {
-      if (value.includes("\0") || new TextEncoder().encode(value).byteLength > 64 * 1024) {
-        throw new DevinError("INVALID_INPUT", `Devin environment value for ${key} is invalid`);
-      }
-      result[key] = value;
+  const result = devinEnvironment(environment);
+  for (const [key, value] of Object.entries(result)) {
+    if (value.includes("\0") || new TextEncoder().encode(value).byteLength > 64 * 1024) {
+      throw new DevinError("INVALID_INPUT", `Devin environment value for ${key} is invalid`);
     }
   }
   result.HOME = directories.home;

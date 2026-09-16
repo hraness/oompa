@@ -2484,7 +2484,7 @@ async function devinAccountFixture(initiallySignedIn = false) {
     readAccount: async () => {
       readCalls += 1;
       if (readError !== undefined) throw readError;
-      return { signedIn };
+      return { readiness: signedIn ? "signed_in" as const : "signed_out" as const, observedAt: 2_000 };
     },
     observeSession: async () => {
       providerSessionCalls.push("observe-session");
@@ -14822,7 +14822,7 @@ describe("OompaService", () => {
     const reviewed: EffectiveDevinRuntimeProfile[] = [];
     const devin = {
       provider: "devin" as const,
-      readAccount: async () => ({ signedIn: true }),
+      readAccount: async () => ({ readiness: "signed_in" as const, observedAt: 2_000 }),
       reviewSessionStart: async (
         input: Parameters<DevinRuntimePort["reviewSessionStart"]>[0],
       ) => {

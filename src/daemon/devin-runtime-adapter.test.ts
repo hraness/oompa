@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import type { AnyMessage } from "@agentclientprotocol/sdk";
-
 import {
   DEVIN_MODEL,
   DEVIN_PIN,
+  DevinError,
+  devinAcpArgv,
   type DevinAcpProcess,
   type DevinDirectories,
   type PinnedDevinRuntime,
 } from "../devin/index.ts";
 import type { CodexFact } from "../codex/protocol.ts";
 import { PresetProviderMismatchError } from "../domain/presets.ts";
-import { effectiveDevinRuntimeProfileSchema } from "../domain/runtime-profile.ts";
+import { effectiveDevinRuntimeProfileV2Schema } from "../domain/runtime-profile.ts";
 import {
   PinnedDevinRuntimeManager,
   type DevinProcessFactory,
@@ -19,10 +19,12 @@ import {
 import type { ProfileAuthority } from "./ports.ts";
 
 type JsonRecord = Record<string, unknown>;
+/** One JSON-RPC frame the fake agent writes; Oompa owns the framing now. */
+type AnyMessage = JsonRecord;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const PROJECT_ROOT = "/var/hra/projects/demo";
+const PROJECT_ROOT = "/var/oompa/projects/demo";
 const NOW = 1_700_000_000_000;
 const ASTRA_REQUIREMENT = {
   effort: "provider-default",
@@ -31,8 +33,8 @@ const ASTRA_REQUIREMENT = {
 
 const authority: ProfileAuthority = {
   bindingGeneration: 1,
-  codexHome: "/var/hra/profiles/acct/codex",
-  desktopUserData: "/var/hra/profiles/acct/desktop",
+  codexHome: "/var/oompa/profiles/acct/codex",
+  desktopUserData: "/var/oompa/profiles/acct/desktop",
   generation: 3,
   id: "acct_00000000000000000000000000000000",
   provider: "devin",
@@ -40,18 +42,16 @@ const authority: ProfileAuthority = {
 };
 
 const directories: DevinDirectories = {
-  cacheHome: "/var/hra/profiles/acct/devin-cache",
-  configHome: "/var/hra/profiles/acct/devin-config",
-  dataHome: "/var/hra/profiles/acct/devin-data",
-  home: "/var/hra/profiles/acct/devin-home",
-  stateHome: "/var/hra/profiles/acct/devin-state",
+  cacheHome: "/var/oompa/profiles/acct/devin-cache",
+  configHome: "/var/oompa/profiles/acct/devin-config",
+  dataHome: "/var/oompa/profiles/acct/devin-data",
+  home: "/var/oompa/profiles/acct/devin-home",
+  stateHome: "/var/oompa/profiles/acct/devin-state",
 };
 
 const runtime: PinnedDevinRuntime = {
-  argv: ["/usr/local/bin/devin", "acp", "--model", DEVIN_MODEL],
   build: "bcbe88c7",
   executablePath: "/usr/local/bin/devin",
-  model: DEVIN_MODEL,
   version: DEVIN_PIN,
   versionOutput: `devin ${DEVIN_PIN} (bcbe88c7)`,
 };
@@ -247,6 +247,7 @@ const harness = (options: {
   projectRootFor?: ConstructorParameters<typeof PinnedDevinRuntimeManager>[0]["projectRootFor"];
   processFactory?: DevinProcessFactory;
   readAuthStatus?: ConstructorParameters<typeof PinnedDevinRuntimeManager>[0]["readAuthStatus"];
+  resolveRuntime?: ConstructorParameters<typeof PinnedDevinRuntimeManager>[0]["resolveRuntime"];
 } = {}) => {
   const facts: CodexFact[] = [];
   const processes: FakeDevinProcess[] = [];
@@ -267,7 +268,7 @@ const harness = (options: {
     }),
     ...(options.projectRootFor === undefined ? {} : { projectRootFor: options.projectRootFor }),
     ...(options.readAuthStatus === undefined ? {} : { readAuthStatus: options.readAuthStatus }),
-    resolveRuntime: async () => runtime,
+    resolveRuntime: options.resolveRuntime ?? (async () => runtime),
   });
   return { facts, launches, manager, processes };
 };
@@ -329,7 +330,7 @@ describe("pinned Devin runtime manager", () => {
       projectRoot: PROJECT_ROOT,
       signal: signal(),
     });
-    expect(effectiveDevinRuntimeProfileSchema.parse(review.effectiveRuntimeProfile)).toEqual({
+    expect(effectiveDevinRuntimeProfileV2Schema.parse(review.effectiveRuntimeProfile)).toEqual({
       devinVersion: DEVIN_PIN,
       isolatedHome: true,
       model: DEVIN_MODEL,
@@ -352,7 +353,7 @@ describe("pinned Devin runtime manager", () => {
       status: "idle",
     });
     expect(manager.pinnedVersion()).toBe(DEVIN_PIN);
-    expect(launches[0]?.runtime.argv).toEqual([
+    expect(launches[0] === undefined ? undefined : devinAcpArgv(launches[0].runtime)).toEqual([
       "/usr/local/bin/devin",
       "acp",
       "--model",
@@ -402,7 +403,7 @@ describe("pinned Devin runtime manager", () => {
     // ACP's context occupancy is not an account allowance or reset window.
     expect(facts.some((fact) => fact.type === "rateLimitsUpdated")).toBe(false);
 
-    const interaction = manager.interactionAuthority(started.providerThreadId, "n:77");
+    const interaction = manager.interactionAuthority(authority, started.providerThreadId, "n:77");
     expect(facts.find((fact) => fact.type === "interactionRequested")).toMatchObject({
       display: { allowsSessionScope: false },
     });
@@ -811,8 +812,23 @@ describe("pinned Devin runtime manager", () => {
         return { signedIn: true };
       },
     });
-    expect(await manager.readAccount({ authority, signal: signal() })).toEqual({ signedIn: true });
+    expect(await manager.readAccount({ authority, signal: signal() }))
+      .toEqual({ observedAt: NOW, readiness: "signed_in" });
     expect(statusCalls).toEqual([directories]);
+    for (const invalid of [
+      { ...authority, provider: "codex" as const },
+      { ...authority, providerAccountId: "pact_00000000000000000000000000000000" },
+      { ...authority, bindingGeneration: 0 },
+    ]) {
+      await expect(manager.readAccount({ authority: invalid, signal: signal() }))
+        .rejects.toMatchObject({ code: "AUTHORITY_STALE" });
+    }
+    const unverified = harness({
+      resolveRuntime: async () => { throw new DevinError("RUNTIME_MISMATCH", "not installed"); },
+    });
+    expect(await unverified.manager.readAccount({ authority, signal: signal() }))
+      .toEqual({ observedAt: NOW, readiness: "unverified" });
+    await unverified.manager.close();
     await expect(manager.reviewSessionStart({
       authority,
       fast: false,
@@ -849,7 +865,7 @@ describe("pinned Devin runtime manager", () => {
     await waitFor(() => process.promptRequestId !== undefined);
     process.sendPermission();
     await settle();
-    const provider = manager.interactionAuthority(providerThreadId, "n:77");
+    const provider = manager.interactionAuthority(authority, providerThreadId, "n:77");
     await expect(manager.resolveInteraction({
       authority,
       deadlineAt: NOW - 1,
@@ -874,10 +890,10 @@ describe("pinned Devin runtime manager", () => {
     ];
     process.sendPermission(78, persistentOnly);
     await waitFor(() => {
-      try { return manager.interactionAuthority(providerThreadId, "n:78").requestId.value === "n:78"; }
+      try { return manager.interactionAuthority(authority, providerThreadId, "n:78").requestId.value === "n:78"; }
       catch { return false; }
     });
-    const decline = manager.interactionAuthority(providerThreadId, "n:78");
+    const decline = manager.interactionAuthority(authority, providerThreadId, "n:78");
     await manager.resolveInteraction({
       authority,
       deadlineAt: NOW + 1_000,
@@ -894,10 +910,10 @@ describe("pinned Devin runtime manager", () => {
 
     process.sendPermission(79, persistentOnly);
     await waitFor(() => {
-      try { return manager.interactionAuthority(providerThreadId, "n:79").requestId.value === "n:79"; }
+      try { return manager.interactionAuthority(authority, providerThreadId, "n:79").requestId.value === "n:79"; }
       catch { return false; }
     });
-    const timedOut = manager.interactionAuthority(providerThreadId, "n:79");
+    const timedOut = manager.interactionAuthority(authority, providerThreadId, "n:79");
     await manager.timeoutInteraction({ authority, provider: timedOut, signal: signal() });
     expect(process.received.find((entry) => entry.id === 79)).toEqual({
       id: 79,
@@ -916,7 +932,7 @@ describe("pinned Devin runtime manager", () => {
     await waitFor(() => process.promptRequestId !== undefined);
     process.sendPermission();
     await waitFor(() => facts.some((fact) => fact.type === "interactionRequested"));
-    const provider = manager.interactionAuthority(providerThreadId, "n:77");
+    const provider = manager.interactionAuthority(authority, providerThreadId, "n:77");
     expect(facts.find((fact) => fact.type === "interactionRequested")).toMatchObject({
       display: { allowsSessionScope: false },
     });

@@ -37,6 +37,7 @@ import type {
   CodexRuntimePort,
   CodexSessionProjection,
   CloudControlPort,
+  DevinAccountReadinessProjection,
   DevinRuntimePort,
   ProfileAuthority,
 } from "../daemon/ports";
@@ -688,7 +689,7 @@ class FakeDevin implements DevinRuntimePort {
   discardRuntimeReview(): void {}
   readSessionCalls = 0;
   readAccountCalls = 0;
-  readonly accountProjection: CodexAccountProjection | Error;
+  readonly accountProjection: DevinAccountReadinessProjection | Error;
   projection: CodexSessionProjection = {
     messages: [
       { role: "user", text: "Implement the bounded change", turnId: "turn_devin_1" },
@@ -709,7 +710,7 @@ class FakeDevin implements DevinRuntimePort {
     }],
   };
 
-  constructor(accountProjection: CodexAccountProjection | Error = new Error("unused")) {
+  constructor(accountProjection: DevinAccountReadinessProjection | Error = new Error("unused")) {
     this.accountProjection = accountProjection;
   }
 
@@ -722,7 +723,7 @@ class FakeDevin implements DevinRuntimePort {
   pinnedVersion(): string { return this.#unused(); }
   rebindProfileAuthority(): void {}
   interactionAuthority(): never { return this.#unused(); }
-  readAccount(): Promise<CodexAccountProjection> {
+  readAccount(): Promise<DevinAccountReadinessProjection> {
     this.readAccountCalls += 1;
     return this.accountProjection instanceof Error
       ? Promise.reject(this.accountProjection)
@@ -6085,7 +6086,8 @@ async function deviceCommandFixture(options: Readonly<{
         }
         if (authority.provider === "devin" && options.devin !== undefined) {
           const projection = await options.devin.readAccount(request);
-          return { signedIn: projection.signedIn };
+          return { signedIn: projection.readiness === "signed_in" ? true
+            : projection.readiness === "signed_out" ? false : null };
         }
         throw new Error("runtime unavailable");
       },
@@ -6306,7 +6308,7 @@ describe("device command execution", () => {
 
   test("expires optional auth observations and invalidates changed or removed profiles", async () => {
     let now = 1_760_000_000_000;
-    const devin = new FakeDevin({ signedIn: true });
+    const devin = new FakeDevin({ readiness: "signed_in", observedAt: 0 });
     const world = await deviceCommandFixture({ devin, now: () => now });
     try {
       expect((await observeFixtureRegistry(world)).accounts.filter((account) => account.provider === "devin"))
@@ -6485,7 +6487,7 @@ describe("device command execution", () => {
   test("derives reversible provider-qualified account ids without cross-provider collisions", async () => {
     const world = await deviceCommandFixture({
       claude: new FakeClaude({ observedAt: 1_050, readiness: "signed_in" }),
-      devin: new FakeDevin({ signedIn: true }),
+      devin: new FakeDevin({ readiness: "signed_in", observedAt: 0 }),
     });
     try {
       const addresses = (["codex", "claude", "devin"] as const).map((provider) =>
@@ -6540,7 +6542,7 @@ describe("device command execution", () => {
   test("caps the registry only at complete provider-qualified profile groups", async () => {
     const world = await deviceCommandFixture({
       claude: new FakeClaude({ observedAt: 1_050, readiness: "signed_in" }),
-      devin: new FakeDevin({ signedIn: true }),
+      devin: new FakeDevin({ readiness: "signed_in", observedAt: 0 }),
     });
     try {
       for (let index = 0; index < 32; index += 1) {
@@ -6614,7 +6616,7 @@ describe("device command execution", () => {
   });
 
   test("discovers a signed-in Devin account and translates its public id before local start", async () => {
-    const devin = new FakeDevin({ signedIn: true });
+    const devin = new FakeDevin({ readiness: "signed_in", observedAt: 0 });
     const world = await deviceCommandFixture({ devin });
     try {
       const signal = new AbortController().signal;
@@ -6692,7 +6694,7 @@ describe("device command execution", () => {
   });
 
   test("publishes known signed-out Devin state and refuses it before local execution", async () => {
-    const world = await deviceCommandFixture({ devin: new FakeDevin({ signedIn: false }) });
+    const world = await deviceCommandFixture({ devin: new FakeDevin({ readiness: "signed_out", observedAt: 0 }) });
     try {
       const signal = new AbortController().signal;
       const address = deviceRegistryAccountAddress({

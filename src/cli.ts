@@ -127,6 +127,8 @@ import {
 import type { OompaHostToolCall } from "./codex/protocol";
 import {
   createDevinLoginSignalCustody,
+  devinAcpArgv,
+  isolatedDevinEnvironment,
   resolvePinnedDevinRuntime,
   runDevinForegroundLogin,
   type DevinDirectories,
@@ -5786,7 +5788,7 @@ async function executeDevinAccountAuthentication(
   };
   const resolveDevinRuntime = input.resolveDevinRuntime ?? resolvePinnedDevinRuntime;
   const runtime = await resolveDevinRuntime({
-    directories,
+    environment: isolatedDevinEnvironment(process.env, directories),
     signal: controller.signal,
   });
   const preflight: { directories: DevinDirectories; runtime: PinnedDevinRuntime } = {
@@ -5866,13 +5868,14 @@ async function executeDevinAccountAuthentication(
     if (foreground === undefined) {
       try {
         const revalidated = await resolveDevinRuntime({
-          directories: preflight.directories,
+          environment: isolatedDevinEnvironment(process.env, preflight.directories),
           executablePath: preflight.runtime.executablePath,
           signal: controller.signal,
         });
         if (
           revalidated.executablePath !== preflight.runtime.executablePath
-          || JSON.stringify(revalidated.argv) !== JSON.stringify(preflight.runtime.argv)
+          || revalidated.versionOutput !== preflight.runtime.versionOutput
+          || JSON.stringify(devinAcpArgv(revalidated)) !== JSON.stringify(devinAcpArgv(preflight.runtime))
         ) throw new Error("Devin runtime identity changed after launch grant.");
         preflight.runtime = revalidated;
       } catch {

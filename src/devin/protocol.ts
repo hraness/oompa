@@ -8,6 +8,22 @@ type UnknownRecord = Record<string, unknown>;
 export const DEVIN_ACP_MAX_FRAME_BYTES = 1024 * 1024;
 export const DEVIN_ACP_MAX_PROMPT_BYTES = 256 * 1024;
 
+/**
+ * The ACP v1 method names this adapter speaks. Oompa owns its JSON-RPC
+ * framing, so these strings are the whole wire vocabulary; anything else the
+ * agent sends is bounded into a protocol notice or refused.
+ */
+export const DEVIN_ACP_METHODS = Object.freeze({
+  initialize: "initialize",
+  sessionNew: "session/new",
+  sessionLoad: "session/load",
+  sessionPrompt: "session/prompt",
+  sessionCancel: "session/cancel",
+  sessionUpdate: "session/update",
+  requestPermission: "session/request_permission",
+  cancelRequest: "$/cancel_request",
+} as const);
+
 export type DevinToolKind =
   | "read"
   | "edit"

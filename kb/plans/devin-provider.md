@@ -16,7 +16,7 @@ instant, not an ACU balance.
 
 ### Phase 1. Credential-free quota reader
 
-- **Status:** Implemented in `src/devin/` on `feat/devin-usage-panel-reader`.
+- **Status:** Complete. Merged in PR #226.
 - **Scope:** pin (`3000.10.27`) and version admission; PTY driver that types
   only `/usage`, Enter, `/exit`, Enter; closed panel grammar for the banner, the
   `Weekly` and optional `Daily` lines, and the optional extra-usage line;
@@ -31,24 +31,39 @@ instant, not an ACU balance.
 
 ### Phase 2. Provider runtime and ACP adapter on the current architecture
 
-- **Status:** Implemented on `codex/devin-provider-20260915` by reverting the
-  removal commit (`5c6d397c`) so the original ACP v1 client, process custody,
-  fact reduction and foreground login return on the current seams, sharing the
-  Phase 1 pin.
-- **Scope:** restore the ACP v1 client, process custody, fact reduction and
-  foreground login from PR #115 onto the Effect-based provider seams that
-  replaced the 2026-09-06 adapters, using the same pinned CLI as Phase 1.
-- **Acceptance:** the protocol, client and adapter fixtures from the removed
-  implementation pass again on the current ports; every child is joined on
-  shutdown; a zero-token initialization check on the pinned build passes.
+- **Status:** Implemented on `feat/devin-provider-runtime`; not wired.
+- **Scope:** the ACP v1 protocol, client, process custody, auth status and
+  foreground login from PR #115 restored under `src/devin/`, and the runtime
+  adapter restored as `src/daemon/devin-runtime-adapter.ts` on the current
+  `SessionRuntimePort` seam: provider-account authority (`dact_` ids and
+  binding generations) at every boundary, `readAccount` as a readiness
+  projection, `rebindProfileAuthority` and `interactionAuthority` in the
+  shapes the Claude adapter uses, `hasLiveSession`, and interaction
+  authorities that carry provider and account identity. The client frames
+  NDJSON itself; the `@agentclientprotocol/sdk` dependency is not restored.
+  The adapter reviews a new `EffectiveDevinRuntimeProfileV2` document pinned
+  to CLI `3000.10.27`; the historical V1 document keeps its exact bytes.
+- **Not in scope:** the V2 document is not yet a member of the reviewed
+  runtime-profile union, and the adapter is not constructed by the daemon,
+  selected by the service, or reachable from the parser. Attachments and
+  in-turn steering remain refused by the adapter as in #115.
+- **Acceptance:** the protocol, client, auth and adapter fixtures from the
+  removed implementation pass on the current ports, extended with authority,
+  readiness, rebind and property cases (83 tests across `src/devin` and the
+  adapter); every fake child is joined on shutdown; lint layering, strict
+  types, the security-primitives table and the reviewed package inventory
+  pass. The zero-token `initialize` check against the real pinned build is
+  deferred to Phase 4 with the paid turn, because it launches `devin acp`
+  under an isolated home that Phase 3 first has to create.
 
 ### Phase 3. Lifting refusals with append-only migrations
 
 - **Status:** Devin readmission implemented on `codex/devin-provider-20260915`
-  (the same revert restores parser, storage, service, cloud-payload and browser
-  admission under ordinary authority guards, with schema 61 retaining
-  historical rows byte-for-byte). The `devin_usage_panel` snapshot source is
-  not wired and remains open.
+  on top of the Phase 2 adapter: parser, storage, service, cloud-payload and
+  browser admission return under ordinary authority guards, and schema 61
+  drops the retired-provider refusal triggers while retaining historical rows
+  byte-for-byte. The `devin_usage_panel` snapshot source is not wired and
+  remains open.
 - **Scope:** parser, storage admission guards, service, cloud payloads and
   browser selectors admit Devin again; usage snapshots gain a `devin_usage_panel`
   source recorded with the exact CLI version line and the `unknown` reason when

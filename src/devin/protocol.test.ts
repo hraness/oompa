@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import fc from "fast-check";
 
 import { DevinError } from "./errors";
 import {
@@ -206,5 +207,60 @@ describe("Devin ACP projection", () => {
   test("redacts UNC paths without depending on slash style", () => {
     expect(sanitizeDevinText("Read \\\\server\\share\\private.txt for details"))
       .toBe("Read [local-path] for details");
+  });
+});
+
+describe("Devin ACP projection properties", () => {
+  const jsonValue = fc.jsonValue({ maxDepth: 4 });
+
+  test("every inbound frame either parses to a closed envelope or raises a DevinError", () => {
+    fc.assert(fc.property(jsonValue, (value) => {
+      try {
+        const message = parseDevinInboundMessage(value);
+        expect(["request", "notification", "response", "errorResponse"]).toContain(message.kind);
+      } catch (error: unknown) {
+        expect(error).toBeInstanceOf(DevinError);
+        expect((error as DevinError).code === "PROTOCOL_ERROR" || (error as DevinError).code === "PROTOCOL_LIMIT")
+          .toBe(true);
+      }
+    }), { numRuns: 300 });
+  });
+
+  test("usage updates round-trip every bounded integer pair and never invent a cost", () => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+      fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }),
+      (used, size) => {
+        expect(parseDevinSessionUpdate({
+          sessionId: "session-1",
+          update: { sessionUpdate: "usage_update", used, size },
+        })).toEqual([{ cost: null, sessionId: "session-1", size, type: "usageUpdated", used }]);
+      },
+    ), { numRuns: 200 });
+  });
+
+  test("assistant deltas keep their text bytes bounded and free of control scalars", () => {
+    fc.assert(fc.property(fc.string({ maxLength: 512 }), (text) => {
+      const facts = parseDevinSessionUpdate({
+        sessionId: "session-1",
+        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+      });
+      expect(facts).toHaveLength(1);
+      const fact = facts[0];
+      if (fact?.type !== "assistantDelta") throw new Error("expected an assistant delta");
+      expect(new TextEncoder().encode(fact.text).byteLength).toBeLessThanOrEqual(64 * 1024);
+      expect(/[\p{Cc}\p{Cf}\p{Cs}]/u.test(fact.text.replaceAll("\n", ""))).toBe(false);
+    }), { numRuns: 300 });
+  });
+
+  test("request keys are injective across the whole safe integer range", () => {
+    fc.assert(fc.property(
+      fc.integer({ min: -Number.MAX_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER }),
+      fc.integer({ min: -Number.MAX_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER }),
+      (left, right) => {
+        expect(devinRequestKey(left) === devinRequestKey(right)).toBe(left === right);
+        expect(devinRequestKey(left)).not.toBe(devinRequestKey(String(left)));
+      },
+    ), { numRuns: 200 });
   });
 });

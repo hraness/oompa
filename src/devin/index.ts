@@ -31,12 +31,10 @@ export {
   DEVIN_ACP_PROTOCOL_VERSION,
   DEVIN_MODEL,
   DEVIN_PIN,
-  DEVIN_PIN_MODEL,
   DEVIN_VERSION_OUTPUT_PATTERN,
   type DevinPinVersion,
 } from "./pin.ts";
 export {
-  DEVIN_SAFE_ENVIRONMENT_KEYS,
   isolatedDevinEnvironment,
   spawnBunDevinAcpProcess,
   validateDevinDirectories,
@@ -52,6 +50,7 @@ export {
   boundedDevinSessionId,
   DEVIN_ACP_MAX_FRAME_BYTES,
   DEVIN_ACP_MAX_PROMPT_BYTES,
+  DEVIN_ACP_METHODS,
   devinRequestKey,
   parseDevinInboundMessage,
   parseDevinInitializeResponse,
@@ -75,13 +74,13 @@ export {
   type DevinToolStatus,
 } from "./protocol.ts";
 export {
-  assertPinnedDevinVersion,
+  DEVIN_SAFE_ENVIRONMENT_KEYS,
+  devinAcpArgv,
   devinEnvironment,
   locateDevinExecutable,
-  parseDevinVersionOutput,
   resolvePinnedDevinRuntime,
   spawnDevinVersionProbe,
-  type DevinVersionProbe,
+  type DevinAcpArgv,
   type DevinVersionProbeProcess,
   type DevinVersionProbeProcessFactory,
   type PinnedDevinRuntime,

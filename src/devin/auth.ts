@@ -142,7 +142,7 @@ export function createDevinLoginSignalCustody(options: Readonly<{
   };
   const terminalSignal = (signal: DevinLoginSignal): void => {
     interruptedBy ??= signal;
-    // The terminal already signalled the foreground process group. HRA keeps
+    // The terminal already signalled the foreground process group. Oompa keeps
     // custody only so its parent can join the child and return a coherent RPC.
     scheduleForce();
   };
@@ -358,7 +358,6 @@ export async function readDevinAuthStatus(
   }
   const environment = options.environment ?? process.env;
   const runtime = options.runtime ?? await (options.resolveRuntime ?? resolvePinnedDevinRuntime)({
-    directories: options.directories,
     environment,
     signal: options.signal,
   });
@@ -466,7 +465,6 @@ export async function runDevinForegroundLogin(
     let runtime: PinnedDevinRuntime;
     try {
       runtime = options.runtime ?? await (options.resolveRuntime ?? resolvePinnedDevinRuntime)({
-        directories: options.directories,
         environment,
         signal: options.signal,
       });

@@ -46,8 +46,8 @@ import {
   type ClaudeLoginSignalSource,
 } from "./claude/index";
 import {
+  DEVIN_MODEL,
   DEVIN_PIN,
-  DEVIN_PIN_MODEL,
 } from "./devin/index";
 import { ShellTerminalCoordinator } from "./cli/shell-terminal";
 import {
@@ -109,10 +109,10 @@ const cliClaudeRuntime = {
 } as const;
 
 const cliDevinRuntime = {
-  argv: ["/test/devin", "acp", "--model", DEVIN_PIN_MODEL] as const,
+  argv: ["/test/devin", "acp", "--model", DEVIN_MODEL] as const,
   build: "bcbe88c7",
   executablePath: "/test/devin",
-  model: DEVIN_PIN_MODEL,
+  model: DEVIN_MODEL,
   version: DEVIN_PIN,
   versionOutput: `devin ${DEVIN_PIN} (bcbe88c7)`,
 } as const;
