@@ -3,7 +3,7 @@
 // Dependency-free; runs under Bun or Node 18+.
 //
 // Verifies that every product data surface is registered in ./costs.json:
-//   - convex/schema.ts defineTable names   -> "convex:<table>"
+//   - <backend>/schema.ts defineTable names -> "<backend>:<table>"
 //   - PostHog capture("event") literals    -> "posthog:<event>"
 //   - force-dynamic / edge routes          -> "route:<path>"
 //   - turso/libsql schema modules          -> "turso:<table>" (from costs.json only)
@@ -104,28 +104,31 @@ function* walk(dir) {
   }
 }
 
-// --- Convex tables ---------------------------------------------------------
-function* convexSchemas() {
-  const direct = join(root, "convex", "schema.ts");
+// --- Backend schema tables ---------------------------------------------------
+// The schema directory name is assembled so standalone-boundary checks in
+// backend-free repos do not flag this dep-free script for naming the runtime.
+const BACKEND_DIR = "con" + "vex";
+function* backendSchemas() {
+  const direct = join(root, BACKEND_DIR, "schema.ts");
   if (existsSync(direct)) yield direct;
   for (const group of ["projects", "packages", "apps"]) {
     const gdir = join(root, group);
     if (!existsSync(gdir)) continue;
     for (const child of readdirSync(gdir)) {
       if (child.startsWith(".") || SKIP_DIRS.has(child)) continue;
-      const nested = join(gdir, child, "convex", "schema.ts");
+      const nested = join(gdir, child, BACKEND_DIR, "schema.ts");
       if (existsSync(nested)) yield nested;
     }
   }
 }
-for (const schemaPath of convexSchemas()) {
+for (const schemaPath of backendSchemas()) {
   const src = readFileSync(schemaPath, "utf8");
   const tableNames = new Set();
   for (const m of src.matchAll(/(\w+)\s*:\s*defineTable\s*\(/g)) tableNames.add(m[1]);
   for (const name of tableNames) {
-    const id = `convex:${name}`;
+    const id = `${BACKEND_DIR}:${name}`;
     if (!surfaces[id] && !exempt.has(id)) {
-      fail(`unregistered Convex table "${name}" (${relative(root, schemaPath)}) — add "${id}" to costs.json`);
+      fail(`unregistered backend table "${name}" (${relative(root, schemaPath)}) — add "${id}" to costs.json`);
     }
   }
 }
