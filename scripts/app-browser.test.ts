@@ -244,9 +244,9 @@ describe("static site graph acceptance", () => {
   });
 
   test("keeps inert preview and opaque product policies distinct with exact credential-free CORS", () => {
-    const siteCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'self'; frame-src 'self'";
+    const siteCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com";
     const previewCsp = "default-src 'none'; font-src 'self'; style-src 'self'; script-src 'none'";
-    const productPreviewCsp = `${exampleCsp}; frame-ancestors 'self'`;
+    const productPreviewCsp = `${exampleCsp}; frame-ancestors 'self' https://hraness.com`;
     const config = (site: string, preview: string) => ({ headers: [
       { source: "/((?!preview/?$|examples/app(?:/|$)).*)", headers: [{ key: "Content-Security-Policy", value: site }] },
       { source: "/preview/", headers: [{ key: "Content-Security-Policy", value: preview }] },
