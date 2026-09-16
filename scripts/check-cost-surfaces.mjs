@@ -132,7 +132,7 @@ for (const schemaPath of convexSchemas()) {
 }
 
 // --- PostHog event literals -------------------------------------------------
-const CAPTURE_RE = /capture\s*\(\s*["'`]([a-zA-Z0-9_:$-]+)["'`]/g;
+const CAPTURE_RE = /(?:posthog\w*|analytics)\.capture\s*\(\s*["'`]([a-zA-Z0-9_:$-]+)["'`]/g;
 const seenEvents = new Set();
 for (const p of walk(root)) {
   const rel = relative(root, p);
