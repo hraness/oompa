@@ -1,0 +1,3140 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-09-16T19:56:52.403Z",
+  "contentHash": "0cfbdbb809270f34",
+  "signals": [
+    {
+      "id": "uscg-6b1ca42f87b2a0f9",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "warning",
+      "title": "The LOWDOWN - 15 September 2026 - Frontline Guardians: Orbital Realities, Chokepoints, and AI Warfighting",
+      "summary": "Disclaimer: This is an AI generated Open-source news summary for general informational awareness. This product is not intended for use as official intelligence. The views expressed here are solely those of the cited authors and do not reflect the official policy or position of the Department of War, the United States Air Force, or any other U.S. government agency.\n \nEurope and Russia\nNATO Airspace Incursions & Explosive Drones: NATO fighter jets (flown by Italian pilots) shot down a Russian-attributed drone rigged with an integrated explosive device over Lithuania near Pratkūnai village and Lake Kaunas. In the Baltic Sea off Gedser, a Russian frigate fired flares within meters of a Danish military surveillance helicopter without radio warning or prior contact.\nTargeted Diplomatic Border Strike: A Russian precision drone struck a diplomatic train and an adjacent gas station at the Yahodyn-Dorohusk border crossing between Ukraine and Poland. The strike occurred 15 minutes after passengers—including former UK Prime Minister Boris Johnson, former CIA Director David Petraeus, and senior European security advisers—were evacuated due to early warning alerts.\nLyman Counter-Offensive & Ener",
+      "url": "https://www.dvidshub.net/audio/93851/lowdown-15-september-2026-frontline-guardians-orbital-realities-chokepoints-and-ai-warfighting",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:14:38.000Z"
+    },
+    {
+      "id": "gdacs-0a06db12a14cc35e",
+      "source": "gdacs-caribbean",
+      "sourceName": "GDACS (UN/EU)",
+      "category": "climate",
+      "severity": "warning",
+      "title": "Drought is on going in The Bahamas, Belize, Cuba, Dominican Republic, Guatemala, Honduras, Haiti, Mexico, Nicaragua, El Salvador",
+      "summary": "DR — The Bahamas, Belize, Cuba, Dominican Republic, Guatemala, Honduras, Haiti, Mexico, Nicaragua, El Salvador (Orange). The Drought notification level is Orange.",
+      "url": "https://www.gdacs.org/report.aspx?eventtype=DR&eventid=1027449",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-07-03T12:57:40.000Z"
+    },
+    {
+      "id": "fema-0be89bff6cec4b9e",
+      "source": "fema-declarations",
+      "sourceName": "FEMA disaster declarations",
+      "category": "official",
+      "severity": "warning",
+      "title": "DR-4850: TROPICAL STORM ERNESTO",
+      "summary": "Incident type: Tropical Storm. Incident began 2024-08-13. Public Assistance authorized.",
+      "url": "https://www.fema.gov/disaster/4850",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2024-11-27T00:00:00.000Z"
+    },
+    {
+      "id": "pr-salud-2471d81e9101cdf2",
+      "source": "pr-salud",
+      "sourceName": "PR Departamento de Salud",
+      "category": "health",
+      "severity": "warning",
+      "title": "Secretario de Salud autoriza exención temporera para facilitar la importación de agua embotellada y hielo ante emergencia por sequía",
+      "summary": "Surveillance or advisory publication from the Puerto Rico Department of Health.",
+      "url": "https://www.salud.pr.gov/CMS/727",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "ioda-2c8705dd938b2ddb",
+      "source": "ioda-pr",
+      "sourceName": "Georgia Tech IODA",
+      "category": "comms",
+      "severity": "watch",
+      "title": "Internet network telescope signal down 41% vs 3-day baseline",
+      "summary": "IODA merit-nt telemetry for Puerto Rico. Large drops correlate with island-wide connectivity loss (power, fiber, or telecom failures).",
+      "url": "https://ioda.inetintel.cc.gatech.edu/country/PR",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "dropPct": 41.2,
+        "current": 18.130555555555556,
+        "baseline": 31
+      }
+    },
+    {
+      "id": "uscg-e0495fb44dca6f7c",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "watch",
+      "title": "NSASP Welcomes New Chief Petty Officers",
+      "summary": "FCAC Grant Allen, Surface Combat System Training Command AEGIS Training and Readiness Center, is piped aboard the Chiefs Mess on Sept. 16, when Naval Support Activity South Potomac welcomed 11 new chief petty officers during a pinning ceremony at Naval Support Facility (NSF) Dahlgren. Capt. John Nadder, NSASP commanding officer, welcomed the new chiefs and thanked their families. “Family and friends, today marks the first time these leaders will wear the anchors reserved for the distant, privileged few who serve in the Armed Forces and are referred to as United States Navy chief petty officers,” he said. “Today all around the globe, current and retired chief petty officers are standing proudly in anticipation, to watch how this class of selectees will impact the Sailors of today, and make their mark on the Navy.",
+      "url": "https://www.dvidshub.net/image/9941478/nsasp-welcomes-new-chief-petty-officers",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:35:18.000Z"
+    },
+    {
+      "id": "gnews-25e6e9a2024ab8b1",
+      "source": "gnews-apagon",
+      "sourceName": "Google News — apagon",
+      "category": "power",
+      "severity": "watch",
+      "title": "El contador que nos cuenta: LUMA, electricidad, datos y vigilancia en Puerto Rico - claridadpuertorico.com",
+      "summary": "El contador que nos cuenta: LUMA, electricidad, datos y vigilancia en Puerto Rico  claridadpuertorico.com",
+      "url": "https://news.google.com/rss/articles/CBMirwFBVV95cUxQLXZUMVhIMTZ4cTZPZG5FUWp1Smk5T0xfNGxVS3ZJVE9FV2c2WTZQVWZwUkNRUkJoRWNoT3g3YXVLaGpkZDR1b0dnbkMwUDd2Q2dDUXBOSGVVbGlsR0d5bzZRUFRRWm1rcEE1eGgybS15c2gzT1YtWFh6Y01HV3M1eFEyM3pMeDJ6SGh6TGwwMHhJeC1sOWd4NkJQVUcyZlBQb0ZIT1BYVWZSVWxWMDc4?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T11:08:33.000Z",
+      "clusterKey": "gnews-apagon"
+    },
+    {
+      "id": "caricof-6342a9d75c943196",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "watch",
+      "title": "Caribbean Coral Reef Watch Vol XI Issue V September – December 2026",
+      "summary": "The post Caribbean Coral Reef Watch Vol XI Issue V September – December 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/caribbean-coral-reef-watch-vol-xi-issue-v-september-december-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-15T14:03:34.000Z"
+    },
+    {
+      "id": "luma-a76ff545562e4654",
+      "source": "luma-outages",
+      "sourceName": "LUMA Energy",
+      "category": "power",
+      "severity": "advisory",
+      "title": "Arecibo: 853 customers without power (0.5%)",
+      "summary": "177,369 customers tracked in the Arecibo service region.",
+      "url": "https://miluma.lumapr.com/outages/outageMap",
+      "regions": [
+        "northwest"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "customersOut": 853,
+        "customersTotal": 177369,
+        "percentOut": 0.48
+      }
+    },
+    {
+      "id": "luma-22600521fd217676",
+      "source": "luma-outages",
+      "sourceName": "LUMA Energy",
+      "category": "power",
+      "severity": "advisory",
+      "title": "Bayamon: 1,976 customers without power (0.9%)",
+      "summary": "216,496 customers tracked in the Bayamon service region. 250 under planned outage.",
+      "url": "https://miluma.lumapr.com/outages/outageMap",
+      "regions": [
+        "san-juan-metro",
+        "north"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "customersOut": 1976,
+        "customersTotal": 216496,
+        "percentOut": 0.91
+      }
+    },
+    {
+      "id": "luma-70eb86c094278baa",
+      "source": "luma-outages",
+      "sourceName": "LUMA Energy",
+      "category": "power",
+      "severity": "advisory",
+      "title": "Carolina: 493 customers without power (0.3%)",
+      "summary": "141,663 customers tracked in the Carolina service region. 477 under planned outage.",
+      "url": "https://miluma.lumapr.com/outages/outageMap",
+      "regions": [
+        "san-juan-metro",
+        "northeast"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "customersOut": 493,
+        "customersTotal": 141663,
+        "percentOut": 0.35
+      }
+    },
+    {
+      "id": "luma-dc41f55f7a283820",
+      "source": "luma-outages",
+      "sourceName": "LUMA Energy",
+      "category": "power",
+      "severity": "advisory",
+      "title": "Caguas: 4,818 customers without power (1.9%)",
+      "summary": "250,514 customers tracked in the Caguas service region. 870 under planned outage.",
+      "url": "https://miluma.lumapr.com/outages/outageMap",
+      "regions": [
+        "central-east",
+        "east"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "customersOut": 4818,
+        "customersTotal": 250514,
+        "percentOut": 1.92
+      }
+    },
+    {
+      "id": "luma-295e754c612e3a8d",
+      "source": "luma-outages",
+      "sourceName": "LUMA Energy",
+      "category": "power",
+      "severity": "advisory",
+      "title": "Mayaguez: 460 customers without power (0.2%)",
+      "summary": "216,605 customers tracked in the Mayaguez service region. 25 under planned outage.",
+      "url": "https://miluma.lumapr.com/outages/outageMap",
+      "regions": [
+        "west",
+        "southwest"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "customersOut": 460,
+        "customersTotal": 216605,
+        "percentOut": 0.21
+      }
+    },
+    {
+      "id": "luma-2ec99d94e858ce46",
+      "source": "luma-outages",
+      "sourceName": "LUMA Energy",
+      "category": "power",
+      "severity": "advisory",
+      "title": "Ponce: 342 customers without power (0.2%)",
+      "summary": "212,508 customers tracked in the Ponce service region. 120 under planned outage.",
+      "url": "https://miluma.lumapr.com/outages/outageMap",
+      "regions": [
+        "south",
+        "southeast"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "customersOut": 342,
+        "customersTotal": 212508,
+        "percentOut": 0.16
+      }
+    },
+    {
+      "id": "cpc-enso-5fb947125c3abdb4",
+      "source": "cpc-enso",
+      "sourceName": "NOAA Climate Prediction Center",
+      "category": "climate",
+      "severity": "advisory",
+      "title": "ENSO: El Niño advisory in effect",
+      "summary": "Current ENSO status from the Climate Prediction Center diagnostic discussion.",
+      "url": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml",
+      "regions": [
+        "atlantic",
+        "caribbean",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z"
+    },
+    {
+      "id": "usgs-rivers-b1b2104d0130b52c",
+      "source": "usgs-rivers",
+      "sourceName": "USGS WaterWatch",
+      "category": "flood",
+      "severity": "advisory",
+      "title": "LAGO GUERRERO NR ISABELA, PR at 409.41 ft gage height",
+      "summary": "Elevated river level. Compare against NWS flood products for the same basin.",
+      "url": "https://waterwatch.usgs.gov/?m=real&r=pr",
+      "regions": [
+        "northwest"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "gageFeet": 409.41
+      }
+    },
+    {
+      "id": "primera-hora-ca987bc6c978120a",
+      "source": "news-primera-hora",
+      "sourceName": "Primera Hora",
+      "category": "weather",
+      "severity": "advisory",
+      "title": "Advertencia de inundaciones y tronada fuerte para varios pueblos del oeste",
+      "summary": "¡Precaución!",
+      "url": "https://www.primerahora.com/noticias/el-tiempo/notas/advertencia-de-inundaciones-y-tronada-fuerte-para-varios-pueblos-del-oeste/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T19:24:49.000Z"
+    },
+    {
+      "id": "caricof-6338bbd75c8bfba7",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "advisory",
+      "title": "Caribbean Drought Bulletin Vol XIII Issue 4 September 2026",
+      "summary": "The post Caribbean Drought Bulletin Vol XIII Issue 4 September 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/caribbean-drought-bulletin-vol-xiii-issue-4-september-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-04T21:53:21.000Z"
+    },
+    {
+      "id": "pr-salud-ade8be941c41e8e9",
+      "source": "pr-salud",
+      "sourceName": "PR Departamento de Salud",
+      "category": "health",
+      "severity": "advisory",
+      "title": "PR Department of Health bulletin",
+      "summary": "Surveillance or advisory publication from the Puerto Rico Department of Health.",
+      "url": "https://www.salud.pr.gov/CMS/414",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "pr-salud-80838e10712790b0",
+      "source": "pr-salud",
+      "sourceName": "PR Departamento de Salud",
+      "category": "health",
+      "severity": "advisory",
+      "title": "PR Department of Health bulletin",
+      "summary": "Surveillance or advisory publication from the Puerto Rico Department of Health.",
+      "url": "https://www.salud.pr.gov/CMS/143",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "pr-salud-91834bd4992bb2ad",
+      "source": "pr-salud",
+      "sourceName": "PR Departamento de Salud",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Influenza",
+      "summary": "Surveillance or advisory publication from the Puerto Rico Department of Health.",
+      "url": "https://www.salud.pr.gov/CMS/135",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "pr-salud-d36a6adfeb25eaec",
+      "source": "pr-salud",
+      "sourceName": "PR Departamento de Salud",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Secretario de Salud activa el Centro de Operaciones de Emergencias con los Hospitales, CDT y Centros de Salud Primaria 330",
+      "summary": "Surveillance or advisory publication from the Puerto Rico Department of Health.",
+      "url": "https://www.salud.pr.gov/CMS/726",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "pr-ferry-290650729a62628f",
+      "source": "pr-ferry",
+      "sourceName": "Puerto Rico Ferry (ATM)",
+      "category": "transport",
+      "severity": "advisory",
+      "title": "Alert Title test alert section",
+      "url": "https://www.puertoricoferry.com/",
+      "regions": [
+        "vieques",
+        "culebra",
+        "northeast"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "prasa-plan-cbc0bc837db9e233",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Español (Puerto Rico)",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://www.acueductospr.com/planes-de-interrupciones-programadas-2026",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-383182ce70e3e546",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "English (United States)",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://www.acueductospr.com/en-us/planes-de-interrupciones-programadas-2026",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-c8849f80f3875d8e",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Folleto Plomo (Ver PDF) ",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://docs.pr.gov/files/AAA/Ambiente%20Cumplimiento/Documentos/BROCHUREPLOMO2022FINAL.pdf",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-dd243051f508b0ef",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Plan de Reemplazo",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://www.acueductospr.com/cumplimiento/plan-de-reemplazo",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-6ee8e842a6a1a359",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Planta de Composta",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://www.acueductospr.com/cumplimiento/planta-de-composta",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-5abe80bb79a395cb",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Dragado Carraizo (Ver PDF) ",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://docs.pr.gov/files/AAA/Infraestructura/Documentos/FONSIFinalEACarraizo11-03-22.pdf",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-1f80b876c7b1582a",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Solicitud de charla educativa (Ver PDF) ",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://docs.pr.gov/files/AAA/Comunicaciones/Documentos/Descargue%20solicitud%20para%20una%20charla%20educativa.pdf",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-92f357a2295a5779",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Strategic Plan 2026 - 2029 (Ver PDF) ",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://docs.pr.gov/files/AAA/Nuestra%20AAA/Documentos/PRASA%20STRATEGIC%20PLAN%202026-2029%20FIRMADO%20APROBADO.pdf",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-6101629429f11e0b",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "EPA/PRASA Consent Decree (Ver PDF) ",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://docs.pr.gov/files/AAA/Nuestra%20AAA/Documentos/EPA_PRASA%20Consent%20Decree.pdf",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-46cf0813432f13ef",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Ver PDF ",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://docs.pr.gov/files/AAA/Comunicaciones/Documentos/Plan_de_Interrupciones_Programadas_PF_Sergio_Cuevas_PRENSA.pdf",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "prasa-plan-c0360dc55de7b489",
+      "source": "prasa-interruptions",
+      "sourceName": "AAA (PRASA) — planned interruptions",
+      "category": "water",
+      "severity": "advisory",
+      "title": "Normas de uso \"disclaimer\"",
+      "summary": "Planned service interruption or replacement plan published by AAA.",
+      "url": "https://docs.pr.gov/files/AAA/Portada/Documentos/Politica-Devolucion-PagoAAA-v3.pdf",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es"
+    },
+    {
+      "id": "cdc-travel-cab6b9ca593656d6",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "There is an outbreak of chikungunya in Nicaragua. You can protect yourself by preventing mosquito bites.Chikungunya in Nicaragua811",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices#",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-b9e408d8aee7b955",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Chikungunya in Nicaragua",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices/level2/chikungunya-nicaragua",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-0a7195f3ef1aef1c",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Cases of Zika are being reported in returning travelers from Bali, Indonesia. All travelers to Bali should take steps to prevent mosquito bites and sexual transmission of Zika virus during and after travel.Zika in Indonesia813",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices#",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-e0f59b01ca3b6503",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Zika in Indonesia",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices/level2/zika-indonesia",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-32161312364090f1",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "There is an outbreak of chikungunya in northwest Costa Rica. You can protect yourself by preventing mosquito bites.Chikungunya in Costa Rica157",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices#",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-12fe4ab6799f9682",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Chikungunya in Costa Rica",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices/level2/chikungunya-costa-rica",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-12957c7699b43ccd",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "There is an outbreak of chikungunya in French Guiana. You can protect yourself by preventing mosquito bites.Chikungunya in French Guiana156",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices#",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-639e4a20aa6aab34",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Chikungunya in French Guiana",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices/level2/chikungunya-french-guiana",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-e7022a8fc138b506",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "There is an outbreak of chikungunya in Mauritius. You can protect yourself by preventing mosquito bites.Chikungunya in Mauritius798",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices#",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-21fe52b3fb7e8af5",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Chikungunya in Mauritius",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices/level2/chikungunya-mauritius",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-490cf22e36a69a0e",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "Global Polio",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices/level2/global-polio",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "cdc-travel-a3fb0aab91868ef0",
+      "source": "cdc-travel",
+      "sourceName": "CDC Travelers' Health",
+      "category": "health",
+      "severity": "advisory",
+      "title": "There is an outbreak of chikungunya in Suriname. You can protect yourself by preventing mosquito bites.Chikungunya in Suriname153",
+      "summary": "CDC travel health notice relevant to Puerto Rico or the Caribbean basin.",
+      "url": "https://wwwnc.cdc.gov/travel/notices#",
+      "regions": [
+        "islandwide",
+        "caribbean"
+      ],
+      "lang": "en"
+    },
+    {
+      "id": "nhc-two-8fd2a9903d2c8da5",
+      "source": "nhc-outlook",
+      "sourceName": "NHC Tropical Weather Outlook",
+      "category": "climate",
+      "severity": "info",
+      "title": "There are no tropical cyclones at this time.",
+      "summary": "No tropical cyclones as of Wed, 16 Sep 2026 19:28:08 GMT",
+      "url": "https://www.nhc.noaa.gov/",
+      "regions": [
+        "atlantic",
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-18T05:57:51.000Z"
+    },
+    {
+      "id": "luma-af32ec973e626ec0",
+      "source": "luma-outages",
+      "sourceName": "LUMA Energy",
+      "category": "power",
+      "severity": "info",
+      "title": "Island total: 9,078 customers without power",
+      "summary": "Across 7 LUMA service regions, 1,468,223 customers tracked.",
+      "url": "https://miluma.lumapr.com/outages/outageMap",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "customersOut": 9078,
+        "customersTotal": 1468223
+      }
+    },
+    {
+      "id": "prasa-emb-7386d6294b78e1d7",
+      "source": "prasa-embalses",
+      "sourceName": "AAA (PRASA)",
+      "category": "water",
+      "severity": "info",
+      "title": "Reservoir dashboard tracks 12 embalses",
+      "summary": "AAA publishes reservoir levels for the island's water supply system (S, DE CARRAIZO CON LOS NOMBRES DE LOS MUNIC, DE LA PLATA CON LOS NOMBRES DE LOS MUNIC, DE CIDRA CON LOS NOMBRES DE LOS MUNICIPI, DE PATILLAS CON LOS NOMBRES DE LOS MUNIC, DE TOA VACA CON LOS NOMBRES DE LOS MUNIC, DE CARITE CON LOS NOMBRES DE LOS MUNICIP, DE RIO BLANCO CON LOS NOMBRES DE LOS MUN…). Check the linked page for the current report.",
+      "url": "https://www.acueductospr.com/infraestructura/niveles-de-los-embalses",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "reservoirsTracked": 12
+      }
+    },
+    {
+      "id": "usgs-rivers-186b0a6d2a872007",
+      "source": "usgs-rivers",
+      "sourceName": "USGS WaterWatch",
+      "category": "flood",
+      "severity": "info",
+      "title": "109 river gauges reporting across Puerto Rico",
+      "summary": "Highest current gage heights: LAGO GUERRERO NR ISABELA, PR 409.41 ft; RIO GUAYANES AT CENTRAL ROIG, PR 12.42 ft; RIO CANAS AT RIO CANAS, PR 11.16 ft; RIO GRANDE DE MANATI NR MANATI, PR 10.71 ft; RIO GUAYANES NR YABUCOA, PR 10.14 ft; RIO DE LA PLATA AT PROYECTO LA PLATA, PR 10.00 ft.",
+      "url": "https://waterwatch.usgs.gov/?m=real&r=pr",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "gaugesReporting": 109,
+        "highestGageFt": 409.41
+      }
+    },
+    {
+      "id": "ioda-1873fb73323e639b",
+      "source": "ioda-pr",
+      "sourceName": "Georgia Tech IODA",
+      "category": "comms",
+      "severity": "info",
+      "title": "Internet BGP routing signal down 0% vs 3-day baseline",
+      "summary": "IODA bgp telemetry for Puerto Rico. Large drops correlate with island-wide connectivity loss (power, fiber, or telecom failures).",
+      "url": "https://ioda.inetintel.cc.gatech.edu/country/PR",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "dropPct": 0,
+        "current": 4501,
+        "baseline": 4501
+      }
+    },
+    {
+      "id": "ioda-b7d9a0d3153106aa",
+      "source": "ioda-pr",
+      "sourceName": "Georgia Tech IODA",
+      "category": "comms",
+      "severity": "info",
+      "title": "Internet active probing signal up 0% vs 3-day baseline",
+      "summary": "IODA ping-slash24 telemetry for Puerto Rico. Large drops correlate with island-wide connectivity loss (power, fiber, or telecom failures).",
+      "url": "https://ioda.inetintel.cc.gatech.edu/country/PR",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:56:52.403Z",
+      "metrics": {
+        "dropPct": -0.1,
+        "current": 1242.1527777777778,
+        "baseline": 1241
+      }
+    },
+    {
+      "id": "coops-25e60e5d90590042",
+      "source": "noaa-coops-sju",
+      "sourceName": "NOAA CO-OPS",
+      "category": "flood",
+      "severity": "info",
+      "title": "San Juan water level 0.56 m MLLW",
+      "summary": "Latest observed water level at the San Juan (La Puntilla) station.",
+      "url": "https://tidesandcurrents.noaa.gov/stationhome.html?id=9755371",
+      "regions": [
+        "san-juan-metro",
+        "waters-north"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:42:00Z",
+      "metrics": {
+        "waterLevelM": 0.558
+      }
+    },
+    {
+      "id": "uscg-477951b488059bcb",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "FY-27 CNSL CPO Pinning Ceremony",
+      "summary": "NAVAL STATION NORFOLK- (Sept. 16, 2026) Chief's past and present, stand at attention for the Chief Petty Officer Creed during the Commander, Naval Surface Force Atlantic (SURFLANT) FY-27 Chief Petty Officer pinning ceremony at Naval Station Norfolk, Va., Sept. 16, 2026. SURFLANT mans, trains, and equips assigned surface forces and shore activities, ensuring a capable force for conducting prompt and sustained operations in support of United States national interests. The SURFLANT force is composed of more than 60 warships and 30 shore commands. (U.S. Navy photo by Mass Communication Specialist Seaman Jack H. Mills)",
+      "url": "https://www.dvidshub.net/image/9941884/fy-27-cnsl-cpo-pinning-ceremony",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:33:09.000Z"
+    },
+    {
+      "id": "uscg-4746c2b487db0235",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "FY-27 CNSL CPO Pinning Ceremony",
+      "summary": "NAVAL STATION NORFOLK- (Sept. 16, 2026) Senior Chief Navy Counselor Elizabeth Lopez welcomes friends and family to the Commander, Naval Surface Force Atlantic (SURFLANT) FY-27 Chief Petty Officer pinning ceremony at Naval Station Norfolk, Va., Sept. 16, 2026. SURFLANT mans, trains, and equips assigned surface forces and shore activities, ensuring a capable force for conducting prompt and sustained operations in support of United States national interests. The SURFLANT force is composed of more than 60 warships and 30 shore commands. (U.S. Navy photo by Mass Communication Specialist Seaman Jack H. Mills)",
+      "url": "https://www.dvidshub.net/image/9941877/fy-27-cnsl-cpo-pinning-ceremony",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:33:08.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-18a0d8553f4316ff",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "transport",
+      "severity": "info",
+      "title": "La “crudita” abona a un costo de vida más alto, según el Instituto de Estadísticas",
+      "summary": "Ronald Hernández Maldonado, gerente de proyectos estadísticos del IEPR, sin embargo, afirmó que no se puede precisar si la eliminación de este impuesto implicaría un alivio directo al costo de vida en Puerto Rico",
+      "url": "https://www.elnuevodia.com/negocios/economia/notas/la-crudita-abona-a-un-costo-de-vida-mas-alto-segun-el-instituto-de-estadisticas/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T19:30:00.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-fff20e2b93dc01df",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "power",
+      "severity": "info",
+      "title": "Aumento de seis centavos: LUMA Energy solicita alza tarifaria en respuesta a costos de combustible",
+      "summary": "El incremento está vinculado, sobre todo, a una brecha de casi $132 millones entre ingresos y gastos bajo la cláusula de ajuste",
+      "url": "https://www.elnuevodia.com/noticias/locales/notas/aumento-de-seis-centavos-luma-energy-solicita-alza-tarifaria-en-respuesta-a-costos-de-combustible/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T19:26:50.000Z"
+    },
+    {
+      "id": "gnews-41151730826fabcb",
+      "source": "gnews-combustible",
+      "sourceName": "Google News — combustible",
+      "category": "power",
+      "severity": "info",
+      "title": "Aumento de seis centavos: LUMA Energy solicita alza tarifaria en respuesta a costos de combustible - El Nuevo Día",
+      "summary": "Aumento de seis centavos: LUMA Energy solicita alza tarifaria en respuesta a costos de combustible  El Nuevo Día",
+      "url": "https://news.google.com/rss/articles/CBMi4gFBVV95cUxPTk5WcE9BckctOFBRRUE4SUtESW1HdVNPT01YYXg4LTFncW5udXk5dUhIMFJkeGQ0emhaSElOc2p5Y3RJZzQxLThPX2ROYVc4UG9SODMzd3JkbWdPUEJMcnBlSGMzc2RjeUlmM1luVmhPUVM2bnd6U04tWEZrWjh5UndHalRVN2hnRGZ0WnNHWXJlM2xrSk1hTVc2U1lINUxxSWNaZWlWVWNSWkhhWGVqTU9INnpNd0tMeUJnbllzaEhIREZRZFFLVFd0dWxJRWJtM05wVUFlX19Ic09KNWh0LTdn?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T19:26:00.000Z",
+      "clusterKey": "gnews-combustible"
+    },
+    {
+      "id": "primera-hora-13cb27db6ef6587b",
+      "source": "news-primera-hora",
+      "sourceName": "Primera Hora",
+      "category": "transport",
+      "severity": "info",
+      "title": "Puerto Rico queda fuera del Preolímpico de Norceca tras caer en tres parciales ante México",
+      "summary": "El sexteto patrio, además, terminó en la sexta posición del Campeonato Continental.",
+      "url": "https://www.primerahora.com/deportes/voleibol/notas/puerto-rico-queda-fuera-del-preolimpico-de-norceca-tras-caer-en-tres-parciales-ante-mexico/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T19:20:34.000Z"
+    },
+    {
+      "id": "uscg-509eb266e4c787a0",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "NY Army Guard's 42nd Infantry Division marks return from Middle East and Operation Epic Fury missions",
+      "summary": "TROY, New York –Five hundred New York Army National Guard Soldiers assigned to the 42nd Infantry who deployed to the Middle East in June of 2025, and eventually conducted combat operations against Iran, were officially welcomed home Sept. 11-13.\n\nDuring a Sept. 11 ceremony at the division’s Troy, New York headquarters, Major General Jack James, the division commander, thanked them for their service.\n\n On Sunday, Sept. 13, “Yellow Ribbon” events were held to salute Soldiers and families in Syracuse, New York National Guard headquarters in Latham, and on Long Island.\n\n\"I want to take the opportunity to thank each and every one of you personally, and the group together as a unit, because this will probably be the last time for sure that this exact group will be together,” James told the Soldiers at the Troy ceremony on Sept. 11.",
+      "url": "https://www.dvidshub.net/news/574909/ny-army-guards-42nd-infantry-division-marks-return-middle-east-and-operation-epic-fury-missions",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:19:44.000Z"
+    },
+    {
+      "id": "uscg-49569766e10bb66d",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "2nd Marine Logistics Group Receives General Friedrich von Steuben",
+      "summary": "MARINE CORPS BASE CAMP LEJEUNE, N.C. – In recognition of its performance during the 2026 Comprehensive Command Inspection, 2nd Marine Logistics Group was presented the 2026 General Friedrich von Steuben Superior Unit Performance Award during the 2026 Inspector General of the Marine Corps Training Symposium at Marine Corps Base Quantico, Virginia, Aug. 25, 2026.",
+      "url": "https://www.dvidshub.net/news/574887/2nd-marine-logistics-group-receives-general-friedrich-von-steuben",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T19:19:05.000Z"
+    },
+    {
+      "id": "caricof-632abcd75c7fbffe",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "info",
+      "title": "Looking Back: May to July 2026",
+      "summary": "The post Looking Back: May to July 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/looking-back-may-to-july-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:57:41.000Z"
+    },
+    {
+      "id": "uscg-509ebe66e4c79c04",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "USAREC Names 2026 Drill Sergeants of the Year",
+      "summary": "U.S. Army Recruiting Command, known as USAREC, announced the active duty and reserve drill sergeants of the year after an intense 72-hour physical, tactical and instructional competition at Fort Jackson.",
+      "url": "https://www.dvidshub.net/news/574905/usarec-names-2026-drill-sergeants-year",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:47:13.000Z"
+    },
+    {
+      "id": "uscg-e95911b453097ece",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "SUBASE New London Holds 2026 Chief Petty Officer Pinning Ceremony",
+      "summary": "Navy Chiefs from Naval Submarine Base (SUBASE) New London and Navy Medicine Readiness and Training Unit Groton pose for a photo on Historic Ship Nautilus’ brow alongside newly pinned Navy Chiefs during a Chief Petty Officer pinning ceremony at Historic Ship Nautilus and Submarine Force Museum in Groton, Connecticut, Sept. 16, 2026. SUBASE New London, alongside NMRTU Groton (Clinic), welcomed the newest Chief Petty Officers with a pinning ceremony where new Chiefs had their anchors pinned and covers set by family, friends and mentors, marking a new milestone in their naval careers. (U.S. Navy photo by Mass Communication Specialist 2nd Class Lucas J. Hastings)",
+      "url": "https://www.dvidshub.net/image/9941735/subase-new-london-holds-2026-chief-petty-officer-pinning-ceremony",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:46:22.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-a6e14ff7066ba2ee",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "transport",
+      "severity": "info",
+      "title": "Compañía de Turismo entregará evidencia de los gastos de Miss Universe 2026 en Puerto Rico",
+      "summary": "Tras una reunión entre la directora ejecutiva de Turismo, Willianette Robles Cancel y la vicepresidenta del Senado, Marissa Jiménez Santoni",
+      "url": "https://www.elnuevodia.com/entretenimiento/farandula/notas/compania-de-turismo-entregara-evidencia-de-los-gastos-de-miss-universe-2026-en-puerto-rico/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T18:46:00.000Z"
+    },
+    {
+      "id": "uscg-509ebf66e4c79db7",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "Lost in 1944, WWII Soldier Will Be Laid to Rest in Home State of Pennsylvania",
+      "summary": "FORT KNOX, Ky. – The remains of U.S. Army Pfc. Howard G. Krapf, missing from World War II, will be interred Sept. 21, at Fairview Cemetery in Whitehall Township, Pennsylvania. Services and interment are being coordinated by Gilbert Funeral Home.",
+      "url": "https://www.dvidshub.net/news/574904/lost-1944-wwii-soldier-will-laid-rest-home-state-pennsylvania",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:45:37.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-8501ae5248b9f861",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "health",
+      "severity": "info",
+      "title": "Suenan voz de alarma ante necesidad de solución al problema de financiamiento del Medicaid",
+      "summary": "La Asociación de Hospitales asegura que Puerto Rico no puede esperar a 2027 para atender el problema continuidad en el acceso a servicios de salud",
+      "url": "https://www.elnuevodia.com/noticias/locales/notas/suenan-voz-de-alarma-ante-necesidad-de-solucion-al-problema-de-financiamiento-del-medicaid/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T18:41:41.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-bf10863922fd15d2",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "transport",
+      "severity": "info",
+      "title": "MassMutual Puerto Rico invierte $1.5 millones en su nueva sede en Hato Rey",
+      "summary": "El espacio de 11,002 pies cuadrados forma parte del plan de expansión de la empresa, que busca profesionalizar y ampliar su equipo de asesores financieros",
+      "url": "https://www.elnuevodia.com/negocios/empresas-comercios/notas/massmutual-puerto-rico-invierte-15-millones-en-su-nueva-sede-en-hato-rey/",
+      "regions": [
+        "san-juan-metro"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T18:40:00.000Z"
+    },
+    {
+      "id": "caricof-632e3dd75c82d108",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "info",
+      "title": "Temperature Outlook September 2026",
+      "summary": "The post Temperature Outlook September 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/temperature-outlook-september-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:36:55.000Z"
+    },
+    {
+      "id": "uscg-509ebb66e4c796eb",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "Washington Aqueduct named regional champion in 2026 Tri-Con water taste test",
+      "summary": "The Washington Aqueduct's McMillan Water Treatment Plant recently earned the 2026 Chesapeake Tri-Association Conference (Tri-Con) Water Taste Test (Surface Water Category) award.",
+      "url": "https://www.dvidshub.net/news/574900/washington-aqueduct-named-regional-champion-2026-tri-con-water-taste-test",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:35:27.000Z"
+    },
+    {
+      "id": "nws-products-f30a07f278c687dd",
+      "source": "nws-sju-products",
+      "sourceName": "National Weather Service (San Juan office)",
+      "category": "weather",
+      "severity": "info",
+      "title": "NWS San Juan Area Forecast Discussion",
+      "summary": "000\nFXCA62 TJSJ 161818\nAFDSJU\n\nArea Forecast Discussion\nNational Weather Service San Juan PR\n218 PM AST Wed Sep 16 2026\n\n...New SHORT TERM, LONG TERM, AVIATION, MARINE, BEACH FORECAST...\n\n.KEY MESSAGES...\nIssued at 159 PM AST Wed Sep 16 2026\n\n- An approaching tropical wave will continue to promote showers\n  and thunderstorms across the U.S. Virgin Islands and Puerto Rico\n  through the rest of the afternoon into Thursday, increasing the\n  potential for flooding and lightning risks.\n\n- There is a low to moderate risk of rip currents through the\n  weekend along the beaches of the U.S. Virgin Islands and Puerto\n  Rico.\n  \n\n- Limited extreme heat risks are expected for the rest of today \n  and Thursday, with elevated to significant hazard risks \n  returning Friday into the weekend.\n\n- Weather conditions are expected to improve by Thursday evening\n  into Friday, as a drier airmass and low concentrations of\n  Saharan dust filter into the area. \n\n&&\n\n.Short Term(This evening through Friday)...\nIssued at 159 PM AST Wed Sep 16 2026\n\nA few passing showers have reached the U.S. Virgin Islands and \neastern portions of Puerto Rico. The combination of an approaching \nmoist, unstable tropical wave, a nearby upper-level low, and local \neffectssuch as diurnal heating, orographic lift, and sea-breeze \nconvergencewill fuel deep convection today. The axis of the \ntropical wave is currently crossing the U.S. Virgin Islands; \nhowever, the main moisture field is preceding it. Consequently, \nshower activity and isolated thunderstorms will increase across the \nislands this afternoon as the wave moves through the Forecast Area \n(CWA). The most active weather is expected overnight, with activity \nramping up across the U.S. Virgin Islands, eastern Puerto Rico, and \nthe metropolitan areas before ext",
+      "url": "https://forecast.weather.gov/product.php?site=SJU&issuedby=SJU&product=AFD&format=CI&version=1&glossary=0",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:18:00+00:00"
+    },
+    {
+      "id": "caricof-633f3bd75c9140d5",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "info",
+      "title": "Precipitation Outlook September 2026",
+      "summary": "The post Precipitation Outlook September 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/precipitation-outlook-september-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:16:38.000Z"
+    },
+    {
+      "id": "uscg-6b1ca22f87b29d93",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "The LOWDOWN - 16 September 2026 - Escalation in Hormuz, NATO Air Defense, and Cross-Strait Autonomous Warfare",
+      "summary": "Disclaimer: This is an AI generated Open-source news summary for general informational awareness. This product is not intended for use as official intelligence. The views expressed here are solely those of the cited authors and do not reflect the official policy or position of the Department of War, the United States Air Force, or any other U.S. government agency.\n \nMiddle East\nHouthi Offensive Expansion & Saudi Strikes: Yemen's Houthi militia has escalated attacks deep into Saudi Arabia, firing ballistic missiles and drones at urban centers including Khamis Mushait, Abha, Taif, and Najran. Saudi forces intercepted a Houthi drone near Mecca, prompting Riyadh to declare the holy city a \"red line\". Additionally, the Houthis claimed to have downed a Saudi F-15 fighter jet over Yemeni airspace.\nEnergy Chokepoint & Supply Disruption: An Iran-backed Iraqi militia drone strike forced the shutdown of Saudi Arabia's East-West Pipeline. To maintain oil exports, Saudi Arabia has significantly increased tanker transits through the Strait of Hormuz under US military escort, while global Brent crude oil prices rose above $106 per barrel.\nJapan’s Energy Crisis: Facing severe energy insecurity due",
+      "url": "https://www.dvidshub.net/audio/93853/lowdown-16-september-2026-escalation-hormuz-nato-air-defense-and-cross-strait-autonomous-warfare",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:14:34.000Z"
+    },
+    {
+      "id": "uscg-495a0e66e10eb679",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "First Army medic exhibits selfless service",
+      "summary": "Staff Sgt. Lizel Green, an observer controller/trainer medic assigned to the 2nd Battalion, 307th Field Artillery Regiment, provided emergency medical care to three people following a vehicle accident at Fort Sill, Oklahoma, on Aug. 18, 2026. Green, a two-year All-Army Softball athlete, was later awarded the Army Commendation Medal for her actions.",
+      "url": "https://www.dvidshub.net/news/574898/first-army-medic-exhibits-selfless-service",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:11:46.000Z"
+    },
+    {
+      "id": "noticel-7b15027b128a1ea6",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "power",
+      "severity": "info",
+      "title": "El sistema eléctrico recuperaría dos importantes unidades mañana",
+      "summary": "La empresa Genera PR anticipa que el sistema eléctrico recuperará dos importantes unidades mañana con el regreso a la operación de la unidad 2 en Aguirre y otra unidad del AES. Anoche Genera PR anticipó que habría apagones debido a que la demanda de energía superaría la oferta, pero ese no fue el caso. «Es […]\nThe post El sistema eléctrico recuperaría dos importantes unidades mañana first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/ultima-hora/20260916/el-sistema-electrico-recuperaria-dos-importantes-unidades-manana/?utm_source=rss&utm_medium=rss&utm_campaign=el-sistema-electrico-recuperaria-dos-importantes-unidades-manana",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T18:10:55.000Z"
+    },
+    {
+      "id": "uscg-49568966e10b9ea3",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "Lost in 1951, Korean War Soldier to be Laid to Rest in Michigan",
+      "summary": "FORT KNOX, Ky. – The remains of U.S. Army Cpl. Richard Lennox, 18, will be interred Sept. 19 at Lakeside Memorial Cemetery in his hometown of Holly, Michigan. Service and interment are being coordinated by Dryer Funeral Home.",
+      "url": "https://www.dvidshub.net/news/574889/lost-1951-korean-war-soldier-laid-rest-michigan",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T18:03:38.000Z"
+    },
+    {
+      "id": "nhc-two-4caae7e07fb88fc2",
+      "source": "nhc-outlook",
+      "sourceName": "NHC Tropical Weather Outlook",
+      "category": "climate",
+      "severity": "info",
+      "title": "Atlantic Tropical Weather Outlook",
+      "summary": "000ABNT20 KNHC 161757TWOAT Tropical Weather OutlookNWS National Hurricane Center Miami FLIssued by the NWS Weather Prediction Center College Park MD200 PM EDT Wed Sep 16 2026For the North Atlantic...Caribbean Sea and the Gulf of America:Central Subtropical Atlantic (AL98):A small area of low pressure located several hundred miles east of Bermuda has become better defined over the last 24 hours. Environmental conditions could become a little more conducive for further development in the next few days while the system moves slowly westward to southward over the subtropical Atlantic.* Formation chance through 48 hours...low...20 percent.* Formation chance through 7 days...low...30 percent.$$Forecaster Gallina/Blake",
+      "url": "https://www.nhc.noaa.gov/gtwo.php?basin=atlc",
+      "regions": [
+        "atlantic",
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:57:51.000Z"
+    },
+    {
+      "id": "caricof-633f3ed75c9145ee",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "info",
+      "title": "Health Implications for September to November 2026",
+      "summary": "The post Health Implications for September to November 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/health-implications-for-september-to-november-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:56:34.000Z"
+    },
+    {
+      "id": "uscg-49530666e1088a33",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "Forged from the Deckplates: Five New Chiefs Don the Anchors of the 133rd Pinning Season",
+      "summary": "The Hub 757 auditorium echoed with pride as five newly selected chief petty officers marched forward to receive their gold fouled anchors. The ceremony, held on September 16, 2026, marked the historic 133rd Chief Petty Officer Pinning Ceremony for Naval Information Forces (NAVIFOR), Fleet Cyber Command and Navy Cyber Defense Operations Command (NCDOC).",
+      "url": "https://www.dvidshub.net/news/574874/forged-deckplates-five-new-chiefs-don-anchors-133rd-pinning-season",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:55:58.000Z"
+    },
+    {
+      "id": "uscg-495a1566e10ec25e",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "Wyoming Air National Guard to host Discovery Day 2026: A Salute to STEAM",
+      "summary": "The Wyoming Air National Guard will host Discovery Day 2026: A Salute to STEAM, a free, hands-on science, technology, engineering, art and math event for students, from 9 a.m. to 2 p.m. Sept. 24 in Cheyenne. More than 25 exhibitors will show students how STEAM and career fields are used in the workforce, with aircraft, drones, simulators, robotics and more. Attendance is limited to school groups that educators register in advance.",
+      "url": "https://www.dvidshub.net/news/574891/wyoming-air-national-guard-host-discovery-day-2026-salute-steam",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:55:45.000Z"
+    },
+    {
+      "id": "uscg-495a1466e10ec0ab",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "Bases unite through soccer to honor fallen, remember 9/11",
+      "summary": "Eight military soccer teams from Air Force and Space Force installations across the country came together in the Las Vegas area Sept. 11-13 for the inaugural 9/11 memorial soccer tournament, bringing service members together through competition and remembrance.",
+      "url": "https://www.dvidshub.net/news/574892/bases-unite-through-soccer-honor-fallen-remember-9-11",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:55:16.000Z"
+    },
+    {
+      "id": "primera-hora-e13eea7b1d43ebc0",
+      "source": "news-primera-hora",
+      "sourceName": "Primera Hora",
+      "category": "supply",
+      "severity": "info",
+      "title": "Cuba pone en circulación nuevos billetes de 10,000 y 20,000 pesos",
+      "summary": "Ante la escasez de dinero.",
+      "url": "https://www.primerahora.com/noticias/mundo/notas/cuba-pone-en-circulacion-nuevos-billetes-de-10000-y-20000-pesos/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T17:55:14.000Z"
+    },
+    {
+      "id": "uscg-a71162e574c07675",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "B-Roll: Marines and Sailors conduct LCAC FARP training",
+      "url": "https://www.dvidshub.net/video/1023242/b-roll-marines-and-sailors-conduct-lcac-farp-training",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:52:31.000Z"
+    },
+    {
+      "id": "uscg-0b9c30b4665552c8",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "120th Medical Group Conducts TCCC Tier 3 Exercise",
+      "summary": "Members of the 120th Medical Group dress Airmen from other units in moulage in preparation for a tactical combat casualty care exercise, Sep. 15, 2026, on the Montana Air National Guard Base, Great Falls, Mont.\n\nMoulage is the term given to utilizing makeup and props to create gore, and adds to exercises by creating realistic representations of injuries for medical professionals to diagnose and treat.",
+      "url": "https://www.dvidshub.net/image/9941364/120th-medical-group-conducts-tccc-tier-3-exercise",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:50:18.000Z"
+    },
+    {
+      "id": "uscg-49568866e10b9cf0",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "APG and Harford County Unite to Strengthen Suicide Prevention and Break Stigmas",
+      "summary": "As the military community marks Suicide Prevention Awareness Month, Aberdeen Proving Ground (APG) is taking a collaborative, data-driven approach to tackle one of the Department of War's top priorities.",
+      "url": "https://www.dvidshub.net/news/574888/apg-and-harford-county-unite-strengthen-suicide-prevention-and-break-stigmas",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:48:59.000Z"
+    },
+    {
+      "id": "caricof-6342afd75c943bc8",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "info",
+      "title": "Key Climate Messages for September to November 2026",
+      "summary": "The post Key Climate Messages for September to November 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/key-climate-messages-for-september-to-november-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:41:20.000Z"
+    },
+    {
+      "id": "uscg-36b1abdca85c8059",
+      "source": "uscg-san-juan",
+      "sourceName": "U.S. Coast Guard Sector San Juan",
+      "category": "transport",
+      "severity": "info",
+      "title": "NTS-3",
+      "url": "https://www.dvidshub.net/video/1022623/nts-3",
+      "regions": [
+        "mona-passage",
+        "islandwide"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T17:40:11.000Z"
+    },
+    {
+      "id": "gnews-20d8f6aefdb08d31",
+      "source": "gnews-combustible",
+      "sourceName": "Google News — combustible",
+      "category": "transport",
+      "severity": "info",
+      "title": "Gasolina en Puerto Rico: ¿a cuánto está hoy, 16 de septiembre? - Primera Hora",
+      "summary": "Gasolina en Puerto Rico: ¿a cuánto está hoy, 16 de septiembre?  Primera Hora",
+      "url": "https://news.google.com/rss/articles/CBMirwFBVV95cUxNdlZRdWs1MWN0ZTRDRDg4bDBzZlRhVFBkd2IySTNTLU0xanRNV2w4bjJmUWdZU1N3RGdaM3pyVmhUUk5jU1ExdW9LOVFIUzRaRmhuaENLS1g1elNxdnJfU3ZPOWstdHJ6N1dqTFNMbldqUGNKUDVNYU9ySHNaRkVlMW1HUGpyb2lSYmV6OURMVFQwMWp6eXE3dEd0RHNHN1dxVl82eXZObTk1S3k5TUh3?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T17:36:57.000Z",
+      "clusterKey": "gnews-combustible"
+    },
+    {
+      "id": "el-nuevo-dia-977fba00ad1c89f6",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "transport",
+      "severity": "info",
+      "title": "Puerto Rico se coloca entre los mejores 12 equipos del Mundial Juvenil de Surf",
+      "summary": "La delegación de 10 atletas contó con un séptimo puesto de Ryan Parkinson y una decimotercera posición de Amari Moore en sus respectivas categorías",
+      "url": "https://www.elnuevodia.com/deportes/otros-deportes/notas/puerto-rico-se-coloca-entre-los-mejores-12-equipos-del-mundial-juvenil-de-surf/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T17:22:23.000Z"
+    },
+    {
+      "id": "noticel-deef537fa6d892b2",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "transport",
+      "severity": "info",
+      "title": "Karol G, Rosalía, Drexler y Ca7riel & Amoroso empatan a 7 nominaciones en los Latin Grammy",
+      "summary": "Los Ángeles (EFE).- La colombiana Karol G y la española Rosalía brillan entre los nominados a los Latin Grammy con siete candidaturas, empatadas con los argentinos Ca7riel & Paco Amoroso y el uruguayo Jorge Drexler, aunque el mayor número de nominaciones ha sido para el compositor y productor mexicano Edgar Barrera, con 10, anunció este […]\nThe post Karol G, Rosalía, Drexler y Ca7riel & Amoroso empatan a 7 nominaciones en los Latin Grammy first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/entretenimiento/20260916/karol-g-rosalia-drexler-y-ca7riel-amoroso-empatan-a-7-nominaciones-en-los-latin-grammy/?utm_source=rss&utm_medium=rss&utm_campaign=karol-g-rosalia-drexler-y-ca7riel-amoroso-empatan-a-7-nominaciones-en-los-latin-grammy",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T17:20:02.000Z"
+    },
+    {
+      "id": "noticel-a1cd2b1e9eab15bf",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "transport",
+      "severity": "info",
+      "title": "Luego del Mundial FISU en Catar, la delegación boricua pone su mira en Armenia 2028",
+      "summary": "La delegación de estudiantes-atletas universitarios de halterofilia finalizó con medallas y grandes expectativas el Campeonato Mundial Universitario de la Federación Internacional de Deporte Universitario (FISU) de halterofilia, que se llevó a cabo en Doha, Catar.  “Ellos llegaron con una autorrealización increíble; vieron que son capaces de ampliar su visión de ser estudiantes y deportistas de levantamiento […]\nThe post Luego del Mundial FISU en Catar, la delegación boricua pone su mira en Armenia 2028 first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/deportes/20260916/luego-del-mundial-fisu-en-catar-la-delegacion-boricua-pone-su-mira-en-armenia-2028/?utm_source=rss&utm_medium=rss&utm_campaign=luego-del-mundial-fisu-en-catar-la-delegacion-boricua-pone-su-mira-en-armenia-2028",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T17:07:58.000Z"
+    },
+    {
+      "id": "primera-hora-23f42ae61c39b85d",
+      "source": "news-primera-hora",
+      "sourceName": "Primera Hora",
+      "category": "news",
+      "severity": "info",
+      "title": "Destilería Serrallés nombra nuevo CEO",
+      "summary": "Martin Guzmán asumirá la dirección de la empresa puertorriqueña y sus subsidiarias.",
+      "url": "https://www.primerahora.com/noticias/consumo/notas/destileria-serralles-nombra-nuevo-ceo/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T16:30:35.000Z"
+    },
+    {
+      "id": "noticel-c19fff8170a47bd7",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "power",
+      "severity": "info",
+      "title": "La AEE esquiva ofrecer detalles del funcionamiento de 14 unidades, según Luis J. Hernández",
+      "summary": "El portavoz de la delegación del Partido Popular Democrático (PPD) en el Senado, Luis Javier Hernández Ortiz, informó que la gerencia de la Autoridad de Energía Eléctrica (AEE), confirmó, mediante el mecanismo de Petición de Información del Senado (2026-0122), el saldo de la adquisición de 14 unidades de generación, ubicadas en las Centrales San Juan […]\nThe post La AEE esquiva ofrecer detalles del funcionamiento de 14 unidades, según Luis J. Hernández first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/ultima-hora/20260916/la-aee-esquiva-ofrecer-detalles-del-funcionamiento-de-14-unidades-segun-luis-j-hernandez/?utm_source=rss&utm_medium=rss&utm_campaign=la-aee-esquiva-ofrecer-detalles-del-funcionamiento-de-14-unidades-segun-luis-j-hernandez",
+      "regions": [
+        "san-juan-metro"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T16:10:37.000Z"
+    },
+    {
+      "id": "primera-hora-7c4eab33f70a683f",
+      "source": "news-primera-hora",
+      "sourceName": "Primera Hora",
+      "category": "weather",
+      "severity": "info",
+      "title": "Maripily lanza su segunda colaboración de maquillaje con OFRA Cosmetics",
+      "summary": "Inspirada en el glamour, su estilo expresivo y personalidad, el “Huracán Boricua” presentó su nueva colección de sombras de ojos y productos labiales.",
+      "url": "https://www.primerahora.com/estilos-de-vida/moda-estilo/notas/maripily-lanza-su-segunda-colaboracion-de-maquillaje-con-ofra-cosmetics/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T15:56:13.000Z"
+    },
+    {
+      "id": "noticel-58d72a3239abf90a",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "transport",
+      "severity": "info",
+      "title": "Junta de Planificación reduce proyecciones de crecimiento económico para 2026 y 2027",
+      "summary": "La Junta de Planificación redujo sus proyecciones de crecimiento de la economía de Puerto Rico a 0.3% para el año fiscal 2026 y 0.2%para el 2027, aunque anticipó que el Producto Bruto real se mantendrá en terreno positivo ante el impulso de la reconstrucción, el turismo y el traslado de operaciones manufactureras a la Isla. […]\nThe post Junta de Planificación reduce proyecciones de crecimiento económico para 2026 y 2027 first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/ultima-hora/20260916/junta-de-planificacion-reduce-proyecciones-de-crecimiento-economico-para-2026-y-2027/?utm_source=rss&utm_medium=rss&utm_campaign=junta-de-planificacion-reduce-proyecciones-de-crecimiento-economico-para-2026-y-2027",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T15:36:54.000Z"
+    },
+    {
+      "id": "noticel-b5dd2446c414e5e1",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "transport",
+      "severity": "info",
+      "title": "Comienza plan de reparación de alumbrado en comunidades de San Juan",
+      "summary": "Un nuevo programa de intervención comunitaria dirigido a identificar, reparar e instalar luminarias en el alumbrado público en calles municipales dentro de comunidades en San Juan comenzó a operar, anunció hoy el alcalde Miguel Romero Lugo. El plan piloto impactará las comunidades del G8, las cuales incluyen San Ciprián, Buena Vista Hato Rey, Barrio Obrero […]\nThe post Comienza plan de reparación de alumbrado en comunidades de San Juan first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/noticias/20260916/comienza-plan-de-reparacion-de-alumbrado-en-comunidades-de-san-juan/?utm_source=rss&utm_medium=rss&utm_campaign=comienza-plan-de-reparacion-de-alumbrado-en-comunidades-de-san-juan",
+      "regions": [
+        "san-juan-metro"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T15:36:34.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-3499f481c4811a15",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "news",
+      "severity": "info",
+      "title": "Premios Latin Grammy 2026: Estos son los nominados",
+      "summary": "Conoce quiénes son los más nominados, así como los puertorriqueños que recibieron menciones",
+      "url": "https://www.elnuevodia.com/entretenimiento/musica/notas/premios-latin-grammy-2026-estos-son-los-nominados/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T15:09:08.000Z"
+    },
+    {
+      "id": "primera-hora-0ffc59f20acb16fe",
+      "source": "news-primera-hora",
+      "sourceName": "Primera Hora",
+      "category": "transport",
+      "severity": "info",
+      "title": "Juan Salgado lanza “Isla de Luz”, la colección de bolsas reusables creadas junto a Walmart Puerto Rico",
+      "summary": "La cultura local y sostenibilidad se unen en la nueva colaboración entre el artista multidisciplinario y la empresa, cuya primera parte ya se puede conseguir en tiendas.",
+      "url": "https://www.primerahora.com/estilos-de-vida/moda-estilo/notas/juan-salgado-lanza-isla-de-luz-la-coleccion-de-bolsas-reusables-creadas-junto-a-walmart-puerto-rico/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T15:03:29.000Z"
+    },
+    {
+      "id": "primera-hora-ada5496df4484c2e",
+      "source": "news-primera-hora",
+      "sourceName": "Primera Hora",
+      "category": "power",
+      "severity": "info",
+      "title": "Cidra pide frenar amenaza de LUMA de desconectar sus instalaciones",
+      "summary": "Se alega que el municipio adeuda más de $300,000.",
+      "url": "https://www.primerahora.com/noticias/gobierno-politica/notas/cidra-pide-frenar-amenaza-de-luma-de-desconectar-sus-instalaciones/",
+      "regions": [
+        "central-east"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T14:58:45.000Z"
+    },
+    {
+      "id": "noticel-6179c45bb39b922e",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "power",
+      "severity": "info",
+      "title": "Cidra pide al Negociado de Energía frenar a LUMA, que quiere desconectar servicio de luz",
+      "summary": "El Municipio de Cidra solicitó al Negociado de Energía que ordene a LUMA detener cualquier gestión para suspender el servicio eléctrico de sus instalaciones mientras se atiende una controversia por $319,216.88 y se determina si la empresa cumplió con los requisitos reglamentarios previos a una desconexión, luego de que una representante del consorcio eléctrico advirtiera […]\nThe post Cidra pide al Negociado de Energía frenar a LUMA, que quiere desconectar servicio de luz first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/ultima-hora/20260916/cidra-pide-al-negociado-de-energia-frenar-a-luma-que-quiere-desconectar-servicio-de-luz/?utm_source=rss&utm_medium=rss&utm_campaign=cidra-pide-al-negociado-de-energia-frenar-a-luma-que-quiere-desconectar-servicio-de-luz",
+      "regions": [
+        "central-east"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T14:31:58.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-c75e2ae8fbcc1a8b",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "news",
+      "severity": "info",
+      "title": "Atrapados Mbappé y Vinícius en debate por tapar mensaje en una camiseta en apoyo a Ceuta",
+      "summary": "Mientras algunos sostienen que los futbolistas mostraron solidaridad con la situación de los migrantes, otros los criticaron por no respaldar a los ciudadanos de la pequeña ciudad al norte de África",
+      "url": "https://www.elnuevodia.com/deportes/futbol/notas/atrapados-mbappe-y-vinicius-en-debate-por-tapar-mensaje-en-una-camiseta-en-apoyo-a-ceuta/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T14:23:48.000Z"
+    },
+    {
+      "id": "noticel-c44b2e828a1ba7d7",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "transport",
+      "severity": "info",
+      "title": "El deshielo en Groenlandia y en la Antártida es responsable de un 25% de la subida del nivel del mar",
+      "summary": "EFE – El deshielo en Groenlandia y en la Antártida es responsable de un cuarto de la subida del nivel del mar, según un estudio publicado este miércoles gracias a una colaboración científica internacional apoyada por la Agencia Espacial Europea (ESA) y la estadounidense Administración Nacional de Aeronáutica y el Espacio (NASA). «Las capas de […]\nThe post El deshielo en Groenlandia y en la Antártida es responsable de un 25% de la subida del nivel del mar first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/ultima-hora/20260916/el-deshielo-en-groenlandia-y-en-la-antartida-es-responsable-de-un-25-de-la-subida-del-nivel-del-mar/?utm_source=rss&utm_medium=rss&utm_campaign=el-deshielo-en-groenlandia-y-en-la-antartida-es-responsable-de-un-25-de-la-subida-del-nivel-del-mar",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T14:21:37.000Z"
+    },
+    {
+      "id": "noticel-bd570f5980cd924e",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "transport",
+      "severity": "info",
+      "title": "La brecha entre Estados Unidos y Europa en materia de IA, en su punto más crítico",
+      "summary": "Madrid (EFE).- La brecha que existe entre Estados Unidos y la UE en el desarrollo de la IA se encuentra en el punto más crítico de los últimos años, y si es abismal la diferencia entre el tamaño de las empresas de uno y otro continente, aún más enorme es la disparidad en materia de […]\nThe post La brecha entre Estados Unidos y Europa en materia de IA, en su punto más crítico first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/noticias/20260916/la-brecha-entre-estados-unidos-y-europa-en-materia-de-ia-en-su-punto-mas-critico/?utm_source=rss&utm_medium=rss&utm_campaign=la-brecha-entre-estados-unidos-y-europa-en-materia-de-ia-en-su-punto-mas-critico",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T14:19:07.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-e1dff031987bb65c",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "transport",
+      "severity": "info",
+      "title": "Espacios Abiertos: Up to 1 million Puerto Ricans could lose access to Vital without new federal funding",
+      "summary": "The study group published a report analyzing the consequences of the Medicaid funding fiscal cliff",
+      "url": "https://www.elnuevodia.com/english/news/story/espacios-abiertos-up-to-1-million-puerto-ricans-could-lose-access-to-vital-without-new-federal-funding/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T14:10:47.000Z"
+    },
+    {
+      "id": "noticel-4e30d5cf9f9b7197",
+      "source": "news-noticel",
+      "sourceName": "NotiCel",
+      "category": "transport",
+      "severity": "info",
+      "title": "Von der Leyen ofrece a Canadá ser el primer «miembro asociado» de la Unión Europea",
+      "summary": "EFE – La presidenta de la Comisión Europea, Ursula von der Leyen, propuso este miércoles abrir la puerta a Canadá para convertirse en el primer «miembro asociado» de la Unión Europea (UE), en su discurso sobre el Estado de la Unión ante el Parlamento Europeo y en presencia del primer ministro canadiense, Mark Carney. «Dije […]\nThe post Von der Leyen ofrece a Canadá ser el primer «miembro asociado» de la Unión Europea first appeared on NotiCel - La verdad como es - Noticias de Puerto Rico - NOTICEL.",
+      "url": "https://noticel.com/ultima-hora/20260916/von-der-leyen-ofrece-a-canada-ser-el-primer-miembro-asociado-de-la-union-europea/?utm_source=rss&utm_medium=rss&utm_campaign=von-der-leyen-ofrece-a-canada-ser-el-primer-miembro-asociado-de-la-union-europea",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T14:06:45.000Z"
+    },
+    {
+      "id": "el-nuevo-dia-410fb2166eb80ba8",
+      "source": "news-el-nuevo-dia",
+      "sourceName": "El Nuevo Día",
+      "category": "power",
+      "severity": "info",
+      "title": "“Eso no es correcto”: LUMA rechaza acusación de Jenniffer González sobre campaña paga contra Josué Colón",
+      "summary": "En entrevista con “Lo de Hoy”, el vicepresidente ejecutivo José Pérez también negó que la empresa dejara sin servicio deliberadamente a Plaza Las Américas",
+      "url": "https://www.elnuevodia.com/noticias/locales/notas/eso-no-es-correcto-luma-rechaza-acusacion-de-jenniffer-gonzalez-sobre-campana-paga-contra-josue-colon/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T14:06:17.000Z"
+    },
+    {
+      "id": "usgs-cd9fdbebec946d15",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 93 km N of San Juan, Puerto Rico",
+      "summary": "Depth 19.9 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531913",
+      "regions": [
+        "san-juan-metro"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T13:29:27.910Z",
+      "metrics": {
+        "magnitude": 3.23,
+        "felt": 0
+      }
+    },
+    {
+      "id": "gnews-c0a8623a0d691af6",
+      "source": "gnews-salud",
+      "sourceName": "Google News — salud",
+      "category": "health",
+      "severity": "info",
+      "title": "En riesgo la salud de los puertorriqueños por posible recorte de 90% en fondos de Medicaid - Metro Puerto Rico",
+      "summary": "En riesgo la salud de los puertorriqueños por posible recorte de 90% en fondos de Medicaid  Metro Puerto Rico",
+      "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxOa0xUVFp5cGxPcEpTUGIxSEFWbUVib2w4ZDBsWlRVX05fZG5zdm9kTmtxekZrWkhPajYzVFVyZnc3MzhFUkY0aG5TbENwM2pDUmk2VjRLVmdwcjNCd2lVMV9zV3g3NXljRUFFalhPWWdlMnpydmJNVnVINUFSeXhuOWtLUFRGUmNsU3k0RjR5V2FQRDlVSzU0cHU4MEh6VlJVZ3J5T1VzaHh2LU80bzhwbDBBTUlqX1JUMGszVmp1Z055UUsyQnFTS2s4bw?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T11:28:22.000Z",
+      "clusterKey": "gnews-salud"
+    },
+    {
+      "id": "gnews-e4ea062c84bf350e",
+      "source": "gnews-clima",
+      "sourceName": "Google News — clima",
+      "category": "weather",
+      "severity": "info",
+      "title": "¿Cómo están los embalses hoy? Estos son los niveles mientras se acerca amplia onda tropical - Primera Hora",
+      "summary": "¿Cómo están los embalses hoy? Estos son los niveles mientras se acerca amplia onda tropical  Primera Hora",
+      "url": "https://news.google.com/rss/articles/CBMi3gFBVV95cUxNZzJ2U0JkdWl2R3ltOVluWEVJajl3YkxrTFc5LUZ3WVJvNDZnQ1ZDX0ZyeXZhUTRBbmZuNmhyVDZacFA4cUpMelMteEN6UzNUZHNMWFVmdERJQXQtc0J4TktTRTRyVzBMSjJjeWRDSWNtRjVCSzZGWHVFbXpHcWVsRVE5ODl0S0JRM0Y2ZXg5Tks3LXdLYUxrZ0xxajcycUhjQ0p3elQ3YjJWckJhZnBpTEhSZjdxZFBjTFpLSS1kalpEb0pFQURqMmQ0cFYxNG5QckNoTE5IeGF3R0hYT3c?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T11:08:22.000Z",
+      "clusterKey": "gnews-clima"
+    },
+    {
+      "id": "gnews-29a8ddceba775322",
+      "source": "gnews-salud",
+      "sourceName": "Google News — salud",
+      "category": "transport",
+      "severity": "info",
+      "title": "Medicaid en Puerto Rico: a un precipicio fiscal de casi $5,000 millones - Periódico La Perla",
+      "summary": "Medicaid en Puerto Rico: a un precipicio fiscal de casi $5,000 millones  Periódico La Perla",
+      "url": "https://news.google.com/rss/articles/CBMirAFBVV95cUxQeFZjaUsxN21vR3Z2TzNNb1J3eTNGU0NTdFRWZEc1QWswZnhMYllyTnNqTXVxV3BiNVBKbGE1czdDR0J2LXBEZGw4ZnhIeXdiNFRXZ25BRkN4TDZsOXplSWU4TmRsRjdtVUEzYWx6TW54UFRHQ2ZKRUo2aXU3cm5QZ2FocG1PRnpXQ1dwekJGMlg4YmpMeW1tVUlCeWdtS2U5bHRyd0VGYUhkY3l0?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-16T09:55:42.000Z",
+      "clusterKey": "gnews-salud"
+    },
+    {
+      "id": "usgs-c624bbebe8ad39ca",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.9 — 18 km W of Rincón, Puerto Rico",
+      "summary": "Depth 8.2 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531888",
+      "regions": [
+        "west"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T02:09:41.730Z",
+      "metrics": {
+        "magnitude": 2.89,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-c65142ebe8d35a1a",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.3 — 76 km NNE of Vieques, Puerto Rico",
+      "summary": "Depth 6.6 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531853",
+      "regions": [
+        "vieques"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-16T00:05:41.730Z",
+      "metrics": {
+        "magnitude": 3.3,
+        "felt": 0
+      }
+    },
+    {
+      "id": "gnews-32ebfad0d3354b69",
+      "source": "gnews-salud",
+      "sourceName": "Google News — salud",
+      "category": "health",
+      "severity": "info",
+      "title": "Puerto Rico enfrentaría una crisis de salud si el Congreso no evita el precipicio fiscal de Medicaid en 2027 - Sin Comillas",
+      "summary": "Puerto Rico enfrentaría una crisis de salud si el Congreso no evita el precipicio fiscal de Medicaid en 2027  Sin Comillas",
+      "url": "https://news.google.com/rss/articles/CBMizgFBVV95cUxPYTFMcVpyQzFILVBPV1RKZFFkbng1Q3ZHYksxUkFnaWpEbFV0X0FSdVUwekRjbE9iTjRjMHpOZm5kQTJLSXpGbVJ4cjRnNVFWOVlXbEd4bWhtMzZIMVVPaEw3czN3N1U0bWtOWmJ3TzFQT3A1aFYxTlh2UGxZYmsxR2JySG13N28xZEdZVHNlcWFBWHVEUmY4aDZzczFOZWlaa3EtQlV6UmE2enlUcjdYUHFOUXhxSUR6OU9reVV6a214Q2NhUFZxZzl3d1E1dw?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-15T18:18:28.000Z",
+      "clusterKey": "gnews-salud"
+    },
+    {
+      "id": "usgs-c6392febe8bea7f0",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.9 — 5 km E of La Parguera, Puerto Rico",
+      "summary": "Depth 13.2 km. 1 felt reports.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531828",
+      "regions": [
+        "southwest"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-15T06:21:48.340Z",
+      "metrics": {
+        "magnitude": 2.86,
+        "felt": 1
+      }
+    },
+    {
+      "id": "usgs-c643b1ebe8c7d95b",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 9 km SE of Cruz Bay, U.S. Virgin Islands",
+      "summary": "Depth 125.5 km. 1 felt reports.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531818",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-15T03:44:35.270Z",
+      "metrics": {
+        "magnitude": 3.36,
+        "felt": 1
+      }
+    },
+    {
+      "id": "gnews-622fea093d531c30",
+      "source": "gnews-apagon",
+      "sourceName": "Google News — apagon",
+      "category": "power",
+      "severity": "info",
+      "title": "LUMA Energy rechaza acusación de gobernadora de Puerto Rico - Prensa Latina",
+      "summary": "LUMA Energy rechaza acusación de gobernadora de Puerto Rico  Prensa Latina",
+      "url": "https://news.google.com/rss/articles/CBMiogFBVV95cUxQcUM0dFM1S3gybDV5M3kxQlQwVl93cWIxemZHSENVZU80cXdyM1BfTEx6Y01nN1ZGSVdOM0FvaVJadGlsMm5ZX3ExeENQQzlIQzFzT2tZazlLeEV0dHVwZ3BDX0dlSXF4dWV4Q2tjTnhCYmU3aVV6elBaNEN3aUdidmw5SjdVUDNVcHhqZElBeXl4WjFPdFJnZVBKcmlTU3RRdXc?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-15T01:36:00.000Z",
+      "clusterKey": "gnews-apagon"
+    },
+    {
+      "id": "gnews-fe2c58cbede050d7",
+      "source": "gnews-sismo",
+      "sourceName": "Google News — sismo",
+      "category": "seismic",
+      "severity": "info",
+      "title": "Temblor en Estados Unidos EN VIVO hoy, lunes 14 de septiembre 2026: hora exacta, magnitud y dónde fue el epicentro del último sismo del USGS - Gestión",
+      "summary": "Temblor en Estados Unidos EN VIVO hoy, lunes 14 de septiembre 2026: hora exacta, magnitud y dónde fue el epicentro del último sismo del USGS  Gestión",
+      "url": "https://news.google.com/rss/articles/CBMingJBVV95cUxQZFJZUHRQdEMyQjlFeF9pT0MtVWFmQU1sNzZTNkdLbGdjSUtTMVZwZTVPTUZiMEZhQ3haZm0zUG5QNXFSazFfZzlaQVFQMXZ5OUJyWU5pX1laNnNqaTZCLXZ1M3lzZlEyQ3dteUhrSEYxWjRIT3B5ZDVCeFVtMWNYUFpDYUdsbXZoVVh0VENSWXU2ZGE5bDBwRHJGdTVpR29PbF9aVEFEenJGUXBZQjlkMG5BSjVMUWRMaE5WaG5vU1N0amdPVnF4bE15bnZibmljb0hOajA4XzB0bTdIQ25mbGY5YlQ5X1JaN3lDWEF0aE1VX3hvQTVqMmZIMXRDdVd2LUpCYTE2QjQxTWl0eTJEZ3ZQdVRYZ2RkNGxSeFJB?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-15T01:00:00.000Z",
+      "clusterKey": "gnews-sismo"
+    },
+    {
+      "id": "usgs-547626eba7fb4ff2",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.0 — 15 km N of Arecibo, Puerto Rico",
+      "summary": "Depth 76.3 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531798",
+      "regions": [
+        "northwest"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-14T21:15:13.770Z",
+      "metrics": {
+        "magnitude": 2.96,
+        "felt": 0
+      }
+    },
+    {
+      "id": "gnews-c71b3d7dfedf6da4",
+      "source": "gnews-apagon",
+      "sourceName": "Google News — apagon",
+      "category": "power",
+      "severity": "info",
+      "title": "LUMA niega responsabilidad en apagones del fin de semana - Telemundo Puerto Rico",
+      "summary": "LUMA niega responsabilidad en apagones del fin de semana  Telemundo Puerto Rico",
+      "url": "https://news.google.com/rss/articles/CBMivgFBVV95cUxQM3BVT05LdmtLWWNlMnljMEtuWHBGSGUwMG5WNlFCcGI5VEZnZkt2bVBWcWdPVGNYSjBYWGViZVRtRjdoOHpsRU52TUlzRVZ3amlfeF85d29TMVJ2dmZRY2d3V0lNOW1QeE5UYVQ1ZzBCbE9SNFFCUlVGOXE2enNLZEJiVUpNdWdQR3doTEN3UjFJSEtYNU5wMUc5dW9lOTdlUV9vdmFxbktpOGhSNkhraVdweklpU3BqTmxFUjdR0gHGAUFVX3lxTFBTeEFZbzZxRUxUQ0dtU19ZMDRXdTM3U2lQZHZncnZPd2dlNzZHdXRZQ2YydDlwU0xwaDJhVG1jbXFBSU10UDV1NUlhMW5vN3cyMjZVaWFMTHhxVDJ3UEkxYkFqU1l1T2IxSVBBOXIxUllDalgzNkZSY2hROW8xdjdmdUVRRHNnc2o4QlV4bEtobk5iand2T3ZyZmtYMUVJdllTNjJ6QTBHelRBYVVSVWZoZk9STUxLQWtBcVNCdUpkVGk4bWxCUQ?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-14T20:08:45.000Z",
+      "clusterKey": "gnews-apagon"
+    },
+    {
+      "id": "usgs-54799ceba7fe4e4b",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 58 km NNE of Punta Cana, Dominican Republic",
+      "summary": "Depth 13.9 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531788",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-14T19:44:26.560Z",
+      "metrics": {
+        "magnitude": 3.2,
+        "felt": 0
+      }
+    },
+    {
+      "id": "cpi-57f802b09c891574",
+      "source": "news-cpi",
+      "sourceName": "Centro de Periodismo Investigativo",
+      "category": "transport",
+      "severity": "info",
+      "title": "CPI Sues ASES Over Vital Plan Coverage and Cost Data",
+      "summary": "For two months, the Puerto Rico Health Insurance Administration has failed to provide public data, such as the number of people covered by the Vital Plan for catastrophic illnesses and special coverage, including cancer.",
+      "url": "https://periodismoinvestigativo.com/2026/09/cpi-sues-ases-vital-coverage/",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-14T16:55:00.000Z"
+    },
+    {
+      "id": "gnews-1dc4922aaf64eaf9",
+      "source": "gnews-apagon",
+      "sourceName": "Google News — apagon",
+      "category": "power",
+      "severity": "info",
+      "title": "Nuevo apagón deja a más de 179,000 clientes de LUMA sin luz - Primera Hora",
+      "summary": "Nuevo apagón deja a más de 179,000 clientes de LUMA sin luz  Primera Hora",
+      "url": "https://news.google.com/rss/articles/CBMivAFBVV95cUxQSDhfaTRPbVhLcXo1TjFGN1lhQ3NQendqVlA0VjdMR19DYXlQb1BTTXpoOXJHWWg5bDJsY3lDQkladHdLTHU5TS1xYTI5TWhRZkVjX3pvT0szS292RFYzSW1KNXA3dXVRU0FlWFRCMnVJRWFHYi1RbGplZ2NEUWh3Q0w2aVN2aEZsZk1iWFItTmdqOTFHQkFkTXlzc05qaExOc2RmU0NvbjR3N01nRVpRdFZOSVppLWhGci1uMQ?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-14T15:59:00.000Z",
+      "clusterKey": "gnews-apagon"
+    },
+    {
+      "id": "gnews-ca3f92fe61d73921",
+      "source": "gnews-salud",
+      "sourceName": "Google News — salud",
+      "category": "health",
+      "severity": "info",
+      "title": "Sanjay Gupta estará en Puerto Rico para hablar de la salud cerebral, el dolor y de cómo llevar - Medicina y Salud Pública",
+      "summary": "Sanjay Gupta estará en Puerto Rico para hablar de la salud cerebral, el dolor y de cómo llevar  Medicina y Salud Pública",
+      "url": "https://news.google.com/rss/articles/CBMiiwJBVV95cUxOZGtIREdLV19uT0IxUkhnTV8yc3ZmR0dJNGdHUEhHQ0NhVFRfSjVKTnlPeXZIcTh5bDBvbFk5RlFqOW9SNDVnOHViU3ZpNDJPaGctMEFNR2l5eEV6NUUwSThCYVE0V3RReVFzZE91NzFZT0Job0FBbThKNy0xU3VNbVBocFhmajRNMmJEZ1Y1ajFjZFJod3RTRTBkM2FxVGZudHFvYlV0MFBsOVVxeWJYWlJxcFNsZjNna0cxNHJFZDJrX1pQaXJkdUVIRlY5aHdtQzJiR0NkQVBrbTFwcnNaTmF3ZFFjWW5kLWdYUHU5ZDVyLTJnTGlfZUR1WFVzSV8tdVlMblBHaU1JSUXSAYsCQVVfeXFMTmRrSERHS1dfbk9CMVJIZ01fMnN2ZkdHSTRnR1BIR0NDYVRUX0o1Sk55T3l2SHE4eWwwb2xZOUZRajlvUjQ1Zzh1YlN2aTQyT2hnLTBBTUdpeXhFejVFMEk4QmFRNFd0UXlRc2RPdTcxWU9CaG9BQW04SjctMVN1TW1QaHBYZmo0TTJiRGdWNWoxY2RSaHd0U0UwZDNhcVRmbnRxb2JVdDBQbDlVcXliWFpScXBTbGYzZ2tHMTRyRWQya19aUGlyZHVFSEZWOWh3bUMyYkdDZEFQa20xcHJzWk5hd2RRY1luZC1nWFB1OWQ1ci0yZ0xpX2VEdVhVc0lfLXVZTG5QR2lNSUlF?oc=5",
+      "regions": [
+        "islandwide"
+      ],
+      "lang": "es",
+      "issuedAt": "2026-09-14T09:00:00.000Z",
+      "clusterKey": "gnews-salud"
+    },
+    {
+      "id": "usgs-4d19fceba42ebc38",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 46 km NNW of San Antonio, Puerto Rico",
+      "summary": "Depth 5.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531693",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-13T16:10:58.500Z",
+      "metrics": {
+        "magnitude": 3.42,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-4d12f4eba4288ff2",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 122 km N of Culebra, Puerto Rico",
+      "summary": "Depth 80.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531673",
+      "regions": [
+        "culebra"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-13T14:06:10.860Z",
+      "metrics": {
+        "magnitude": 3.22,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-db069bb6bb6c15af",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.5 — 137 km NNE of Vieques, Puerto Rico",
+      "summary": "Depth 16.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026256003",
+      "regions": [
+        "vieques"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-13T10:59:51.590Z",
+      "metrics": {
+        "magnitude": 3.53,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-4d01f4eba41a1cbf",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 77 km NE of Cruz Bay, U.S. Virgin Islands",
+      "summary": "Depth 10.3 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531623",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-13T03:34:13.230Z",
+      "metrics": {
+        "magnitude": 3.39,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-4cfb71eba414d278",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 130 km NNE of Vieques, Puerto Rico",
+      "summary": "Depth 7.9 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531608",
+      "regions": [
+        "vieques"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-13T03:23:41.300Z",
+      "metrics": {
+        "magnitude": 3.4,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-db069ab6bb6c13fc",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.6 — 141 km NNW of Charlotte Amalie, U.S. Virgin Islands",
+      "summary": "Depth 13.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026256002",
+      "regions": [
+        "usvi"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-13T03:23:40.560Z",
+      "metrics": {
+        "magnitude": 3.63,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-db069db6bb6c1915",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.5 — 59 km N of Culebra, Puerto Rico",
+      "summary": "Depth 16.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026256001",
+      "regions": [
+        "culebra"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-13T03:00:07.490Z",
+      "metrics": {
+        "magnitude": 3.51,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-669bf7ebb27e937b",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 157 km NNE of Vieques, Puerto Rico",
+      "summary": "Depth 21.6 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531573",
+      "regions": [
+        "vieques"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T23:01:48.740Z",
+      "metrics": {
+        "magnitude": 3.4,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-66986febb27b768c",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 141 km NNE of Vieques, Puerto Rico",
+      "summary": "Depth 72.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531543",
+      "regions": [
+        "vieques"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T20:54:55.100Z",
+      "metrics": {
+        "magnitude": 3.41,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7b06b3b03c920eca",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.6 — 74 km NNE of Cruz Bay, U.S. Virgin Islands",
+      "summary": "Depth 8.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026255005",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T16:51:23.250Z",
+      "metrics": {
+        "magnitude": 3.56,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7b06b4b03c92107d",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.6 — 119 km NE of Punta Cana, Dominican Republic",
+      "summary": "Depth 69.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026255004",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T11:48:02.770Z",
+      "metrics": {
+        "magnitude": 3.6,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-5d63beebad1d4cb0",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.6 — 1 km SSE of Indios, Puerto Rico",
+      "summary": "Depth 14.4 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531473",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T09:52:33.700Z",
+      "metrics": {
+        "magnitude": 2.6,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7b06adb03c920498",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.5 — 86 km ENE of Punta Cana, Dominican Republic",
+      "summary": "Depth 76.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026255003",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T08:58:42.130Z",
+      "metrics": {
+        "magnitude": 3.51,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7b06aeb03c92064b",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.5 — 72 km NNE of Cruz Bay, U.S. Virgin Islands",
+      "summary": "Depth 9.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026255002",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T06:45:20.260Z",
+      "metrics": {
+        "magnitude": 3.53,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7b06afb03c9207fe",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.6 — 139 km NNE of Suárez, Puerto Rico",
+      "summary": "Depth 19.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026255001",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T04:01:16.630Z",
+      "metrics": {
+        "magnitude": 3.63,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-76e5b9ebbb6d23f3",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 102 km N of Charlotte Amalie, U.S. Virgin Islands",
+      "summary": "Depth 61.5 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531393",
+      "regions": [
+        "usvi"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T02:47:25.290Z",
+      "metrics": {
+        "magnitude": 3.4,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7b06b0b03c9209b1",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.5 — 65 km N of Charlotte Amalie, U.S. Virgin Islands",
+      "summary": "Depth 79.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026255000",
+      "regions": [
+        "usvi"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-12T02:43:30.330Z",
+      "metrics": {
+        "magnitude": 3.53,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-76fa41ebbb7eb415",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 102 km NNE of Vieques, Puerto Rico",
+      "summary": "Depth 20.2 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531333",
+      "regions": [
+        "vieques"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-11T11:40:29.420Z",
+      "metrics": {
+        "magnitude": 3.41,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-c5dca4a7495c77c0",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.8 — 113 km N of Culebra, Puerto Rico",
+      "summary": "Depth 90.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026254000",
+      "regions": [
+        "culebra"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-11T08:12:14.440Z",
+      "metrics": {
+        "magnitude": 3.75,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-6f89a8ebb7a0bab4",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.9 — 55 km N of Charlotte Amalie, U.S. Virgin Islands",
+      "summary": "Depth 75.6 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531293",
+      "regions": [
+        "usvi"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-10T16:08:52.630Z",
+      "metrics": {
+        "magnitude": 2.89,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-6f9e10ebb7b21476",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 54 km ENE of Cruz Bay, U.S. Virgin Islands",
+      "summary": "Depth 58.9 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531273",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-10T09:48:30.490Z",
+      "metrics": {
+        "magnitude": 3.16,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-6f9395ebb7a8eef0",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.1 — 71 km NNE of Cruz Bay, U.S. Virgin Islands",
+      "summary": "Depth 8.8 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531248",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-09T19:01:35.180Z",
+      "metrics": {
+        "magnitude": 3.1,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-6faba8ebb7bda11a",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.3 — 64 km SW of Pole Ojea, Puerto Rico",
+      "summary": "Depth 16.1 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531233",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-09T05:33:14.170Z",
+      "metrics": {
+        "magnitude": 3.34,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-6fa498ebb7b7673c",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.5 — 15 km W of Pole Ojea, Puerto Rico",
+      "summary": "Depth 4.4 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531213",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-09T00:04:42.640Z",
+      "metrics": {
+        "magnitude": 2.55,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-6fa118ebb7b457e5",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 70 km ENE of Punta Cana, Dominican Republic",
+      "summary": "Depth 92.7 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531203",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-08T19:50:10.670Z",
+      "metrics": {
+        "magnitude": 3.23,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-88bd9bebc5ae630e",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.0 — 56 km N of Charlotte Amalie, U.S. Virgin Islands",
+      "summary": "Depth 20.1 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531163",
+      "regions": [
+        "usvi"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-08T01:58:36.170Z",
+      "metrics": {
+        "magnitude": 3.03,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-88b310ebc5a52258",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 27 km N of Isabela, Puerto Rico",
+      "summary": "Depth 13.9 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531158",
+      "regions": [
+        "northwest"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-07T20:10:15.820Z",
+      "metrics": {
+        "magnitude": 3.17,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-88b68bebc5a82930",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.0 — 38 km N of Charlotte Amalie, U.S. Virgin Islands",
+      "summary": "Depth 77.5 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531143",
+      "regions": [
+        "usvi"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-07T10:41:28.130Z",
+      "metrics": {
+        "magnitude": 3.02,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-88c78bebc5b69c63",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 7 km WNW of Maricao, Puerto Rico",
+      "summary": "Depth 121.9 km. 1 felt reports.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531133",
+      "regions": [
+        "west"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-07T08:08:04.030Z",
+      "metrics": {
+        "magnitude": 3.18,
+        "felt": 1
+      }
+    },
+    {
+      "id": "usgs-46a115c8a2eca2b7",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.6 — 8 km SSW of Salvaleón de Higüey, Dominican Republic",
+      "summary": "Depth 143.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026250001",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-07T02:46:38.930Z",
+      "metrics": {
+        "magnitude": 3.64,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7fb4faebc0758f4d",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 38 km NE of Cruz Bay, U.S. Virgin Islands",
+      "summary": "Depth 7.3 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531063",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-06T03:55:41.650Z",
+      "metrics": {
+        "magnitude": 3.41,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7fadf3ebc06f64ba",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.7 — 20 km SW of Stella, Puerto Rico",
+      "summary": "Depth 14.6 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531008",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-05T17:25:55.160Z",
+      "metrics": {
+        "magnitude": 2.7,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-2a59741443675e5c",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.7 — 117 km N of San Juan, Puerto Rico",
+      "summary": "Depth 11.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr2026248001",
+      "regions": [
+        "san-juan-metro"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-05T07:54:23.150Z",
+      "metrics": {
+        "magnitude": 3.68,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-e6f07ff48788f38d",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.6 — 6 km SW of Guánica, Puerto Rico",
+      "summary": "Depth 9.7 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530943",
+      "regions": [
+        "southwest"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-05T03:14:57.290Z",
+      "metrics": {
+        "magnitude": 2.57,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-e6ecf7f48785d69e",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.4 — 76 km NNW of San Antonio, Puerto Rico",
+      "summary": "Depth 6.0 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530933",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-05T03:10:36.910Z",
+      "metrics": {
+        "magnitude": 3.36,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-7fc8faebc0863857",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.1 — 76 km NNW of San Antonio, Puerto Rico",
+      "summary": "Depth 3.5 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71531083",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-05T03:09:06.980Z",
+      "metrics": {
+        "magnitude": 3.06,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-e6e5f2f4877faf71",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.3 — 79 km NNW of San Antonio, Puerto Rico",
+      "summary": "Depth 4.2 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530918",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-05T03:07:04.540Z",
+      "metrics": {
+        "magnitude": 3.27,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-e6e2ecf4877d6f68",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.7 — 3 km ENE of Sabana Grande, Puerto Rico",
+      "summary": "Depth 20.3 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530908",
+      "regions": [
+        "southwest"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-05T02:16:18.000Z",
+      "metrics": {
+        "magnitude": 2.67,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-f010a1f48cd58162",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.9 — 65 km N of Tierras Nuevas Poniente, Puerto Rico",
+      "summary": "Depth 11.1 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530898",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-04T23:37:18.230Z",
+      "metrics": {
+        "magnitude": 2.94,
+        "felt": 0
+      }
+    },
+    {
+      "id": "caricof-633bbed75c8e3697",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "info",
+      "title": "Monthly Rainfall July 2026",
+      "summary": "The post Monthly Rainfall July 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/monthly-rainfall-july-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-04T19:27:59.000Z"
+    },
+    {
+      "id": "caricof-633bbad75c8e2fcb",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "info",
+      "title": "SPI Monitor July 2026",
+      "summary": "July 2026 Conditions throughout the eastern Caribbean were mostly normal to below normal during the month of July, apart from Trinidad which was mostly normal ranging to slightly wet in the southwest and to slightly dry in the extreme northeast. Tobago, Barbados and St Thomas were slight to moderately dry; Grenada normal; St Vincent extremely […]\nThe post SPI Monitor July 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/spi-monitor-july-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-04T19:26:11.000Z"
+    },
+    {
+      "id": "caricof-634cbbd75c9ca4b1",
+      "source": "caricof",
+      "sourceName": "CariCOF / CIMH Barbados",
+      "category": "climate",
+      "severity": "info",
+      "title": "SPI Change July 2026",
+      "summary": "The post SPI Change July 2026 appeared first on Caribbean Regional Climate Centre.",
+      "url": "https://rcc.cimh.edu.bb/spi-change-july-2026/",
+      "regions": [
+        "caribbean"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-04T19:13:18.000Z"
+    },
+    {
+      "id": "usgs-f01417f48cd87fbb",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 67 km NW of San Antonio, Puerto Rico",
+      "summary": "Depth 5.9 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530888",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-04T14:06:56.420Z",
+      "metrics": {
+        "magnitude": 3.21,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-effc28f48cc40abd",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M2.9 — 3 km SSE of Magas Arriba, Puerto Rico",
+      "summary": "Depth 10.3 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530873",
+      "regions": [
+        "offshore"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-04T10:58:08.490Z",
+      "metrics": {
+        "magnitude": 2.94,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-f0069ff48ccd2977",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 7 km ENE of Fajardo, Puerto Rico",
+      "summary": "Depth 95.9 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530848",
+      "regions": [
+        "northeast"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-04T08:31:22.740Z",
+      "metrics": {
+        "magnitude": 3.23,
+        "felt": 0
+      }
+    },
+    {
+      "id": "usgs-603834f4cc3b0e3f",
+      "source": "usgs-quakes",
+      "sourceName": "U.S. Geological Survey",
+      "category": "seismic",
+      "severity": "info",
+      "title": "M3.2 — 8 km WNW of Maricao, Puerto Rico",
+      "summary": "Depth 126.3 km.",
+      "url": "https://earthquake.usgs.gov/earthquakes/eventpage/pr71530758",
+      "regions": [
+        "west"
+      ],
+      "lang": "en",
+      "issuedAt": "2026-09-03T21:21:33.570Z",
+      "metrics": {
+        "magnitude": 3.19,
+        "felt": 0
+      }
+    }
+  ],
+  "health": [
+    {
+      "id": "caricof",
+      "name": "CariCOF Caribbean climate",
+      "homepage": "https://rcc.cimh.edu.bb/",
+      "category": "climate",
+      "ok": true,
+      "latencyMs": 1706,
+      "signalCount": 10
+    },
+    {
+      "id": "cdc-travel",
+      "name": "CDC travel health notices",
+      "homepage": "https://wwwnc.cdc.gov/travel/notices",
+      "category": "health",
+      "ok": true,
+      "latencyMs": 2025,
+      "signalCount": 12
+    },
+    {
+      "id": "cpc-enso",
+      "name": "NOAA ENSO status",
+      "homepage": "https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/",
+      "category": "climate",
+      "ok": true,
+      "latencyMs": 1806,
+      "signalCount": 1
+    },
+    {
+      "id": "fcc-dirs",
+      "name": "FCC DIRS reports",
+      "homepage": "https://www.fcc.gov/disaster-information-reporting-system-dirs",
+      "category": "comms",
+      "ok": false,
+      "latencyMs": 1451,
+      "signalCount": 0,
+      "error": "fcc.gov responded 403."
+    },
+    {
+      "id": "fema-declarations",
+      "name": "FEMA OpenFEMA",
+      "homepage": "https://www.fema.gov/about/openfema/data-sets",
+      "category": "official",
+      "ok": true,
+      "latencyMs": 1837,
+      "signalCount": 10
+    },
+    {
+      "id": "gdacs-caribbean",
+      "name": "GDACS Caribbean",
+      "homepage": "https://www.gdacs.org/",
+      "category": "regional",
+      "ok": true,
+      "latencyMs": 4835,
+      "signalCount": 1
+    },
+    {
+      "id": "gdelt-queries",
+      "name": "GDELT news radar",
+      "homepage": "https://www.gdeltproject.org/",
+      "category": "regional",
+      "ok": true,
+      "latencyMs": 20005,
+      "signalCount": 0
+    },
+    {
+      "id": "google-news-queries",
+      "name": "Google News crisis queries",
+      "homepage": "https://news.google.com/",
+      "category": "news",
+      "ok": true,
+      "latencyMs": 10050,
+      "signalCount": 12
+    },
+    {
+      "id": "ioda-pr",
+      "name": "IODA connectivity",
+      "homepage": "https://ioda.inetintel.cc.gatech.edu/country/PR",
+      "category": "comms",
+      "ok": true,
+      "latencyMs": 2314,
+      "signalCount": 3
+    },
+    {
+      "id": "luma-notables",
+      "name": "LUMA notable outages",
+      "homepage": "https://lumapr.com/notable-outages/?lang=en",
+      "category": "power",
+      "ok": true,
+      "latencyMs": 1603,
+      "signalCount": 0
+    },
+    {
+      "id": "luma-outages",
+      "name": "LUMA Energy outages",
+      "homepage": "https://miluma.lumapr.com/outages/outageMap",
+      "category": "power",
+      "ok": true,
+      "latencyMs": 1661,
+      "signalCount": 7
+    },
+    {
+      "id": "news-cpi",
+      "name": "Centro de Periodismo Investigativo (local news)",
+      "homepage": "https://periodismoinvestigativo.com",
+      "category": "news",
+      "ok": true,
+      "latencyMs": 1807,
+      "signalCount": 1
+    },
+    {
+      "id": "news-el-nuevo-dia",
+      "name": "El Nuevo Día (local news)",
+      "homepage": "https://www.elnuevodia.com",
+      "category": "news",
+      "ok": true,
+      "latencyMs": 1716,
+      "signalCount": 10
+    },
+    {
+      "id": "news-el-vocero",
+      "name": "El Vocero (local news)",
+      "homepage": "https://www.elvocero.com",
+      "category": "news",
+      "ok": false,
+      "latencyMs": 2051,
+      "signalCount": 0,
+      "error": "www.elvocero.com responded 404."
+    },
+    {
+      "id": "news-noticel",
+      "name": "NotiCel (local news)",
+      "homepage": "https://noticel.com",
+      "category": "news",
+      "ok": true,
+      "latencyMs": 1833,
+      "signalCount": 10
+    },
+    {
+      "id": "news-primera-hora",
+      "name": "Primera Hora (local news)",
+      "homepage": "https://www.primerahora.com",
+      "category": "news",
+      "ok": true,
+      "latencyMs": 1699,
+      "signalCount": 7
+    },
+    {
+      "id": "news-teleonce",
+      "name": "TeleOnce (local news)",
+      "homepage": "https://www.teleonce.com",
+      "category": "news",
+      "ok": true,
+      "latencyMs": 1939,
+      "signalCount": 0
+    },
+    {
+      "id": "nhc-outlook",
+      "name": "NHC Atlantic outlook",
+      "homepage": "https://www.nhc.noaa.gov/gtwo.php",
+      "category": "climate",
+      "ok": true,
+      "latencyMs": 1644,
+      "signalCount": 2
+    },
+    {
+      "id": "nhc-storms",
+      "name": "National Hurricane Center",
+      "homepage": "https://www.nhc.noaa.gov/",
+      "category": "weather",
+      "ok": true,
+      "latencyMs": 1641,
+      "signalCount": 0
+    },
+    {
+      "id": "noaa-coops-sju",
+      "name": "NOAA tides — San Juan",
+      "homepage": "https://tidesandcurrents.noaa.gov/stationhome.html?id=9755371",
+      "category": "flood",
+      "ok": true,
+      "latencyMs": 1639,
+      "signalCount": 1
+    },
+    {
+      "id": "nws-alerts-marine",
+      "name": "NWS marine alerts",
+      "homepage": "https://www.weather.gov/sju/marine",
+      "category": "weather",
+      "ok": true,
+      "latencyMs": 1613,
+      "signalCount": 0
+    },
+    {
+      "id": "nws-alerts-pr",
+      "name": "NWS San Juan alerts",
+      "homepage": "https://www.weather.gov/sju/",
+      "category": "weather",
+      "ok": false,
+      "latencyMs": 1495,
+      "signalCount": 0,
+      "error": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"features\",\n      0,\n      \"properties\",\n      \"ends\"\n    ],\n    \"message\": \"Invalid input: expected string, received null\"\n  }\n]"
+    },
+    {
+      "id": "nws-alerts-vi",
+      "name": "NWS alerts (USVI)",
+      "homepage": "https://www.weather.gov/sju/",
+      "category": "weather",
+      "ok": true,
+      "latencyMs": 1523,
+      "signalCount": 0
+    },
+    {
+      "id": "nws-sju-products",
+      "name": "NWS San Juan products",
+      "homepage": "https://www.weather.gov/sju/",
+      "category": "weather",
+      "ok": true,
+      "latencyMs": 1884,
+      "signalCount": 1
+    },
+    {
+      "id": "pr-ferry",
+      "name": "Puerto Rico Ferry",
+      "homepage": "https://www.puertoricoferry.com/",
+      "category": "transport",
+      "ok": true,
+      "latencyMs": 1519,
+      "signalCount": 1
+    },
+    {
+      "id": "pr-salud",
+      "name": "PR Dept. of Health",
+      "homepage": "https://www.salud.pr.gov/",
+      "category": "health",
+      "ok": true,
+      "latencyMs": 1217,
+      "signalCount": 5
+    },
+    {
+      "id": "prasa-embalses",
+      "name": "AAA reservoir levels",
+      "homepage": "https://www.acueductospr.com/infraestructura/niveles-de-los-embalses",
+      "category": "water",
+      "ok": true,
+      "latencyMs": 1961,
+      "signalCount": 1
+    },
+    {
+      "id": "prasa-interruptions",
+      "name": "AAA planned interruptions",
+      "homepage": "https://www.acueductospr.com/planes-de-interrupciones-programadas-2026",
+      "category": "water",
+      "ok": true,
+      "latencyMs": 1963,
+      "signalCount": 18
+    },
+    {
+      "id": "swpc-alerts",
+      "name": "NOAA space weather",
+      "homepage": "https://www.swpc.noaa.gov/products/alerts-and-forecasts",
+      "category": "climate",
+      "ok": true,
+      "latencyMs": 1462,
+      "signalCount": 6
+    },
+    {
+      "id": "uscg-san-juan",
+      "name": "U.S. Coast Guard Sector San Juan",
+      "homepage": "https://www.dvidshub.net/unit/PADETSanJuan",
+      "category": "transport",
+      "ok": true,
+      "latencyMs": 2345,
+      "signalCount": 20
+    },
+    {
+      "id": "usgs-quakes",
+      "name": "USGS earthquakes",
+      "homepage": "https://earthquake.usgs.gov/earthquakes/map/?extent=15.5,-69.5&extent=20.5,-63",
+      "category": "seismic",
+      "ok": true,
+      "latencyMs": 2018,
+      "signalCount": 50
+    },
+    {
+      "id": "usgs-rivers",
+      "name": "USGS river gauges",
+      "homepage": "https://waterwatch.usgs.gov/?m=real&r=pr",
+      "category": "flood",
+      "ok": true,
+      "latencyMs": 1992,
+      "signalCount": 2
+    },
+    {
+      "id": "volcano-caribbean",
+      "name": "Smithsonian volcano activity",
+      "homepage": "https://volcano.si.edu/news/",
+      "category": "regional",
+      "ok": true,
+      "latencyMs": 1857,
+      "signalCount": 0
+    }
+  ],
+  "metrics": {
+    "signalsActive": 169,
+    "emergencySignals": 0,
+    "warningSignals": 4,
+    "watchSignals": 4,
+    "customersOut": 9078,
+    "quakes24h": 3
+  },
+  "brief": null,
+  "aiStatus": "disabled"
+}

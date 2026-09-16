@@ -25,6 +25,7 @@ import { PRODUCT_PREVIEW_CSP } from "../scripts/build-product-preview.ts";
 import { renderSocialCardPng, renderSocialCardSvg } from "./social-card.ts";
 import { readPngDimensions } from "./social-card-raster.ts";
 import {
+  OOMPA_MAILING_TURNSTILE_SITEKEY_ENV,
   renderAskAiAboutThis,
   renderOompaAnalyticsScript,
   renderOompaSiteFooter,
@@ -33,6 +34,7 @@ import {
   renderPrivacyHtml,
   renderSiteHtml,
 } from "./template.ts";
+import { renderPrHtml } from "./pr-template.ts";
 import { OOMPA_RELEASE_VERSION } from "../scripts/release-evidence";
 import { mobileHeaderFlowClassName } from "./marketing.stylex.ts";
 import { createSiteCompilerCase, siteCompilerHookMs, siteCompilerOuterMs } from "./build-site-test-owner";
@@ -373,6 +375,9 @@ describe("static-site build", () => {
       "dist/site/social-card.svg",
       "dist/site/social-card.png",
       "dist/site/stylex.css",
+      "dist/site/pr/index.html",
+      "dist/site/pr/data/snapshot.json",
+      "dist/site/pr/data/history.json",
       ...docsPaths.flatMap((path) => [`dist/site${path}index.html`, `dist/site${path}index.md`]),
       ...allAttributionPaths.map((path) => `dist/site/fonts/${path}`),
       "dist/site/marketing-preset/LICENSE",
@@ -386,7 +391,7 @@ describe("static-site build", () => {
     const html = await readFile(join(root, "dist/site/index.html"), "utf8");
     const { foundationPath, authoredHtml } = compiledStylesheetJoin(html);
     expect(authoredHtml).toBe(renderSiteHtml());
-    for (const [path, render] of [["privacy/index.html", renderPrivacyHtml], ["preview/index.html", renderPreviewHtml]] as const) {
+    for (const [path, render] of [["privacy/index.html", renderPrivacyHtml], ["preview/index.html", renderPreviewHtml], ["pr/index.html", renderPrHtml]] as const) {
       const route = compiledStylesheetJoin(await readFile(join(root, "dist/site", path), "utf8"));
       expect(route.foundationPath).toBe(foundationPath);
       expect(route.authoredHtml).toBe(render());
@@ -550,7 +555,7 @@ describe("static-site build", () => {
     })).rejects.toThrow("Release commit");
   });
 
-  compilerCase("fails Production closed without valid public analytics configuration", async ({ buildSite, createFixtureRoot }) => {
+  compilerCase("fails Production closed without valid public analytics and mailing configuration", async ({ buildSite, createFixtureRoot }) => {
     const validToken = "phc_public_production_token";
     expect(resolveOompaAnalyticsProjectToken({ VERCEL_ENV: "preview" })).toBe("");
     expect(resolveOompaAnalyticsProjectToken({
@@ -575,6 +580,16 @@ describe("static-site build", () => {
       })).rejects.toThrow(OOMPA_POSTHOG_PROJECT_TOKEN_ENV);
     }
 
+    const missingTurnstileRoot = await createFixtureRoot();
+    await expect(buildSite({
+      check: false,
+      environment: {
+        [OOMPA_POSTHOG_PROJECT_TOKEN_ENV]: validToken,
+        VERCEL_ENV: "production",
+      },
+      repositoryRoot: missingTurnstileRoot,
+      sourceRoot,
+    })).rejects.toThrow(OOMPA_MAILING_TURNSTILE_SITEKEY_ENV);
   });
 
   compilerCase("embeds only the public token in the self-hosted Production bundle", async ({ buildSite, createFixtureRoot }) => {
@@ -583,6 +598,7 @@ describe("static-site build", () => {
     await buildSite({
       check: false,
       environment: {
+        [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: "1x00000000000000000000AA",
         [OOMPA_POSTHOG_PROJECT_TOKEN_ENV]: publicToken,
         VERCEL_ENV: "production",
       },
@@ -596,7 +612,9 @@ describe("static-site build", () => {
     expect(analytics).not.toMatch(/\bphx_[A-Za-z0-9_-]+\b/u);
     expect(analytics).not.toContain("POSTHOG_API_KEY");
     expect(html).toContain('data-mailing-list="signup"');
-    expect(html).not.toContain("challenges.cloudflare.com");
+    expect(html).toContain(
+      'src="https://challenges.cloudflare.com/turnstile/v0/api.js"',
+    );
   });
 
   compilerCase("keeps the hosted identity marker at the fixed release-evidence version", async ({ buildSite, createFixtureRoot }) => {
@@ -693,7 +711,7 @@ describe("static-site build", () => {
     expect(await readFile(join(root, "dist/site/stylex.css"), "utf8")).toBe("stale\n");
   });
 
-  test("admits only owned browser entries and restrictive response headers", async () => {
+  test("admits only owned browser entries, configured Turnstile, and restrictive response headers", async () => {
     const repositoryRoot = join(import.meta.dir, "..");
     const html = renderSiteHtml();
     const css = await readFile(join(repositoryRoot, "site/styles.css"), "utf8");
@@ -708,8 +726,11 @@ describe("static-site build", () => {
     expect(renderPreviewHtml()).not.toContain(renderOompaAnalyticsScript());
     expect(renderPreviewHtml()).not.toContain('src="/site.js"');
     expect(renderPreviewHtml()).not.toContain('src="/appearance.js"');
-    expect(renderOompaSiteFooter()).toContain('data-mailing-list="signup"');
-    expect(renderOompaSiteFooter()).not.toContain("challenges.cloudflare.com");
+    expect(renderOompaSiteFooter({
+      [OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]: "1x00000000000000000000AA",
+    })).toContain(
+      'src="https://challenges.cloudflare.com/turnstile/v0/api.js"',
+    );
     expect(html).not.toMatch(/<link[^>]+rel="(?:icon|stylesheet)"[^>]+href="https?:\/\//);
     expect(css).not.toMatch(/url\(["']?https?:\/\//);
     expect(css).toContain('--font-sans: "Nebula Sans", ui-sans-serif, system-ui');
@@ -741,7 +762,7 @@ describe("static-site build", () => {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "default-src 'none'; script-src 'self'; style-src 'self'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; frame-ancestors 'self'",
+            value: "default-src 'none'; script-src 'self'; style-src 'self'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; frame-ancestors 'self' https://hraness.com",
           },
           { key: "Access-Control-Allow-Origin", value: "*" },
           {
@@ -758,7 +779,7 @@ describe("static-site build", () => {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "default-src 'none'; base-uri 'none'; connect-src https://us.i.posthog.com; font-src 'self'; form-action https://account.hraness.com; frame-ancestors 'none'; frame-src 'self'; img-src 'self' data:; manifest-src 'self'; script-src 'self'; style-src 'self'",
+            value: "default-src 'none'; base-uri 'none'; connect-src https://us.i.posthog.com; font-src 'self'; form-action https://account.hraness.com; frame-ancestors 'self' https://hraness.com; frame-src 'self' https://challenges.cloudflare.com; img-src 'self' data:; manifest-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'",
           },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           {
@@ -767,7 +788,6 @@ describe("static-site build", () => {
           },
           { key: "Referrer-Policy", value: "no-referrer" },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
         ],
       },
     ]);

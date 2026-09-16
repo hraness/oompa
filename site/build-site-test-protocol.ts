@@ -12,6 +12,7 @@ export const siteTestBuildOptions = z.object({
   environment: z.object({
     VERCEL_ENV: z.string().max(32).optional(),
     NEXT_PUBLIC_POSTHOG_KEY: z.string().max(1024).optional(),
+    NEXT_PUBLIC_HRANESS_MAILING_TURNSTILE_SITEKEY: z.string().max(1024).optional(),
   }).strict().optional(),
 }).strict();
 export type SiteTestBuildOptions = z.infer<typeof siteTestBuildOptions>;

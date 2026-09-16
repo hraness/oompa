@@ -3,6 +3,7 @@
 - `src/` contains the Bun CLI, daemon, local authority, Codex, Claude Code, and Devin adapters, and cloud client.
 - `convex/` contains the optional encrypted sync and verified-email device authority.
 - `site/` contains the public product website and task-oriented documentation. Its content is not an input to the npm package README or description.
+- `pr/` contains the Puerto Rico emergency-signal collectors, snapshot pipeline, and CLI that refresh the committed `/pr/` dashboard data on a scheduled GitHub Actions pulse.
 - `scripts/` contains deterministic checks, builds, and release helpers.
 - `kb/` contains maintained product knowledge and executable implementation plans.
 - `.agents/skills/` contains the portable five-skill phased planning and execution pack.
