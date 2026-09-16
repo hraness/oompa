@@ -3,6 +3,7 @@
 ## v0.8.4 candidate (unreleased)
 
 - Migrating a state root from a pre-authority release no longer fails with `CODEX_USAGE_UPLOAD_AUTHORITY_INVALID` when retention pruned a Codex usage snapshot before its cloud upload anchor. The schema-41 step retires such an anchor through its prune trigger and keeps every anchor whose snapshot survived. `oompa daemon start` now names the refused invariant in its migration failure message instead of a generic line.
+- Add a credential-free Devin quota reader in `src/devin/`. It admits exactly Devin CLI 3000.10.27, drives the CLI on a pseudo-terminal only far enough to render its own `/usage` panel, and parses weekly and daily remaining percent and reset instants with a closed grammar that reports `unknown` on any drift. Nothing is wired into the daemon, CLI, storage or cloud; Devin remains a retired provider. Plan: `kb/plans/devin-provider.md`, Phase 1.
 - This candidate needs its own exact immutable artifact admission. The admitted v0.8.3 GitHub artifact and exact-byte npm mirror remain unchanged.
 
 ## v0.8.3
