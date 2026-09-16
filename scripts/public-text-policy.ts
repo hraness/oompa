@@ -24,6 +24,8 @@ const allowedPublicScopes = new Set([
   "vitejs",
 ]);
 const allowedPublicScopedPackages = new Set([
+  "@ai-sdk/anthropic",
+  "@ai-sdk/openai",
   "@anthropic-ai/claude-code",
   "@anthropic-ai/claude-code-darwin-arm64",
   "@babel/core",
