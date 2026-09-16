@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { runProductSupportCommand, showProductSupportInvitation, standaloneSupportEnvironment } from "./support";
+
 import { dlopen } from "bun:ffi";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, mkdtemp, readFile, realpath, rmdir, unlink, writeFile } from "node:fs/promises";
@@ -1262,6 +1264,9 @@ export type DaemonReadyStatus = Readonly<{
 }>;
 
 export type CliMainInput = Readonly<{
+  /** Optional content-free standalone completion observer. */
+  onUsefulResult?: () => unknown;
+  supportEnv?: Readonly<Record<string, string | undefined>>;
   installation?: OompaInstallation;
   startDaemon?: (installation: OompaInstallation) => Promise<DaemonReadyStatus>;
   statePaths?: StatePaths;
@@ -6574,11 +6579,24 @@ async function executeInvocation(
   return 0;
 }
 
+export function isUsefulSupportResult(invocation: CliInvocation): boolean {
+  if (invocation.kind === "session.export") return true;
+  if (invocation.kind !== "command") return false;
+  const usefulKinds: ReadonlySet<LocalCommand["kind"]> = new Set([
+    "session.list", "session.show", "session.task.list", "session.task.show",
+    "work.snapshot", "work.task", "memory.query", "memory.explain", "turn.inspect", "project.list",
+  ]);
+  return usefulKinds.has(invocation.command.kind);
+}
+
 export async function main(
   argv: readonly string[] = Bun.argv.slice(2),
   output: Output = processOutput,
   input: CliMainInput = {},
 ): Promise<number> {
+  if (argv[0] === "support") {
+    return await runProductSupportCommand(argv.slice(1), { stdout: text => output.writeStdout(text), stderr: text => output.writeStderr(text) }, input.supportEnv === undefined ? {} : { env: input.supportEnv });
+  }
   const installation = input.installation ?? createProductionInstallation();
   assertInstallationHome(installation);
   const resolvedInput = { ...input, installation };
@@ -6590,7 +6608,11 @@ export async function main(
   let invocation: CliInvocation | undefined;
   try {
     invocation = parseCli(argv);
-    return await executeInvocation(invocation, output, { ...resolvedInput, interactive });
+    const exitCode = await executeInvocation(invocation, output, { ...resolvedInput, interactive });
+    if (exitCode === 0 && isUsefulSupportResult(invocation)) {
+      try { void Promise.resolve(input.onUsefulResult?.()).catch(() => {}); } catch { /* Observers cannot change task outcomes. */ }
+    }
+    return exitCode;
   } catch (error: unknown) {
     const syncNow = invocation?.kind === "command" && invocation.command.kind === "sync.now";
     const projectionRecovery = invocation?.kind === "sync.projection-recover"
@@ -6728,4 +6750,10 @@ export async function main(
   }
 }
 
-if (import.meta.main) process.exitCode = await main();
+if (import.meta.main) {
+  const supportEnv = standaloneSupportEnvironment();
+  const completion = { usefulResult: false };
+  const exitCode = await main(Bun.argv.slice(2), processOutput, { supportEnv, onUsefulResult: () => { completion.usefulResult = true; } });
+  process.exitCode = exitCode;
+  if (Bun.argv.length > 2 && exitCode === 0 && completion.usefulResult) await showProductSupportInvitation({ env: supportEnv });
+}

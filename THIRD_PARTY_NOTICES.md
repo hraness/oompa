@@ -12,4 +12,33 @@ The isolated product examples on oompa.app incorporate MIT-licensed `@hraness/di
 
 Oompa validates trajectory exports during development against Apache-2.0-licensed `@letta-ai/trajectory` 0.3.0 and MIT-licensed Ajv 8.20.0. These development dependencies are not runtime dependencies of the published CLI.
 
-The `v0.8.2` candidate records its build graph in `bun.lock`, while the install tarball declares its direct runtime dependency versions in `package.json`. This candidate is not yet admitted. The admitted `v0.7.1` predecessor records its own build graph in its immutable source; its release workflow bound the immutable source tag, published the exact tarball plus `SHA256SUMS` on GitHub and the same tarball on npm through trusted publishing, and verified the public bytes and cryptographic provenance before final admission. That predecessor evidence does not admit the candidate. The tarball does not vendor transitive dependencies. Dependency packages retain their own license texts and source metadata.
+The `v0.8.3` candidate records its build graph in `bun.lock`, while the install tarball declares its direct runtime dependency versions in `package.json`. This candidate is not yet admitted. The admitted `v0.7.1` predecessor records its own build graph in its immutable source; its release workflow bound the immutable source tag, published the exact tarball plus `SHA256SUMS` on GitHub and the same tarball on npm through trusted publishing, and verified the public bytes and cryptographic provenance before final admission. That predecessor evidence does not admit the candidate. The tarball does not vendor transitive dependencies. Dependency packages retain their own license texts and source metadata.
+
+## Hraness Support Foundation 0.3.0
+
+The CLI bundles the optional local support protocol from reviewed commit
+`2d034b357680353574411217d68b02b6755b07ed` of
+[Hraness Support Foundation](https://github.com/hraness/support-foundation).
+It is generated from the pinned build dependency and adds no runtime dependency.
+
+MIT License
+
+Copyright (c) 2026 Hraness
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

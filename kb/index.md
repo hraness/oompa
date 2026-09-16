@@ -7,6 +7,7 @@ type: index
 
 ## Plans
 
+- [Optional updates and development support](plans/optional-support.md)
 - [Oompa v1](plans/oompa-v1.md)
 - [Cross-platform daily driver](plans/cross-platform-daily-driver.md)
 - [Personal-home session adoption](plans/session-adoption.md)

@@ -73,6 +73,9 @@ type ClaudeLaunchIntentSnapshot = ReadonlySet<string> | null;
  */
 export const SAFE_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
   "HOME",
+  "HRANESS_SUPPORT",
+  "HRANESS_SUPPORT_AUDIENCE",
+  "HRANESS_SUPPORT_EMAIL",
   "LANG",
   "LC_ALL",
   "LC_CTYPE",

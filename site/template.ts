@@ -49,6 +49,7 @@ export const oompaMailingListConfig = (): HranessMailingListConfig => ({
 
 export const renderOompaSiteFooter = (): string => renderHranessSiteFooter({
   mailingList: oompaMailingListConfig(),
+  support: {"id": "hra", "name": "Oompa", "valueProposition": "Support ongoing development of local tools for coordinating your agents.", "updates": true},
 });
 
 export const renderAskAiAboutThis = (canonicalUrl: string): string =>

@@ -227,6 +227,8 @@ export const usage = `Oompa
 
 Usage:
   oompa
+  oompa support [protocol --json|offer --json|shown ID|release ID|dismiss|snooze|enable|status --json]
+    Optional support and updates; agents use support protocol --json at closeout.
   oompa help [<group> [<command>]]
   oompa status [--json]
   oompa init [--yes] [--json]
