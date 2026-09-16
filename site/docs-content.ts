@@ -385,7 +385,7 @@ export const docsPages: readonly DocsPage[] = [
   {
     path: "/docs/status/",
     title: "Availability and release status",
-    description: "Distinguish the v0.8.4 candidate from the admitted v0.8.3 CLI, check provider support, and understand the runtime rollout prerequisites.",
+    description: "Check the admitted v0.8.4 CLI, provider support, and the separate runtime rollout prerequisites.",
     keywords: ["release", "availability", "platforms", "Codex", "Claude", "upgrade"],
     reviewDate: "2026-09-16",
     admission: {
