@@ -19,6 +19,7 @@
         "@babel/core": "7.29.7",
         "@convex-dev/auth": "0.0.95",
         "@eslint/js": "9.34.0",
+        "@hraness/credits-foundation": "github:hraness/credits-foundation#19b7f04b7bc2f829f8daed0f92ecf604aa6d6142",
         "@hraness/design-kit": "github:hraness/design-kit#v0.8.0",
         "@hraness/direct": "github:hraness/direct#v0.7.0",
         "@hraness/posthog": "github:hraness/posthog#v0.1.2",
@@ -187,6 +188,8 @@
     "@eslint/plugin-kit": ["@eslint/plugin-kit@0.3.5", "", { "dependencies": { "@eslint/core": "^0.15.2", "levn": "^0.4.1" } }, "sha512-Z5kJ+wU3oA7MMIqVR9tyZRtjYPr4OC004Q4Rw7pgOKUOKkJfZ3O24nz3WYfGRpMDNmcOi3TwQOmgm7B7Tpii0w=="],
 
     "@gar/promise-retry": ["@gar/promise-retry@1.0.3", "", {}, "sha512-GmzA9ckNokPypTg10pgpeHNQe7ph+iIKKmhKu3Ob9ANkswreCx7R3cKmY781K8QK3AqVL3xVh9A42JvIAbkkSA=="],
+
+    "@hraness/credits-foundation": ["@hraness/credits-foundation@github:hraness/credits-foundation#19b7f04", {}, "hraness-credits-foundation-19b7f04", "sha512-nLGRudE3XxSDf239auRMBVBqN56iN3uFZ0+siwI/5nDIh3PlTGpZ6FrigoMvaRYH5heQGn/jm4YwNRCZAWxX7g=="],
 
     "@hraness/design-kit": ["@hraness/design-kit@github:hraness/design-kit#7813c9c", { "dependencies": { "@hugeicons/core-free-icons": "^4.2.2", "@stylexjs/stylex": "0.19.0", "motion": "12.42.0", "next-themes": "0.4.6", "react-aria-components": "1.19.0", "recharts": "3.8.0", "sugar-high": "^1.2.1", "web-haptics": "0.0.6" }, "peerDependencies": { "@hraness/ui": ">=0.5.12 <0.6.0", "react": ">=18 <20", "react-dom": ">=18 <20" }, "optionalPeers": ["@hraness/ui"] }, "hraness-design-kit-7813c9c", "sha512-erlyNqevsQJUqKbI1vSfJRkU6TDiIEHypuYopjkJotXjaatWd5ouDSBeB5vt4RVa5v8tpeIMb4tb4K3hX6D4CA=="],
 

@@ -6,7 +6,7 @@
 - The explicit live-acceptance daemon composition exposes a structural observer for actual personal-provider children. Its acceptance implementation and bounded status policy live under `scripts/`; the reusable exact-child adapter lives under `src/claude/`.
 - `devin-runtime-adapter.ts` implements the neutral seam for the pinned `devin acp` server on top of `src/devin/`. It is a constructed port with its own tests; the service does not select it until the Devin plan's third phase lifts the retired-provider refusals.
 - Autorespond decides who answers an approval: the protocol path answers provider requests, the prose path answers an assistant turn that asks only for consent through the responder port.
-- Gateway key custody keeps the responder credential in one user-only file, never in a journal, log, or projection.
+- Gateway key custody keeps the responder credential in one user-only file, never in a journal, log, or projection. The same custody selects the hosted responder metered by prepaid Hraness credits; `SelectingProseResponder` picks per call, `HostedProseResponder` forwards the stored credits device token, and a `402` pauses hosted autorespond in memory until reselection or the retry window.
 - Attachment ingest resolves a filesystem path into local content-addressed custody; attachment resolution turns a message's digest references back into bytes for the provider adapters.
 
 # Guidelines

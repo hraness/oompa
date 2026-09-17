@@ -3158,14 +3158,22 @@ export function renderSuccess(command: LocalCommand, data: unknown, json: boolea
       budgets?: { consecutive: number; lastDay: number; lastHour: number };
       budgetHistoryAvailableAt?: number | null;
       counts?: { accepted: number; refused: number; unknown?: number };
+      credits?: { state?: unknown; retryAt?: unknown };
       gateway?: unknown;
       mode?: unknown;
       recent?: unknown[];
+      responder?: unknown;
       source?: unknown;
     };
     const rows = [`Approval mode: ${line(report.mode)} (${line(report.source)})`];
     // Only the configured/not-configured fact is ever shown for the key.
     if (report.gateway !== undefined) rows.push(`Gateway: ${line(report.gateway)}`);
+    if (report.responder !== undefined) rows.push(`Prose responder: ${line(report.responder)}`);
+    if (report.credits !== undefined) {
+      rows.push(report.credits.state === "required"
+        ? `Hosted credits: required${typeof report.credits.retryAt === "number" ? `; the hosted responder is paused until ${new Date(report.credits.retryAt).toISOString()} or \`oompa autorespond gateway set --hosted\`` : ""}`
+        : `Hosted credits: ${line(report.credits.state)}`);
+    }
     if (report.counts !== undefined) {
       rows.push(`Autoresponses: ${String(report.counts.accepted)} accepted, ${String(report.counts.refused)} escalated, ${String(report.counts.unknown ?? 0)} unknown`);
     }
@@ -3209,7 +3217,9 @@ export function renderSuccess(command: LocalCommand, data: unknown, json: boolea
       `Account linking: ${policy.accountLinkingAllowed === true ? "allowed" : "denied"}`,
     ].join("\n").concat("\n"));
   } else if (command.kind === "autorespond.gateway-set") {
-    output.writeStdout("Autorespond gateway key configured.\n");
+    output.writeStdout(value.responder === "hosted"
+      ? "Autorespond hosted responder selected; replies are metered by prepaid Hraness credits.\n"
+      : "Autorespond gateway key configured.\n");
   } else if (command.kind === "autorespond.gateway-clear") {
     output.writeStdout(value.cleared === true
       ? "Autorespond gateway key cleared.\n"

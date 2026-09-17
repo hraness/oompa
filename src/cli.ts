@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 
 import { runProductSupportCommand, showProductSupportInvitation, standaloneSupportEnvironment } from "./support";
+import { emitHostedCreditsRequired, readProductCreditsToken, runProductCreditsCommand } from "./credits";
+import type { CreditsCommandIo } from "@hraness/credits-foundation/node";
 
 import { dlopen } from "bun:ffi";
 import { randomUUID } from "node:crypto";
@@ -81,6 +83,7 @@ import {
   createLocalCloudControlFromEnvironment,
   createLocalCloudDaemonBridgeFromEnvironment,
   DEFAULT_CLOUD_DEPLOYMENT_URL,
+  deploymentUrlFromEnvironment,
   DeploymentScopedCloudSecretCustody,
   IdentityScopedCloudSecretCustody,
   isRecord,
@@ -239,7 +242,8 @@ import { FactsMemoryControlStore } from "./storage/facts-memory-control";
 import { LocalFactsMemoryBroker } from "./storage/local-facts-memory-broker";
 import { resolveUsableCanonicalProjectDirectory } from "./storage/project-directory";
 import { CustodyGatewayKeyStore } from "./storage/gateway-key-custody";
-import { AiGatewayProseResponder } from "./daemon/prose-responder";
+import { AiGatewayProseResponder, HostedProseResponder, SelectingProseResponder } from "./daemon/prose-responder";
+import { hostedAutorespondOrigin, hostedCreditsRequiredSchema } from "./domain/hosted-autorespond";
 import type { GenerationalSecretCustody } from "./storage/secret-custody";
 import { StateStore } from "./storage/state-store";
 import { WorkCapabilityCodec } from "./storage/work-capability";
@@ -1283,6 +1287,8 @@ export type CliMainInput = Readonly<{
   /** Optional content-free standalone completion observer. */
   onUsefulResult?: () => unknown;
   supportEnv?: Readonly<Record<string, string | undefined>>;
+  /** Test seam for `oompa credits`: isolated state directory, transport, and clock. */
+  creditsIo?: CreditsCommandIo;
   installation?: OompaInstallation;
   startDaemon?: (installation: OompaInstallation) => Promise<DaemonReadyStatus>;
   statePaths?: StatePaths;
@@ -3933,7 +3939,9 @@ async function runDaemonLifecycle(
             return await current.executeRemote(command, expected, { signal: options.signal });
           },
           gatewayKeyCustody: {
-            hasKey: async () => await gatewayKeys.isConfigured(),
+            // Prose autorespond counts as configured with either a key or
+            // the hosted responder; the browser only learns that fact.
+            hasKey: async () => await gatewayKeys.readMode() !== null,
             setKey: async (key) => { await gatewayKeys.set(key); },
           },
           paths,
@@ -4105,8 +4113,20 @@ async function runDaemonLifecycle(
       beforeMemoryClose: closeCloudLifecycle,
       ...(canonicalMemorySync === undefined ? {} : { canonicalMemorySync }),
       gatewayKeys,
-      proseResponder: new AiGatewayProseResponder({
-        readKey: async () => await gatewayKeys.read(),
+      // Custody picks the responder per call. The hosted one lives on the
+      // HTTP host of the same deployment that serves hosted sync and forwards
+      // the credits device token the `oompa credits` commands store.
+      proseResponder: new SelectingProseResponder({
+        gateway: new AiGatewayProseResponder({
+          readKey: async () => await gatewayKeys.read(),
+        }),
+        hosted: new HostedProseResponder({
+          origin: hostedAutorespondOrigin(
+            deploymentUrlFromEnvironment(installation.cloudEnvironment) ?? DEFAULT_CLOUD_DEPLOYMENT_URL,
+          ),
+          readToken: async () => await readProductCreditsToken(),
+        }),
+        readMode: async () => await gatewayKeys.readMode(),
       }),
       requestStop,
     });
@@ -4558,6 +4578,35 @@ async function executeGatewayKeySet(
   if (!response.ok) return renderFailure(response.error, invocation.json, output);
   renderSuccess(command, response.data, invocation.json, output);
   return 0;
+}
+
+/*
+ * A hosted responder paused for credits turns `oompa autorespond status` into
+ * the shared payment handoff: exactly one `hraness-credits-required-v1` line
+ * on stderr for agents, a few plain lines for people, and the command's own
+ * failure envelope with `error.code: "credits_required"`. Any other status
+ * renders as usual.
+ */
+async function renderHostedCreditsHandoff(data: unknown, json: boolean, output: Output): Promise<number | null> {
+  if (!isRecord(data) || data.responder !== "hosted" || !isRecord(data.credits) || data.credits.state !== "required") {
+    return null;
+  }
+  const payload = hostedCreditsRequiredSchema.safeParse(data.credits.payload);
+  if (!payload.success) return null;
+  const printed = await emitHostedCreditsRequired(payload.data, {
+    audience: json ? "agent" : "human",
+    stderr: (text) => { output.writeStderr(text); },
+  });
+  const message = printed
+    ? "Hosted autorespond is paused until this device has enough Hraness credits. After paying, rerun `oompa autorespond gateway set --hosted`."
+    : payload.data.reason === "subject_missing"
+      ? "Hosted autorespond is paused because this device has no Hraness credits set up. Run `oompa credits topup`, pay in your browser, run `oompa credits wait`, then rerun `oompa autorespond gateway set --hosted`."
+      : `Hosted autorespond is paused: ${payload.data.message} After resolving it, rerun \`oompa autorespond gateway set --hosted\`.`;
+  return renderFailure({
+    code: "credits_required",
+    message,
+    ...(json ? { details: { reason: payload.data.reason, retryAt: data.credits.retryAt } } : {}),
+  }, json, output);
 }
 
 async function executeProtectedInteraction(
@@ -7071,6 +7120,10 @@ async function executeInvocation(
       ? renderSyncNowFailure(response.error, invocation.json, output)
       : renderFailure(response.error, invocation.json, output);
   }
+  if (command.kind === "autorespond.status") {
+    const handoff = await renderHostedCreditsHandoff(response.data, invocation.json, output);
+    if (handoff !== null) return handoff;
+  }
   if (command.kind === "sync.now") {
     return renderSyncNowSuccess(response.data, invocation.json, output);
   }
@@ -7096,6 +7149,11 @@ export async function main(
 ): Promise<number> {
   if (argv[0] === "support") {
     return await runProductSupportCommand(argv.slice(1), { stdout: text => output.writeStdout(text), stderr: text => output.writeStderr(text) }, input.supportEnv === undefined ? {} : { env: input.supportEnv });
+  }
+  if (argv[0] === "credits" && argv[1] !== "help" && !argv.includes("--help") && !argv.includes("-h")) {
+    // The credits protocol owns its own argv grammar, exit codes, and JSON;
+    // help stays with the ordinary parser so `oompa help credits` renders.
+    return await runProductCreditsCommand(argv.slice(1), { stdout: text => output.writeStdout(text), stderr: text => output.writeStderr(text) }, input.creditsIo ?? {});
   }
   const installation = input.installation ?? createProductionInstallation();
   assertInstallationHome(installation);

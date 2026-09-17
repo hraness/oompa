@@ -42,6 +42,41 @@ test("autorespond status distinguishes uncertain effects and an upgrade hold", (
   expect(result.stdout.join("")).toContain("previous budget history is incomplete");
 });
 
+test("autorespond status names the selected prose responder and a hosted credits pause", () => {
+  const ready = capture();
+  renderSuccess({ kind: "autorespond.status" }, {
+    version: 1,
+    mode: "auto:all",
+    source: "default",
+    gateway: "not configured",
+    responder: "hosted",
+    credits: { state: "ready" },
+    counts: { accepted: 0, refused: 0, unknown: 0 },
+  }, false, ready.output);
+  expect(ready.stdout.join("")).toContain("Gateway: not configured");
+  expect(ready.stdout.join("")).toContain("Prose responder: hosted");
+  expect(ready.stdout.join("")).toContain("Hosted credits: ready");
+
+  const paused = capture();
+  renderSuccess({ kind: "autorespond.status" }, {
+    version: 1,
+    mode: "auto:all",
+    source: "default",
+    gateway: "not configured",
+    responder: "hosted",
+    credits: { state: "required", retryAt: Date.parse("2026-09-17T13:15:00.000Z"), since: 1, payload: { error: "credits_required", message: "m", operation: "assistant_reply", reason: "insufficient_credits" } },
+    counts: { accepted: 0, refused: 1, unknown: 0 },
+  }, false, paused.output);
+  expect(paused.stdout.join("")).toContain("Hosted credits: required; the hosted responder is paused until 2026-09-17T13:15:00.000Z or `oompa autorespond gateway set --hosted`");
+
+  const selected = capture();
+  renderSuccess({ kind: "autorespond.gateway-set", hosted: true }, { version: 1, gateway: "not configured", responder: "hosted" }, false, selected.output);
+  expect(selected.stdout.join("")).toBe("Autorespond hosted responder selected; replies are metered by prepaid Hraness credits.\n");
+  const keyed = capture();
+  renderSuccess({ kind: "autorespond.gateway-set", key: ["gw", "k".repeat(22)].join("") }, { version: 1, gateway: "configured", responder: "gateway-key" }, false, keyed.output);
+  expect(keyed.stdout.join("")).toBe("Autorespond gateway key configured.\n");
+});
+
 const primarySessionId = `sess_${"1".repeat(32)}`;
 
 describe("after-hours approval consent output", () => {

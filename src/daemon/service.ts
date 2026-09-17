@@ -319,9 +319,11 @@ import {
 } from "./autorespond";
 import {
   PROSE_APPROVAL_REPLY,
+  ProseCreditsRequiredError,
   type ProseResponder,
 } from "./prose-responder";
-import type { GatewayKeyPort } from "../storage/gateway-key-custody";
+import type { GatewayKeyPort, ProseResponderMode } from "../storage/gateway-key-custody";
+import { HOSTED_CREDITS_RETRY_MS, type HostedCreditsRequired } from "../domain/hosted-autorespond";
 import {
   DENYLIST_CUES,
   HUMAN_ACTION_CUES,
@@ -353,6 +355,16 @@ class ProviderConnectionChangedBeforeEffectError extends CommandFailure {
     this.name = "ProviderConnectionChangedBeforeEffectError";
   }
 }
+
+type HostedCreditsPause = Readonly<{
+  payload: HostedCreditsRequired;
+  retryAt: number;
+  since: number;
+}>;
+
+export type HostedCreditsStatus =
+  | Readonly<{ state: "ready" }>
+  | Readonly<{ state: "required"; payload: HostedCreditsRequired; retryAt: number; since: number }>;
 
 const proseAutorespondIdempotencyKey = (
   sessionId: string,
@@ -1613,6 +1625,13 @@ export class OompaService {
   readonly #proseResponder: ProseResponder | undefined;
   #proseGatewayRevision = 0;
   #proseGatewayChangesInFlight = 0;
+  /**
+   * Why the hosted responder is paused, when it is. Set from one 402 or a
+   * missing credits token, cleared by `gateway set|clear`, and retried once
+   * after `HOSTED_CREDITS_RETRY_MS` so credits that arrive without a command
+   * are still picked up. Never persisted: a restart tries again.
+   */
+  #hostedCreditsPause: HostedCreditsPause | null = null;
   /** Last turn per session that already spent its one prose autoresponse. */
   readonly #proseAutorespondedTurns = new Map<string, string>();
   readonly #factsMemory: OompaFactsMemoryLifecyclePort | undefined;
@@ -2630,6 +2649,7 @@ export class OompaService {
             source: mode.source,
             // Status carries only whether a key exists, never any part of it.
             gateway: await this.#gatewayConfigured() ? "configured" : "not configured",
+            ...(await this.#responderStatus()),
             counts: this.#store.countAutorespondEvidence(session === null ? {} : { sessionId: session.id }),
             ...(session === null ? {} : {
               budgets: this.#store.readAutorespondBudgets(session.id),
@@ -2643,8 +2663,18 @@ export class OompaService {
           this.#proseGatewayRevision += 1;
           this.#proseGatewayChangesInFlight += 1;
           try {
+            // Selecting either responder lifts a credits pause: the person
+            // acted, so the next approval tries the hosted service again.
+            this.#hostedCreditsPause = null;
+            if (command.hosted === true) {
+              await custody.setHosted();
+              return { version: 1, gateway: "not configured", responder: "hosted" };
+            }
+            if (command.key === undefined) {
+              throw new CommandFailure("INVALID_INPUT", "autorespond.gateway-set carries exactly one of key or hosted.");
+            }
             await custody.set(command.key);
-            return { version: 1, gateway: "configured" };
+            return { version: 1, gateway: "configured", responder: "gateway-key" };
           } finally {
             this.#proseGatewayChangesInFlight -= 1;
           }
@@ -2654,8 +2684,9 @@ export class OompaService {
           this.#proseGatewayRevision += 1;
           this.#proseGatewayChangesInFlight += 1;
           try {
+            this.#hostedCreditsPause = null;
             const cleared = await custody.clear();
-            return { version: 1, cleared, gateway: "not configured" };
+            return { version: 1, cleared, gateway: "not configured", responder: "not configured" };
           } finally {
             this.#proseGatewayChangesInFlight -= 1;
           }
@@ -8890,6 +8921,50 @@ export class OompaService {
     }
   }
 
+  async #proseResponderMode(): Promise<ProseResponderMode | null> {
+    try {
+      return await this.#gatewayKeys?.readMode() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The active pause, if its retry deadline has not passed. */
+  #activeHostedCreditsPause(): HostedCreditsPause | null {
+    const pause = this.#hostedCreditsPause;
+    if (pause === null) return null;
+    if (this.#now() >= pause.retryAt) {
+      this.#hostedCreditsPause = null;
+      return null;
+    }
+    return pause;
+  }
+
+  #pauseHostedCredits(payload: HostedCreditsRequired): void {
+    const now = this.#now();
+    this.#hostedCreditsPause = { payload, retryAt: now + HOSTED_CREDITS_RETRY_MS, since: now };
+  }
+
+  /**
+   * Which responder custody selects and, for the hosted one, whether it is
+   * paused for credits. The payload is the backend's own payment payload; it
+   * carries a topup link and amounts, never a token.
+   */
+  async #responderStatus(): Promise<Readonly<{
+    responder: ProseResponderMode | "not configured";
+    credits?: HostedCreditsStatus;
+  }>> {
+    const mode = await this.#proseResponderMode();
+    if (mode !== "hosted") return { responder: mode ?? "not configured" };
+    const pause = this.#activeHostedCreditsPause();
+    return {
+      responder: "hosted",
+      credits: pause === null
+        ? { state: "ready" }
+        : { state: "required", payload: pause.payload, retryAt: pause.retryAt, since: pause.since },
+    };
+  }
+
   /*
    * Prose autorespond (W2). A completed turn that classified as
    * `needs_approval` through the lexical approval cue — never through a pending
@@ -9025,7 +9100,11 @@ export class OompaService {
     if (finalText.length >= PROSE_AUTORESPOND_MAX_MESSAGE_CHARACTERS) {
       return refuse("message_too_long");
     }
-    if (!await this.#gatewayConfigured()) return refuse("gateway_key_missing");
+    const responderMode = await this.#proseResponderMode();
+    if (responderMode === null) return refuse("gateway_key_missing");
+    if (responderMode === "hosted" && this.#activeHostedCreditsPause() !== null) {
+      return refuse("credits_required");
+    }
     const reviewedGateFailure = currentGateFailure();
     if (reviewedGateFailure !== null) return refuse(reviewedGateFailure);
     const verbatimLiteral = classification.verbatimRequired
@@ -9051,10 +9130,18 @@ export class OompaService {
             revision: durable?.revision ?? 0,
           },
           ...(verbatimLiteral === undefined ? {} : { verbatimLiteral }),
+          attempt: proseAutorespondIdempotencyKey(sessionId, turnId),
         },
         this.#backgroundAbort.signal,
       );
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof ProseCreditsRequiredError) {
+        // The hosted service refused for want of credits. Keep its payload so
+        // `oompa autorespond status` can hand the person the payment link,
+        // and stop consulting it until credits arrive or the retry passes.
+        this.#pauseHostedCredits(error.payload);
+        return refuse("credits_required");
+      }
       this.#store.recordProseAutorespondEvidence({
         decision: "refuse",
         latencyMs: this.#now() - startedAt,

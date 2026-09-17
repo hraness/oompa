@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
   AUTORESPOND_GATEWAY_KEY_SLOT,
+  AUTORESPOND_HOSTED_RESPONDER_MARKER,
+  AUTORESPOND_HOSTED_RESPONDER_SLOT,
   CustodyGatewayKeyStore,
   GatewayKeyError,
   InMemoryGatewayKeyStore,
@@ -105,5 +107,57 @@ describe("InMemoryGatewayKeyStore", () => {
     expect(await store.clear()).toBe(true);
     expect(await store.clear()).toBe(false);
     expect(() => new InMemoryGatewayKeyStore("short")).toThrow(GatewayKeyError);
+  });
+});
+
+describe("hosted responder selection", () => {
+  test("selects the hosted responder exclusively of a key and clears both together", async () => {
+    const custody = new MemoryCustody();
+    const store = new CustodyGatewayKeyStore(custody);
+    expect(await store.readMode()).toBeNull();
+
+    await store.setHosted();
+    expect(await store.readMode()).toBe("hosted");
+    expect(await store.isConfigured()).toBe(false);
+    expect(await store.read()).toBeNull();
+    expect([...custody.slots.keys()]).toEqual([AUTORESPOND_HOSTED_RESPONDER_SLOT]);
+    expect(custody.slots.get(AUTORESPOND_HOSTED_RESPONDER_SLOT)?.value).toBe(AUTORESPOND_HOSTED_RESPONDER_MARKER);
+
+    // A key replaces the hosted selection; the hosted selection replaces a key.
+    await store.set(firstKey);
+    expect(await store.readMode()).toBe("gateway-key");
+    expect([...custody.slots.keys()]).toEqual([AUTORESPOND_GATEWAY_KEY_SLOT]);
+    await store.setHosted();
+    expect(await store.readMode()).toBe("hosted");
+    expect([...custody.slots.keys()]).toEqual([AUTORESPOND_HOSTED_RESPONDER_SLOT]);
+
+    expect(await store.clear()).toBe(true);
+    expect(await store.readMode()).toBeNull();
+    expect(custody.slots.size).toBe(0);
+    expect(await store.clear()).toBe(false);
+  });
+
+  test("a stored key wins over a stale hosted marker", async () => {
+    const custody = new MemoryCustody();
+    await custody.compareAndSwap(AUTORESPOND_HOSTED_RESPONDER_SLOT, null, AUTORESPOND_HOSTED_RESPONDER_MARKER);
+    await custody.compareAndSwap(AUTORESPOND_GATEWAY_KEY_SLOT, null, firstKey);
+    const store = new CustodyGatewayKeyStore(custody);
+    expect(await store.readMode()).toBe("gateway-key");
+    await custody.clearIfGeneration(AUTORESPOND_GATEWAY_KEY_SLOT, custody.slots.get(AUTORESPOND_GATEWAY_KEY_SLOT)?.generation ?? 0);
+    expect(await store.readMode()).toBe("hosted");
+    await custody.compareAndSwap(AUTORESPOND_HOSTED_RESPONDER_SLOT, custody.slots.get(AUTORESPOND_HOSTED_RESPONDER_SLOT)?.generation ?? null, "other");
+    expect(await store.readMode()).toBeNull();
+  });
+
+  test("the in-memory store mirrors the same exclusive selection", async () => {
+    const store = new InMemoryGatewayKeyStore(null, { hosted: true });
+    expect(await store.readMode()).toBe("hosted");
+    await store.set(firstKey);
+    expect(await store.readMode()).toBe("gateway-key");
+    await store.setHosted();
+    expect(await store.read()).toBeNull();
+    expect(await store.readMode()).toBe("hosted");
+    expect(await store.clear()).toBe(true);
+    expect(await store.readMode()).toBeNull();
   });
 });

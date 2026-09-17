@@ -2425,4 +2425,15 @@ describe("autorespond parsing", () => {
     expect(() => parseCli(["autorespond", "gateway", "clear", "--from-fd", "3"])).toThrow("--from-fd");
     expect(() => parseCli(["autorespond", "gateway", "rotate"])).toThrow("Unknown autorespond gateway action");
   });
+
+  test("selects the hosted responder without any key material", () => {
+    expect(parseCli(["autorespond", "gateway", "set", "--hosted", "--json"])).toEqual({
+      command: { hosted: true, kind: "autorespond.gateway-set" },
+      json: true,
+      kind: "command",
+    });
+    expect(() => parseCli(["autorespond", "gateway", "set", "--hosted", "--from-fd", "3"])).toThrow("either --hosted or --from-fd");
+    expect(() => parseCli(["autorespond", "gateway", "clear", "--hosted"])).toThrow("--hosted");
+    expect(parseCli(["help", "credits"])).toEqual({ group: "credits", json: false, kind: "help" });
+  });
 });

@@ -31,6 +31,7 @@ const allowedPublicScopedPackages = new Set([
   "@babel/core",
   // Historical public commit patches retain this exact predecessor package.
   "@hraness/atet",
+  "@hraness/credits-foundation",
   "@hraness/design-kit",
   "@hraness/direct",
   "@hraness/hra",
@@ -143,7 +144,7 @@ const excludedDirectories = new Set([".git", "dist", "node_modules", "target"]);
  * generated-site source, published docs, and the GitHub issue templates.
  */
 const publicCopyFile = /^(?:[A-Z_]+\.md|package\.json|site\/.+|docs\/.+\.md|\.github\/ISSUE_TEMPLATE\/.+)$/u;
-const textFile = /(?:^|\/)(?:CODEOWNERS|LICENSE|\.bun-version|\.editorconfig|\.gitattributes|\.gitignore)$|\.(?:c|css|h|html|json|lock|md|mjs|ps1|rs|svg|toml|ts|tsx|txt|xml|yaml|yml|zig)$/u;
+const textFile = /(?:^|\/)(?:CODEOWNERS|LICENSE|\.bun-version|\.editorconfig|\.env\.example|\.gitattributes|\.gitignore)$|\.(?:c|css|h|html|json|lock|md|mjs|ps1|rs|svg|toml|ts|tsx|txt|xml|yaml|yml|zig)$/u;
 // This synthetic logical dump is a reviewed migration input, not a general
 // database-file exception. It still passes every public sensitive-text check.
 const releasedStateSql = "scripts/fixtures/released-state/v0.5.0/control-plane.sql";
@@ -156,6 +157,8 @@ const materialDeclaration = `${materialDirectory}/check.d.mts`;
 const marketingFont = "fonts/instrument-serif/instrument-serif-latin-400.woff2";
 const supportRuntimePath = /^(?:package\/)?src\/support-runtime\.js$/u;
 const supportRuntimeSha256 = "6510a8046a611d4e47d1e220869bce4ae308ac59587944d3fdf10883eb3fd63e";
+const creditsRuntimePath = /^(?:package\/)?src\/credits-runtime\.js$/u;
+const creditsRuntimeSha256 = "94f4d103ecb2b87a44718e6435f02d4717501a45cd469e8eab231a2be3ed6b71";
 
 /** One additional declaration path; all snapshot text still receives the public scan. */
 async function assertMaterialPublicSource(root: string, label: string): Promise<void> {
@@ -257,6 +260,12 @@ async function scanPublicTree(root: string, skipCheckoutTmp: boolean): Promise<v
       } else if (entry.isFile() && supportRuntimePath.test(label)) {
         const bytes = await readFile(child);
         if (createHash("sha256").update(bytes).digest("hex") !== supportRuntimeSha256) {
+          throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
+        }
+        assertPublicText(bytes.toString("utf8"), label);
+      } else if (entry.isFile() && creditsRuntimePath.test(label)) {
+        const bytes = await readFile(child);
+        if (createHash("sha256").update(bytes).digest("hex") !== creditsRuntimeSha256) {
           throw new PublicTextPolicyError("UNREVIEWED_FILE_TYPE", label);
         }
         assertPublicText(bytes.toString("utf8"), label);

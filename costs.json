@@ -308,6 +308,18 @@
       "owner": "convex/quota.ts",
       "deletion": "convex/accountDeletion.ts",
       "budget": { "rowsPerAccount": 64, "bytesPerAccountMonth": 16384 }
+    },
+    "route:/v1/autorespond": {
+      "kind": "served",
+      "retention": "ephemeral",
+      "owner": "convex/autorespond.ts",
+      "budget": { "requestBytes": 16384, "responseBytes": 65536, "holdMicroUsdMax": 500000 }
+    },
+    "provider:vercel-ai-gateway:assistant_reply": {
+      "kind": "served",
+      "retention": "ephemeral",
+      "owner": "convex/autorespond.ts",
+      "budget": { "callsPerRequest": 1, "timeoutMs": 10000, "holdMicroUsdMax": 500000 }
     }
   },
   "exempt": []

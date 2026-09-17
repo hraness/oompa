@@ -43,6 +43,10 @@ These examples require a machine whose setup and rollout prerequisites are satis
 
 Use `oompa --help` for command groups and `--json` for structured output. Inspect an uncertain mutation before retrying it; do not replay a failed or ambiguous request under another account.
 
+### Prose autorespond and prepaid credits
+
+Prose autorespond answers an assistant turn that asks only for consent. `oompa autorespond gateway set` uses a Vercel AI Gateway key you supply; `oompa autorespond gateway set --hosted` uses Oompa's hosted backend instead and meters each reply against prepaid Hraness credits held by this machine, where one credit is one cent. `oompa credits topup` prints a payment link, `oompa credits wait` stores the device token after payment, and `oompa credits status` shows the balance. When credits run out, `oompa autorespond status` reports the payment link and exits `1`; agents read `oompa credits protocol --json`. The credits service, not this package, prices each reply. See [hosted autorespond](https://github.com/hraness/oompa/blob/main/docs/hosted-autorespond.md).
+
 ## Local execution, optional encrypted sync
 
 The local daemon owns session execution on one machine. Managed profiles have separate configuration. Synced session content is encrypted for paired devices; the service still receives account and delivery metadata. Provider credentials and raw reasoning are not sync payloads.

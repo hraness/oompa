@@ -7862,3 +7862,189 @@ describe("CLI entry point", () => {
     }
   });
 });
+
+describe("credits and hosted autorespond handoff", () => {
+  const shortfall = {
+    balance: { availableMicroUsd: 0, credits: 0, microUsd: 0, usd: "0.00" },
+    error: "credits_required",
+    message: "Oompa needs $0.01 in credits for one hosted autorespond reply; this device has $0.00 available.",
+    operation: "assistant_reply",
+    reason: "insufficient_credits",
+    required: { credits: 1, microUsd: 10_000, usd: "0.01" },
+    topup: {
+      claimId: "clm_8f3k2q",
+      expiresAt: "2026-09-18T12:00:00.000Z",
+      packs: [
+        { bonusCredits: 0, credits: 1000, id: "p10", usd: 10 },
+        { bonusCredits: 150, credits: 2500, id: "p25", usd: 25 },
+      ],
+      suggestedPackId: "p25",
+      url: "https://credits.hraness.com/t/clm_8f3k2q",
+    },
+  };
+  const requestId = "018bcfe5-6800-7000-8000-00000000077b";
+  const statusData = (credits: unknown) => ({
+    version: 1,
+    mode: "auto:all",
+    source: "default",
+    gateway: "not configured",
+    responder: "hosted",
+    credits,
+    counts: { accepted: 0, refused: 1, unknown: 0 },
+    recent: [],
+  });
+
+  test("delegates `oompa credits` to the shared protocol with Oompa's profile and exit codes", async () => {
+    const protocol = capture();
+    expect(await main(["credits", "protocol", "--json"], protocol.output, {})).toBe(0);
+    const document = JSON.parse(protocol.read().stdout) as {
+      commands: { status: string[]; wait: string[] };
+      product: { id: string; name: string };
+      schemaVersion: string;
+    };
+    expect(document.schemaVersion).toBe("hraness-credits-protocol-v1");
+    expect(document.product).toEqual({ id: "oompa", name: "Oompa" });
+    expect(document.commands.status).toEqual(["oompa", "credits", "status", "--json"]);
+    expect(document.commands.wait).toEqual(["oompa", "credits", "wait", "--json"]);
+    expect(protocol.read().stderr).toBe("");
+
+    const stateDirectory = await realpath(await mkdtemp(join(tmpdir(), "oompa-credits-state-")));
+    try {
+      let calls = 0;
+      const status = capture();
+      expect(await main(["credits", "status", "--json"], status.output, {
+        creditsIo: { fetch: () => { calls += 1; throw new Error("no network in tests"); }, stateDirectory },
+      })).toBe(0);
+      expect(JSON.parse(status.read().stdout)).toEqual({
+        product: { id: "oompa", name: "Oompa" },
+        schemaVersion: "hraness-credits-status-v1",
+        signedOut: true,
+        topup: { command: ["oompa", "credits", "topup", "--json"] },
+      });
+      expect(calls).toBe(0);
+
+      const usage = capture();
+      expect(await main(["credits", "rotate"], usage.output, { creditsIo: { stateDirectory } })).toBe(2);
+      expect(usage.read().stderr).toContain("Unknown credits command");
+    } finally {
+      await rm(stateDirectory, { force: true, recursive: true });
+    }
+
+    const help = capture();
+    expect(await main(["help", "credits"], help.output, {})).toBe(0);
+    expect(help.read().stdout).toContain("oompa credits topup");
+    expect(help.read().stdout).toContain("One credit is one cent.");
+  });
+
+  test("turns a paused hosted responder into exactly one credits-required line for agents", async () => {
+    const captured = capture();
+    expect(await main(["autorespond", "status", "--json"], captured.output, {
+      callDaemon: () => Promise.resolve({
+        data: statusData({ payload: shortfall, retryAt: 1_800_000, since: 900_000, state: "required" }),
+        ok: true,
+        requestId,
+        version: 1,
+      }),
+    })).toBe(1);
+    const stderrLines = captured.read().stderr.split("\n").filter((line) => line.length > 0);
+    expect(stderrLines).toHaveLength(1);
+    const envelope = JSON.parse(stderrLines[0] ?? "") as Record<string, unknown>;
+    expect(envelope).toMatchObject({
+      balance: { credits: 0, microUsd: 0, usd: "0.00" },
+      commands: {
+        email: ["oompa", "credits", "email", "--to", "{address}"],
+        status: ["oompa", "credits", "status", "--json"],
+        wait: ["oompa", "credits", "wait", "--json"],
+      },
+      operation: "assistant_reply",
+      product: { id: "oompa", name: "Oompa" },
+      required: { credits: 1, microUsd: 10_000, usd: "0.01" },
+      resume: { argv: ["oompa", "autorespond", "gateway", "set", "--hosted"], automatic: true },
+      schemaVersion: "hraness-credits-required-v1",
+      topup: {
+        expiresAt: "2026-09-18T12:00:00.000Z",
+        packs: [
+          { bonusCredits: 0, credits: 1000, id: "p10", usd: 10 },
+          { bonusCredits: 150, credits: 2500, id: "p25", usd: 25 },
+        ],
+        suggestedPackId: "p25",
+        url: "https://credits.hraness.com/t/clm_8f3k2q",
+      },
+    });
+    const failure = JSON.parse(captured.read().stdout) as { error: { code: string; details: unknown }; ok: boolean };
+    expect(failure.ok).toBe(false);
+    expect(failure.error.code).toBe("credits_required");
+    expect(failure.error.details).toEqual({ reason: "insufficient_credits", retryAt: 1_800_000 });
+  });
+
+  test("renders the same pause for people and leaves a ready or keyed status untouched", async () => {
+    const human = capture();
+    expect(await main(["autorespond", "status"], human.output, {
+      callDaemon: () => Promise.resolve({
+        data: statusData({ payload: shortfall, retryAt: 1_800_000, since: 900_000, state: "required" }),
+        ok: true,
+        requestId,
+        version: 1,
+      }),
+    })).toBe(1);
+    expect(human.read().stdout).toBe("");
+    expect(human.read().stderr).toContain("Oompa needs $0.01 in credits for assistant_reply; this device has $0.00.");
+    expect(human.read().stderr).toContain("Add credits: https://credits.hraness.com/t/clm_8f3k2q");
+    expect(human.read().stderr).toContain("oompa: Hosted autorespond is paused");
+
+    const signedOut = capture();
+    expect(await main(["autorespond", "status", "--json"], signedOut.output, {
+      callDaemon: () => Promise.resolve({
+        data: statusData({
+          payload: { error: "credits_required", message: "none set up", operation: "assistant_reply", reason: "subject_missing" },
+          retryAt: 1_800_000,
+          since: 900_000,
+          state: "required",
+        }),
+        ok: true,
+        requestId,
+        version: 1,
+      }),
+    })).toBe(1);
+    expect(signedOut.read().stderr).toBe("");
+    const failure = JSON.parse(signedOut.read().stdout) as { error: { code: string; message: string } };
+    expect(failure.error.code).toBe("credits_required");
+    expect(failure.error.message).toContain("oompa credits topup");
+
+    const ready = capture();
+    expect(await main(["autorespond", "status", "--json"], ready.output, {
+      callDaemon: () => Promise.resolve({ data: statusData({ state: "ready" }), ok: true, requestId, version: 1 }),
+    })).toBe(0);
+    expect(ready.read().stderr).toBe("");
+    expect(JSON.parse(ready.read().stdout)).toMatchObject({ data: { credits: { state: "ready" }, responder: "hosted" }, ok: true });
+
+    const keyed = capture();
+    expect(await main(["autorespond", "status", "--json"], keyed.output, {
+      callDaemon: () => Promise.resolve({
+        data: { ...statusData(undefined), credits: undefined, gateway: "configured", responder: "gateway-key" },
+        ok: true,
+        requestId,
+        version: 1,
+      }),
+    })).toBe(0);
+    expect(JSON.parse(keyed.read().stdout)).toMatchObject({ data: { gateway: "configured", responder: "gateway-key" }, ok: true });
+  });
+
+  test("selects the hosted responder without reading any descriptor", async () => {
+    const captured = capture();
+    const commands: LocalCommand[] = [];
+    expect(await main(["autorespond", "gateway", "set", "--hosted", "--json"], captured.output, {
+      callDaemon: (command) => {
+        commands.push(command);
+        return Promise.resolve({
+          data: { gateway: "not configured", responder: "hosted", version: 1 },
+          ok: true,
+          requestId,
+          version: 1,
+        });
+      },
+    })).toBe(0);
+    expect(commands).toEqual([{ hosted: true, kind: "autorespond.gateway-set" }]);
+    expect(JSON.parse(captured.read().stdout)).toMatchObject({ data: { responder: "hosted" }, ok: true });
+  });
+});

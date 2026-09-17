@@ -21,8 +21,8 @@
     "build:site": "bun ./scripts/build-site.ts",
     "check:effect-architecture": "bun ./scripts/check-codex-effect-architecture.ts",
     "check:browser": "bun run build:app && bun run build:site && bun run test:browser:custody && bun run test:browser",
-    "check": "bun run check:support-runtime && bun run check:cost-surfaces && bun run check:install-pins && bun run check:effect-architecture && bun run check:security-primitives && bun run lint && bun run typecheck && bun run test && bun run build:site -- --check && bun run build:app && bun run build && bun run check:package",
-    "check:ci-remainder": "bun run check:support-runtime && bun run check:cost-surfaces && bun run check:install-pins && bun run check:effect-architecture && bun run check:security-primitives && bun run lint && bun run typecheck && bun test ./scripts --isolate --max-concurrency=1 && bun run test:local-efficiency-plugin && bun run test:cloud-efficiency-plugin && bun test ./convex --isolate --max-concurrency=1 && bun run test:pr && bun run test:site && bun run test:app && bun run build:site -- --check && bun run build:app && bun run build && bun run check:package",
+    "check": "bun run check:support-runtime && bun run check:credits-runtime && bun run check:cost-surfaces && bun run check:install-pins && bun run check:effect-architecture && bun run check:security-primitives && bun run lint && bun run typecheck && bun run test && bun run build:site -- --check && bun run build:app && bun run build && bun run check:package",
+    "check:ci-remainder": "bun run check:support-runtime && bun run check:credits-runtime && bun run check:cost-surfaces && bun run check:install-pins && bun run check:effect-architecture && bun run check:security-primitives && bun run lint && bun run typecheck && bun test ./scripts --isolate --max-concurrency=1 && bun run test:local-efficiency-plugin && bun run test:cloud-efficiency-plugin && bun test ./convex --isolate --max-concurrency=1 && bun run test:pr && bun run test:site && bun run test:app && bun run build:site -- --check && bun run build:app && bun run build && bun run check:package",
     "check:package": "bun run test:package-policy && bun ./scripts/check-package.ts",
     "check:security-primitives": "bun ./scripts/check-security-primitives.ts",
     "check:install-pins": "bun ./scripts/check-install-pins.ts",
@@ -64,7 +64,9 @@
     "test:package-policy": "sh -c 'umask 077; exec bun test ./scripts/package-policy.test.ts --isolate --max-concurrency=1'",
     "typecheck": "tsc --noEmit",
     "build:support-runtime": "bun ./scripts/build-support-runtime.ts --write",
-    "check:support-runtime": "bun ./scripts/build-support-runtime.ts --check"
+    "check:support-runtime": "bun ./scripts/build-support-runtime.ts --check",
+    "build:credits-runtime": "bun ./scripts/build-credits-runtime.ts --write",
+    "check:credits-runtime": "bun ./scripts/build-credits-runtime.ts --check"
   },
   "files": [
     "src",
@@ -150,6 +152,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.67.0",
     "vite": "7.3.6",
-    "@hraness/support-foundation": "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed"
+    "@hraness/support-foundation": "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed",
+    "@hraness/credits-foundation": "github:hraness/credits-foundation#19b7f04b7bc2f829f8daed0f92ecf604aa6d6142"
   }
 }

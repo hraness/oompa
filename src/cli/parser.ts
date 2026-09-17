@@ -238,6 +238,8 @@ Usage:
   oompa
   oompa support [protocol --json|offer --json|shown ID|release ID|dismiss|snooze|enable|status --json]
     Optional support and updates; agents use support protocol --json at closeout.
+  oompa credits [protocol --json|status [--json]|topup [--usd N|--pack ID] [--email ADDR] [--json]|email --to ADDR|wait [--timeout 15m] [--json]|estimate OPERATION [--units N]|signout]
+    Prepaid credits for hosted autorespond; agents use credits protocol --json.
   oompa help [<group> [<command>]]
   oompa status [--json]
   oompa init [--yes] [--json]
@@ -488,6 +490,30 @@ Examples:
   oompa memory share my-session preferences.review --reason "Reusable project convention"
   oompa memory hosted create jungle
   oompa memory hosted list`,
+  credits: `Oompa prepaid credits
+
+Usage:
+  oompa credits protocol --json
+  oompa credits status [--json]
+  oompa credits topup [--usd <dollars>|--pack <id>] [--email <address>] [--json]
+  oompa credits email --to <address> [--claim <id>]
+  oompa credits wait [--claim <id>] [--timeout 15m] [--json]
+  oompa credits estimate <operation> [--units <n>] [--json]
+  oompa credits signout
+
+Hosted autorespond (\`oompa autorespond gateway set --hosted\`) answers prose
+approvals through Oompa's backend and meters each reply against prepaid
+Hraness credits held by this device. One credit is one cent. \`topup\` prints a
+payment link; after paying in the browser, \`wait\` stores the device token that
+the first purchase issues. Exit codes: 0 success; 1 state unavailable, busy, or
+service unreachable; 2 usage error, invalid id, or expired link; 3 payment
+still required after \`wait\` timed out. Tokens never appear in output.
+
+Examples:
+  oompa credits status --json
+  oompa credits topup --usd 25
+  oompa credits wait --timeout 10m
+  oompa autorespond gateway set --hosted`,
   "autorespond-after-hours": `Oompa after-hours automatic approval budgets
 
 Usage:
@@ -518,7 +544,7 @@ Usage:
   oompa session peer-policy get <session> [--json]
   oompa session peer-policy set <session> <off|inspect|coordinate> --revision <n> [--json]
   oompa autorespond on|workspace|off|default|status [--session <session>] [--json]
-  oompa autorespond gateway set [--from-fd <fd>] [--json]
+  oompa autorespond gateway set [--from-fd <fd>|--hosted] [--json]
   oompa autorespond gateway clear [--json]
   oompa session watch <session> [--cursor <cursor>] [--jsonl]
   oompa session events <session> [--cursor <cursor>] [--limit <1..200>] [--wait-ms <0..30000>] [--json|--jsonl|--follow]
@@ -2499,6 +2525,7 @@ export function parseCli(argv: readonly string[], cwd = process.cwd()): CliInvoc
     if (action === "gateway") {
       const gatewayAction = take(cursor, "autorespond gateway action");
       const descriptor = option(cursor, "--from-fd");
+      const hosted = flag(cursor, "--hosted");
       finish(cursor);
       if (idempotencyKey !== undefined) {
         throw new CliUsageError("--idempotency-key is not supported by autorespond.");
@@ -2507,10 +2534,19 @@ export function parseCli(argv: readonly string[], cwd = process.cwd()): CliInvoc
         if (descriptor !== undefined) {
           throw new CliUsageError("--from-fd is not supported by `autorespond gateway clear`.");
         }
+        if (hosted) {
+          throw new CliUsageError("--hosted is not supported by `autorespond gateway clear`.");
+        }
         return { kind: "command", command: { kind: "autorespond.gateway-clear" }, json };
       }
       if (gatewayAction !== "set") {
         throw new CliUsageError("Unknown autorespond gateway action. Use `set` or `clear`.");
+      }
+      if (hosted) {
+        if (descriptor !== undefined) {
+          throw new CliUsageError("Choose either --hosted or --from-fd for `autorespond gateway set`.");
+        }
+        return { kind: "command", command: { hosted: true, kind: "autorespond.gateway-set" }, json };
       }
       if (descriptor === undefined) {
         return { input: { kind: "stdin" }, json, kind: "autorespond.gateway-set" };
