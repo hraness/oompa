@@ -50,52 +50,70 @@ const compilerOutput = async (
   }
 };
 
+// The source argument stays repository-relative on purpose: rustc embeds the
+// spelled input path into panic metadata, so an absolute path would make the
+// artifact bytes depend on the checkout directory.
 export const authoritySupervisorBuildCommand = (
-  zigExecutable: string,
+  rustcExecutable: string,
   target: "x86_64-linux-musl" | "aarch64-linux-musl",
   sourcePath: string,
   outputPath: string,
 ): readonly string[] => [
-  zigExecutable,
-  "build-exe",
+  rustcExecutable,
+  "--edition",
+  "2021",
   "-O",
-  "ReleaseSafe",
-  "-fstrip",
-  "-target",
-  target,
+  "-C",
+  "overflow-checks=on",
+  "-C",
+  "debug-assertions=on",
+  "-C",
+  "strip=symbols",
+  "-C",
+  "panic=abort",
+  "-C",
+  "linker=rust-lld",
+  "--target",
+  target === "x86_64-linux-musl" ? "x86_64-unknown-linux-musl" : "aarch64-unknown-linux-musl",
   sourcePath,
-  `-femit-bin=${outputPath}`,
+  "-o",
+  outputPath,
 ];
 
 export const parseAuthoritySupervisorBuildVerifierArguments = (
   arguments_: readonly string[],
-): Readonly<{ zigExecutable: string }> => {
+): Readonly<{ rustcExecutable: string }> => {
   if (
     arguments_.length !== 2
-    || arguments_[0] !== "--zig"
+    || arguments_[0] !== "--rustc"
     || arguments_[1] === undefined
     || !isAbsolute(arguments_[1])
   ) return verificationError("authority_supervisor_build_usage_invalid");
-  return { zigExecutable: arguments_[1] };
+  return { rustcExecutable: arguments_[1] };
+};
+
+const rustcVersion = (output: string): string | undefined => {
+  const match = /^rustc (\d+\.\d+\.\d+)(?:\s|$)/u.exec(output.trim());
+  return match?.[1];
 };
 
 export async function verifyAuthoritySupervisorBuild(
-  zigExecutable: string,
+  rustcExecutable: string,
   repositoryRoot = resolve(import.meta.dir, ".."),
 ): Promise<void> {
-  if (!isAbsolute(zigExecutable)) {
+  if (!isAbsolute(rustcExecutable)) {
     return verificationError("authority_supervisor_build_usage_invalid");
   }
   let compilerPath: string;
   try {
-    compilerPath = await realpath(zigExecutable);
+    compilerPath = await realpath(rustcExecutable);
   } catch {
     return verificationError("authority_supervisor_build_usage_invalid");
   }
   const root = await realpath(repositoryRoot).catch(() =>
     verificationError("authority_supervisor_build_usage_invalid"));
-  const version = await compilerOutput([compilerPath, "version"], root);
-  if (version.trim() !== authoritySupervisorArtifactManifest.compiler.version) {
+  const version = await compilerOutput([compilerPath, "--version"], root);
+  if (rustcVersion(version) !== authoritySupervisorArtifactManifest.compiler.version) {
     return verificationError("authority_supervisor_build_compiler_version_invalid");
   }
 
@@ -106,7 +124,7 @@ export async function verifyAuthoritySupervisorBuild(
 
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "hra-authority-supervisor-build-"));
   try {
-    const sourcePath = join(root, authoritySupervisorArtifactManifest.source.relativePath);
+    const sourcePath = authoritySupervisorArtifactManifest.source.relativePath;
     for (const artifact of artifacts) {
       const firstOutput = join(temporaryDirectory, `${artifact.target}.first`);
       const secondOutput = join(temporaryDirectory, `${artifact.target}.second`);
@@ -139,7 +157,7 @@ if (import.meta.main) {
   let exitCode = 0;
   try {
     const arguments_ = parseAuthoritySupervisorBuildVerifierArguments(process.argv.slice(2));
-    await verifyAuthoritySupervisorBuild(arguments_.zigExecutable);
+    await verifyAuthoritySupervisorBuild(arguments_.rustcExecutable);
   } catch (error: unknown) {
     exitCode = 1;
     process.stderr.write(`${error instanceof Error ? error.message : "Authority supervisor build verification failed."}\n`);

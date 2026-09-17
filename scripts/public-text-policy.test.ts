@@ -663,7 +663,7 @@ describe("public text policy", () => {
   test("permits only the two verified authority-supervisor binary names", async () => {
     const root = await mkdtemp(join(tmpdir(), "oompa-public-policy-authority-artifacts-"));
     const repositoryRoot = join(import.meta.dir, "..");
-    const sourceRelativePath = join("scripts", "authority-supervisor.zig");
+    const sourceRelativePath = join("scripts", "authority-supervisor.rs");
     const binaryDirectory = join("scripts", "authority-supervisor-bin");
     const binaries = [
       "authority-supervisor-linux-x64-musl",

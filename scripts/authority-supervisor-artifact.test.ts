@@ -46,7 +46,7 @@ const elf = (machine: number): Buffer => {
   return value;
 };
 
-const sourceRelativePath = "scripts/authority-supervisor.zig";
+const sourceRelativePath = "scripts/authority-supervisor.rs";
 const x64RelativePath = "scripts/authority-supervisor-bin/authority-supervisor-linux-x64-musl";
 const arm64RelativePath = "scripts/authority-supervisor-bin/authority-supervisor-linux-arm64-musl";
 
@@ -75,7 +75,7 @@ const fixtureManifest = (
       target: "x86_64-linux-musl",
     },
   },
-  compiler: { name: "zig", version: "0.16.0" },
+  compiler: { name: "rustc", version: "1.97.1" },
   schemaVersion: 1,
   source: {
     byteLength: source.byteLength,
@@ -290,7 +290,7 @@ describe("authority supervisor artifact resolver", () => {
 
       const wrongPath: AuthoritySupervisorArtifactManifest = {
         ...fixture.manifest,
-        source: { ...fixture.manifest.source, relativePath: "scripts/other.zig" },
+        source: { ...fixture.manifest.source, relativePath: "scripts/other.rs" },
       };
       await expect(resolveFixture(fixture, { manifest: wrongPath })).rejects.toMatchObject({
         code: "authority_supervisor_manifest_invalid",

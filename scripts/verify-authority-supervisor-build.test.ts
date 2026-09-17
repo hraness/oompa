@@ -9,42 +9,52 @@ import {
 } from "./verify-authority-supervisor-build";
 
 describe("authority supervisor build verifier", () => {
-  test("constructs the exact pinned Zig 0.16 static-musl build command", () => {
+  test("constructs the exact pinned rustc static-musl build command", () => {
     expect(authoritySupervisorBuildCommand(
-      "/opt/zig/zig",
+      "/opt/rust/rustc",
       "x86_64-linux-musl",
-      "/workspace/scripts/authority-supervisor.zig",
+      "scripts/authority-supervisor.rs",
       "/temporary/x64",
     )).toEqual([
-      "/opt/zig/zig",
-      "build-exe",
+      "/opt/rust/rustc",
+      "--edition",
+      "2021",
       "-O",
-      "ReleaseSafe",
-      "-fstrip",
-      "-target",
-      "x86_64-linux-musl",
-      "/workspace/scripts/authority-supervisor.zig",
-      "-femit-bin=/temporary/x64",
+      "-C",
+      "overflow-checks=on",
+      "-C",
+      "debug-assertions=on",
+      "-C",
+      "strip=symbols",
+      "-C",
+      "panic=abort",
+      "-C",
+      "linker=rust-lld",
+      "--target",
+      "x86_64-unknown-linux-musl",
+      "scripts/authority-supervisor.rs",
+      "-o",
+      "/temporary/x64",
     ]);
     expect(authoritySupervisorBuildCommand(
-      "/opt/zig/zig",
+      "/opt/rust/rustc",
       "aarch64-linux-musl",
-      "/workspace/scripts/authority-supervisor.zig",
+      "scripts/authority-supervisor.rs",
       "/temporary/arm64",
-    )).toContain("aarch64-linux-musl");
+    )).toContain("aarch64-unknown-linux-musl");
   });
 
-  test("requires one explicit absolute Zig executable", () => {
+  test("requires one explicit absolute rustc executable", () => {
     expect(parseAuthoritySupervisorBuildVerifierArguments([
-      "--zig",
-      "/opt/zig/zig",
-    ])).toEqual({ zigExecutable: "/opt/zig/zig" });
+      "--rustc",
+      "/opt/rust/rustc",
+    ])).toEqual({ rustcExecutable: "/opt/rust/rustc" });
     for (const arguments_ of [
       [],
-      ["--zig"],
-      ["--zig", "zig"],
-      ["--compiler", "/opt/zig/zig"],
-      ["--zig", "/opt/zig/zig", "--extra"],
+      ["--rustc"],
+      ["--rustc", "rustc"],
+      ["--compiler", "/opt/rust/rustc"],
+      ["--rustc", "/opt/rust/rustc", "--extra"],
     ]) {
       expect(() => parseAuthoritySupervisorBuildVerifierArguments(arguments_)).toThrow(
         "authority_supervisor_build_usage_invalid",
@@ -52,15 +62,18 @@ describe("authority supervisor build verifier", () => {
     }
   });
 
-  test("pins the official Zig archive and rebuilds the checked-in artifacts in CI", async () => {
+  test("installs the pinned Rust toolchain and rebuilds the checked-in artifacts in CI", async () => {
     const workflow = await readFile(
       join(import.meta.dir, "..", ".github", "workflows", "ci.yml"),
       "utf8",
     );
-    expect(workflow).toContain("https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz");
-    expect(workflow).toContain("70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00");
-    expect(workflow).toContain("sha256sum --check --status");
-    expect(workflow).toMatch(/verify-authority-supervisor-build\.ts\s+--zig/u);
+    expect(workflow).toContain("rustup toolchain install 1.97.1");
+    expect(workflow).toContain("--target x86_64-unknown-linux-musl");
+    expect(workflow).toContain("--target aarch64-unknown-linux-musl");
+    expect(workflow).toContain("rustup which --toolchain 1.97.1 rustc");
+    expect(workflow).toMatch(/verify-authority-supervisor-build\.ts\s+--rustc/u);
+    expect(workflow).not.toContain("ziglang.org");
+    expect(workflow).not.toContain("setup-zig");
     // The runtime custody test runs once, inside the remainder's scripts suite.
     expect(workflow).not.toContain("authority-supervisor-runtime.test.ts");
     const packageScripts = (JSON.parse(await readFile(
@@ -72,7 +85,6 @@ describe("authority supervisor build verifier", () => {
     expect(packageScripts["check:ci-remainder"])
       .toContain("bun test ./scripts --isolate --max-concurrency=1");
     expect(packageScripts["test:source"]).toBe("bun test ./src --isolate --max-concurrency=1");
-    expect(workflow).not.toContain("setup-zig");
     const enable = workflow.indexOf(
       "sudo /usr/sbin/sysctl --write kernel.apparmor_restrict_unprivileged_userns=0",
     );

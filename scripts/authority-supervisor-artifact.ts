@@ -40,7 +40,7 @@ export type AuthoritySupervisorArtifactManifest = Readonly<{
   source: PinnedFile;
 }>;
 
-const sourceRelativePath = "scripts/authority-supervisor.zig";
+const sourceRelativePath = "scripts/authority-supervisor.rs";
 const artifactRelativePaths = {
   arm64: "scripts/authority-supervisor-bin/authority-supervisor-linux-arm64-musl",
   x64: "scripts/authority-supervisor-bin/authority-supervisor-linux-x64-musl",
@@ -61,35 +61,35 @@ const freezeAuthoritySupervisorArtifactManifest = (
 export const authoritySupervisorArtifactManifest = freezeAuthoritySupervisorArtifactManifest({
   artifacts: {
     arm64: {
-      byteLength: 237_680,
+      byteLength: 434_472,
       elfMachine: 183,
       maximumByteLength: 8 * 1024 * 1024,
       mode: 0o755,
       relativePath: artifactRelativePaths.arm64,
-      sha256: "0b01043131f57843818d4a129bb418876087638574671dbb632adb3425890697",
+      sha256: "ab13e9ca1b6a8961a9e72dfe73f4bd812720d27fc1a16c293ec47b2560151626",
       target: "aarch64-linux-musl",
     },
     x64: {
-      byteLength: 328_104,
+      byteLength: 478_888,
       elfMachine: 62,
       maximumByteLength: 8 * 1024 * 1024,
       mode: 0o755,
       relativePath: artifactRelativePaths.x64,
-      sha256: "066c4f49d3cb5cd3481fa8143fb6a2fc826d4c0a94e96ad970df54194288907d",
+      sha256: "c0aac07998a26f43a7a1b2af98dab8600eab6a44340e358f2e6a3faffdc4bc40",
       target: "x86_64-linux-musl",
     },
   },
   compiler: {
-    name: "zig",
-    version: "0.16.0",
+    name: "rustc",
+    version: "1.97.1",
   },
   schemaVersion: 1,
   source: {
-    byteLength: 73_870,
+    byteLength: 113_058,
     maximumByteLength: 2 * 1024 * 1024,
     mode: 0o644,
     relativePath: sourceRelativePath,
-    sha256: "a8911c16f3327230e5cd9dea0fa07cfa1fd760896ec43233b2423e01e71de680",
+    sha256: "df7d44e034956b9032e3ba75428dfa3e9e20dbd3fdbdf99c544c42d4c1f324ee",
   },
 } as const satisfies AuthoritySupervisorArtifactManifest);
 
@@ -195,8 +195,8 @@ const expectedUid = (): number | undefined =>
 const assertManifest = (manifest: AuthoritySupervisorArtifactManifest): void => {
   if (
     manifest.schemaVersion !== 1
-    || manifest.compiler.name !== "zig"
-    || manifest.compiler.version !== "0.16.0"
+    || manifest.compiler.name !== "rustc"
+    || manifest.compiler.version !== "1.97.1"
     || manifest.source.relativePath !== sourceRelativePath
     || manifest.source.mode !== 0o644
     || manifest.artifacts.x64.relativePath !== artifactRelativePaths.x64
