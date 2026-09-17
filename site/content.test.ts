@@ -273,13 +273,19 @@ describe("public content contract", () => {
       path: "/social-card.png",
       width: 1200,
     });
-    for (const document of [html, renderPrivacyHtml(), renderPreviewHtml()]) {
+    for (const document of [html, renderPrivacyHtml(), renderPreviewHtml(), renderDocumentationHtml("/docs/")]) {
       expect(document).toContain('<meta property="og:image" content="https://oompa.app/social-card.png">');
       expect(document).toContain('<meta property="og:image:type" content="image/png">');
       expect(document).toContain('<meta property="og:image:width" content="1200">');
       expect(document).toContain('<meta property="og:image:height" content="630">');
       expect(document).toContain(`<meta property="og:image:alt" content="${publicContent.socialCard.alt}">`);
+      const ogTitle = /<meta property="og:title" content="([^"]+)">/u.exec(document)?.[1];
+      const ogDescription = /<meta property="og:description" content="([^"]+)">/u.exec(document)?.[1];
+      expect(ogTitle).toBeDefined();
+      expect(ogDescription).toBeDefined();
       expect(document).toContain('<meta name="twitter:card" content="summary_large_image">');
+      expect(document).toContain(`<meta name="twitter:title" content="${ogTitle ?? ""}">`);
+      expect(document).toContain(`<meta name="twitter:description" content="${ogDescription ?? ""}">`);
       expect(document).toContain('<meta name="twitter:image" content="https://oompa.app/social-card.png">');
       expect(document).not.toContain("social-card.svg");
     }
