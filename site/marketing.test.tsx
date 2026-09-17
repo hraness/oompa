@@ -68,10 +68,13 @@ describe("public server marketing composition", () => {
     const { document } = parseHTML(renderMarketingPage(publicContent));
     const notice = document.querySelector('.hraness-marketing-hero__copy a[href="/docs/status/"]')?.parentElement;
     expect(notice?.textContent).toContain("New machine setup is temporarily paused.");
-    expect(notice?.textContent).toContain("The v0.8.4 CLI artifact is admitted for installation");
-    const future = parseHTML(renderMarketingPage({ ...publicContent, releaseVersion: "0.8.5" })).document;
+    expect(notice?.textContent).toContain("This release candidate is not yet admitted");
+    const admitted = parseHTML(renderMarketingPage({ ...publicContent, releaseVersion: "0.8.4" })).document;
+    expect(admitted.querySelector(".hraness-marketing-hero__copy")?.textContent).toContain("The v0.8.4 CLI artifact is admitted for installation");
+    const future = parseHTML(renderMarketingPage({ ...publicContent, releaseVersion: "0.8.6" })).document;
     expect(future.querySelector(".hraness-marketing-hero__copy")?.textContent).toContain("This release candidate is not yet admitted");
     expect(future.querySelector(".hraness-marketing-cta__summary")?.textContent).toContain("unavailable install command");
+    expect(document.querySelector(".hraness-marketing-cta__summary")?.textContent).toContain("unavailable install command");
     expect(notice?.textContent).toContain("current daemon and hosted command-writer rollout remains blocked on capacity");
     expect(notice?.querySelector("a")?.textContent).toBe("Check current availability");
     expect(notice?.querySelector("strong")?.textContent).toBe("New machine setup is temporarily paused.");
@@ -82,14 +85,14 @@ describe("public server marketing composition", () => {
     expect(flowText.indexOf("initialized, authorized machine")).toBeLessThan(flowText.indexOf(publicContent.hero.steps[0]!.command));
     const setup = guideDocument("/docs/start/");
     const commandBlocks = [...setup.querySelectorAll("main pre")];
-    const installNotice = setup.querySelector('aside[aria-label="CLI artifact admitted; daemon startup blocked"]');
+    const installNotice = setup.querySelector('aside[aria-label="Candidate artifact not yet admitted"]');
     expect(installNotice?.textContent).toContain(publicContent.installNotice);
     expect(installNotice?.querySelector("a")?.getAttribute("href")).toBe(publicContent.links.admittedInstall);
     expect(installNotice?.nextElementSibling).toBe(commandBlocks[0]);
     expect(commandBlocks[0]?.textContent).toBe(publicContent.installCommand);
-    const admissionNotice = setup.querySelector('aside[aria-label="CLI artifact admitted; daemon startup blocked"]');
+    const admissionNotice = setup.querySelector('aside[aria-label="Candidate artifact not yet admitted"]');
     expect(admissionNotice).not.toBeNull();
-    expect(admissionNotice?.textContent).toContain("CLI artifact and its exact-byte npm mirror passed release admission");
+    expect(admissionNotice?.textContent).toContain("This release candidate is not yet admitted");
     expect(admissionNotice?.textContent).toContain("Neither artifact admission nor installation authorizes daemon startup.");
     expect(admissionNotice?.querySelector('a[href="https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts"]')?.getAttribute("href")).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts");
     expect(admissionNotice?.nextElementSibling).toBe(commandBlocks[0]);
@@ -144,7 +147,7 @@ describe("public server marketing composition", () => {
       ["/docs/start/", "Set up your first machine", "primary"],
       [publicContent.links.app, "Open Oompa", "secondary"],
     ]);
-    expect(textAt(".hraness-marketing-cta__summary")).toBe("The setup guide starts with the admitted CLI installer and offline checks. Complete capacity rollout prerequisites before initializing or starting a daemon.");
+    expect(textAt(".hraness-marketing-cta__summary")).toBe("The setup guide starts with the admitted predecessor and this candidate's unavailable install command. Wait for exact artifact admission and the capacity rollout prerequisites before starting a new machine.");
     expect(textAt(".hraness-marketing-cta__footnote")).toBe(publicContent.hero.boundary);
   });
 
