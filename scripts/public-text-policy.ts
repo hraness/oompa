@@ -145,7 +145,7 @@ const excludedDirectories = new Set([".git", "dist", "node_modules", "target"]);
  * generated-site source, published docs, and the GitHub issue templates.
  */
 const publicCopyFile = /^(?:[A-Z_]+\.md|package\.json|site\/.+|docs\/.+\.md|\.github\/ISSUE_TEMPLATE\/.+)$/u;
-const textFile = /(?:^|\/)(?:CODEOWNERS|LICENSE|\.bun-version|\.editorconfig|\.gitattributes|\.gitignore)$|\.(?:c|css|h|html|json|lock|md|mjs|ps1|rs|svg|toml|ts|tsx|txt|xml|yaml|yml|zig)$/u;
+const textFile = /(?:^|\/)(?:CODEOWNERS|LICENSE|\.bun-version|\.editorconfig|\.gitattributes|\.gitignore)$|\.(?:c|css|h|html|json|ld|lock|md|mjs|ps1|rs|svg|toml|ts|tsx|txt|xml|yaml|yml|zig)$/u;
 // This synthetic logical dump is a reviewed migration input, not a general
 // database-file exception. It still passes every public sensitive-text check.
 const releasedStateSql = "scripts/fixtures/released-state/v0.5.0/control-plane.sql";
