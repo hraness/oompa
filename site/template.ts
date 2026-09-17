@@ -216,6 +216,8 @@ export const renderHead = (
 <meta property="og:image" content="${escapeHtml(image.src)}">
 ${image.type === undefined ? "" : `<meta property="og:image:type" content="${escapeHtml(image.type)}">\n`}${image.width === undefined ? "" : `<meta property="og:image:width" content="${image.width.toString()}">\n`}${image.height === undefined ? "" : `<meta property="og:image:height" content="${image.height.toString()}">\n`}<meta property="og:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(options.title)}">
+<meta name="twitter:description" content="${escapeHtml(options.description)}">
 <meta name="twitter:image" content="${escapeHtml(image.src)}">
 <meta name="twitter:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="theme-color" content="${escapeHtml(options.themeColor ?? defaultPalette.background)}">
