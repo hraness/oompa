@@ -272,6 +272,7 @@ class SignInOnlyCodex implements CodexRuntimePort {
   startTurn(): Promise<never> { return Promise.reject(this.#unsupported()); }
   steer(): Promise<never> { return Promise.reject(this.#unsupported()); }
   interrupt(): Promise<never> { return Promise.reject(this.#unsupported()); }
+  compact(): Promise<never> { return Promise.reject(this.#unsupported()); }
   rename(): Promise<never> { return Promise.reject(this.#unsupported()); }
   inspectTurn(): Promise<never> { return Promise.reject(this.#unsupported()); }
   inspectInteractionAuthority(): Promise<never> { return Promise.reject(this.#unsupported()); }

@@ -352,6 +352,26 @@ export class ClaudeStreamClient {
     await this.#write(claudeUserLine(message, attachments), onWriteStarted);
   }
 
+  /**
+   * Asks the pinned runtime to compact the session's context with one
+   * `/compact` `user` line — the same write path `steer` uses, but admitted
+   * only between turns: a `/compact` arriving mid-turn is ambiguous in v1
+   * (the runtime may queue it as ordinary message text rather than run it),
+   * so an in-flight turn refuses `INVALID_INPUT` instead of writing. A
+   * closed or fenced client refuses through `#assertOpen` exactly as every
+   * other frame does. The provider's `compaction` facts report the outcome.
+   */
+  async compact(onWriteStarted?: () => void): Promise<void> {
+    this.#assertOpen();
+    if (this.#assembler.activeTurnId !== null) {
+      throw new ClaudeError(
+        "INVALID_INPUT",
+        "A Claude turn is in flight; compaction is only admitted between turns",
+      );
+    }
+    await this.#write(claudeUserLine("/compact"), onWriteStarted);
+  }
+
   /** Asks the runtime to stop the in-flight turn. Its `result` reads interrupted. */
   async interrupt(onWriteStarted?: () => void): Promise<void> {
     this.#assertOpen();

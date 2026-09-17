@@ -346,7 +346,7 @@ describe("durable autorespond admission", () => {
     predecessor.exec("PRAGMA query_only=ON");
     try {
       const before = capturedDatabaseSnapshot(predecessor);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:43:61");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:43:62");
       expect(capturedDatabaseSnapshot(predecessor)).toEqual(before);
     } finally { predecessor.close(false); }
     const migrated = new StateStore(paths, { now: () => clock.now });
@@ -397,14 +397,14 @@ describe("durable autorespond admission", () => {
       const before = capturedDatabaseSnapshot(damaged);
       expect(() => new StateStore(paths)).toThrow("STATE_SCHEMA_V44_AUTORESPOND_BUDGET_PREDECESSOR_COLLISION");
       expect(capturedDatabaseSnapshot(damaged)).toEqual(before);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:43:61");
+      expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:43:62");
       expect(capturedDatabaseSnapshot(damaged)).toEqual(before);
     } finally { damaged.close(false); }
   });
 
-  // Exact45, exact49 and current61 exercise the post43 refusal branch. These
+  // Exact45, exact49 and current62 exercise the post43 refusal branch. These
   // controls do not claim unavailable archived44/46/47/48 producer coverage.
-  for (const version of [45, 49, 61] as const) test(`never applies pre-release v43 trigger repair to ${version === 61 ? "current" : "authentic canonical"} v${String(version)}`, async () => {
+  for (const version of [45, 49, 62] as const) test(`never applies pre-release v43 trigger repair to ${version === 62 ? "current" : "authentic canonical"} v${String(version)}`, async () => {
     let paths: StateStore["paths"];
     if (version === 45) ({ paths } = await canonicalBudgetArchive(45));
     else if (version === 49) {
@@ -427,8 +427,8 @@ describe("durable autorespond admission", () => {
       const before = capturedDatabaseSnapshot(damaged);
       expect(() => new StateStore(paths)).toThrow("STATE_SCHEMA_V43_QUEUE_CANCELLATION_GUARD_INVALID");
       expect(capturedDatabaseSnapshot(damaged)).toEqual(before);
-      expect(() => new StateStore(paths, { readonly: true })).toThrow(version === 61
-        ? "STATE_SCHEMA_V43_QUEUE_CANCELLATION_GUARD_INVALID" : `STATE_SCHEMA_MIGRATION_REQUIRED:${String(version)}:61`);
+      expect(() => new StateStore(paths, { readonly: true })).toThrow(version === 62
+        ? "STATE_SCHEMA_V43_QUEUE_CANCELLATION_GUARD_INVALID" : `STATE_SCHEMA_MIGRATION_REQUIRED:${String(version)}:62`);
       expect(capturedDatabaseSnapshot(damaged)).toEqual(before);
     } finally { damaged.close(false); }
   });
@@ -568,11 +568,11 @@ describe("after-hours autorespond storage authority", () => {
         ).map(({ name: column }) => `"${column}"`).join(",");
         return { name, columns, rows: inspector.query(`SELECT ${columns} FROM "${name}"`).all() };
       });
-    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:45:61");
+    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:45:62");
     expect(capturedDatabaseSnapshot(inspector)).toEqual(original);
     const migrated = new StateStore(paths, { now: () => clock.now });
     stores.push(migrated);
-    expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
+    expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 62 });
     for (const { table, columns } of canonicalColumns) {
       // Preserve main's new canonical50 column oracle on the authentic45
       // source. Joined60 may append other columns; every old column stays exact.
@@ -693,7 +693,7 @@ describe("after-hours autorespond storage authority", () => {
         inspector.query("DELETE FROM autorespond_after_hours_history WHERE session_id=?").run(sessionId);
         inspector.exec(sql);
       } else if (damage === "missing_ledger") inspector.exec("DELETE FROM migrations WHERE version=46");
-      else inspector.exec("INSERT INTO migrations(version,applied_at) VALUES (62,1000000)");
+      else inspector.exec("INSERT INTO migrations(version,applied_at) VALUES (63,1000000)");
       const before = inspector.query("SELECT * FROM sqlite_master ORDER BY type,name").all();
       const ledger = inspector.query("SELECT * FROM migrations ORDER BY version").all();
       for (const readonly of [true, false]) {

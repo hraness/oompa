@@ -721,6 +721,30 @@ export class PinnedDevinRuntimeManager implements DevinRuntimePort {
     for (const permission of pending) this.#reportInteractionSettled(session, permission);
   }
 
+  async compact(input: {
+    authority: ProfileAuthority;
+    providerThreadId: string;
+    signal: AbortSignal;
+  }): Promise<void> {
+    input.signal.throwIfAborted();
+    const session = this.#requireSession(input.authority, input.providerThreadId);
+    if (session.status === "terminal") {
+      throw new DevinError("PROCESS_EXITED", "The Devin session requires a fresh session/load writer.");
+    }
+    if (session.activeTurnId !== undefined || session.promptTask !== undefined) {
+      throw new DevinError("INVALID_INPUT", "The Devin session has an active prompt; compaction is only admitted between turns.");
+    }
+    // ACP v1 has no dedicated compaction request: the pinned CLI advertises
+    // `/compact` as a slash command, which arrives as an ordinary
+    // session/prompt. The client's single-prompt guard is the mid-turn fence,
+    // and its compaction updates stay intentionally unprojected.
+    await session.client.prompt({
+      sessionId: input.providerThreadId,
+      signal: input.signal,
+      text: "/compact",
+    });
+  }
+
   interactionAuthority(
     authority: ProfileAuthority,
     providerThreadId: string,

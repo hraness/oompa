@@ -208,7 +208,7 @@ export const PINNED_CODEX_NOTIFICATION_MATRIX = Object.freeze({
   "item/reasoning/summaryTextDelta": "routed",
   "item/reasoning/summaryPartAdded": "ignored",
   "item/reasoning/textDelta": "ignored",
-  "thread/compacted": "ignored",
+  "thread/compacted": "routed",
   "model/rerouted": "ignored",
   "model/verification": "ignored",
   "modelProvider/authRecoveryStarted": "ignored",
@@ -390,6 +390,7 @@ export type CodexMethod =
   | "model/list"
   | "permissionProfile/list"
   | "plugin/list"
+  | "thread/compact/start"
   | "thread/list"
   | "thread/items/list"
   | "thread/name/set"
@@ -444,6 +445,7 @@ export const OPERATIONS: Readonly<Record<CodexMethod, CodexOperationDescriptor>>
   "thread/turns/list": operation("thread/turns/list", "read", 20_000, "retry-read", true),
   "thread/start": operation("thread/start", "thread-mutation", 30_000, "reconcile"),
   "thread/resume": operation("thread/resume", "thread-mutation", 30_000, "reconcile"),
+  "thread/compact/start": operation("thread/compact/start", "thread-mutation", 30_000, "reconcile"),
   "thread/unsubscribe": operation("thread/unsubscribe", "thread-mutation", 15_000, "reconcile"),
   "thread/name/set": operation("thread/name/set", "thread-mutation", 15_000, "reconcile"),
   "turn/start": operation("turn/start", "turn-mutation", 30_000, "reconcile"),
@@ -838,6 +840,21 @@ type CodexFactBody =
   | { readonly type: "loginCompleted"; readonly loginId: string | null; readonly success: boolean }
   | { readonly type: "threadStatusChanged"; readonly threadId: string; readonly status: CodexThreadStatus }
   | { readonly type: "threadDeleted"; readonly threadId: string }
+  | {
+      /**
+       * One provider-native context-compaction episode on `threadId`. Codex
+       * reports only the applied completion (`thread/compacted` carries the
+       * exact turn id); another provider may also report a `started` or
+       * `failed` episode and may not bind the episode to a turn. Token
+       * counts are retained only when the provider reports them.
+       */
+      readonly type: "threadCompaction";
+      readonly threadId: string;
+      readonly turnId: string | null;
+      readonly outcome: "started" | "completed" | "failed";
+      readonly preTokens?: number;
+      readonly postTokens?: number;
+    }
   | { readonly type: "turnStarted"; readonly threadId: string; readonly turn: CodexTurn }
   | { readonly type: "turnCompleted"; readonly threadId: string; readonly turn: CodexTurn }
   | { readonly type: "threadNameUpdated"; readonly threadId: string; readonly name: string | null }
@@ -3185,6 +3202,16 @@ export function parseFact(method: string, params: unknown): CodexFact {
       type: "threadNameUpdated",
       threadId: identifier(root.threadId, "thread id"),
       name: nullableString(root.name, "thread name", 1_024),
+    };
+  }
+  if (method === "thread/compacted") {
+    // The pinned `ContextCompactedNotification` is exactly
+    // `{ threadId, turnId }`. No other provider payload is retained.
+    return {
+      type: "threadCompaction",
+      threadId: identifier(root.threadId, "thread id"),
+      turnId: identifier(root.turnId, "turn id"),
+      outcome: "completed",
     };
   }
   if (method === "item/started" || method === "item/completed") {

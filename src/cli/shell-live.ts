@@ -408,6 +408,7 @@ const renderNonDeltaEvent = (event: SessionEvent): string | null => {
     case "plan_updated": return `Plan updated: ${String(body.steps.length)} step${body.steps.length === 1 ? "" : "s"}.`;
     case "diff_updated": return `Diff updated: ${String(body.changedFiles)} file${body.changedFiles === 1 ? "" : "s"}.`;
     case "token_usage": return null;
+    case "compaction": return `Compaction ${safeLiveText(body.outcome)} (${safeLiveText(body.trigger)}).`;
     case "interaction_requested": return null;
     case "interaction_state": return `Interaction ${body.interactionId}: ${safeLiveText(body.state)}, revision ${String(body.revision)}.`;
     case "warning": return `Warning ${safeLiveText(body.code)}: ${safeLiveText(body.message)}`;

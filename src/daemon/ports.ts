@@ -276,6 +276,14 @@ export interface SessionRuntimePort<Profile> {
   startTurn(input: { authority: ProfileAuthority; providerThreadId: string; projectRoot?: string; review: RuntimeStartReviewOf<Profile>; message: string; attachments?: readonly PreparedAttachment[]; clientMessageId: string; signal: AbortSignal }): Promise<{ turnId: string; status: CodexTurnStatus; effectiveRuntimeProfile: Profile }>;
   steer(input: { authority: ProfileAuthority; providerThreadId: string; activeTurnId: string; message: string; attachments?: readonly PreparedAttachment[]; clientMessageId: string; signal: AbortSignal }): Promise<void>;
   interrupt(input: { authority: ProfileAuthority; providerThreadId: string; activeTurnId: string; signal: AbortSignal }): Promise<void>;
+  /**
+   * One provider-native context-compaction request: `thread/compact/start`
+   * for Codex, a `/compact` user line for Claude Code. The call resolves when
+   * the provider accepted the request; the applied outcome arrives as the
+   * provider's own `threadCompaction` fact. Providers that cannot compact
+   * mid-turn refuse with a typed error rather than queue the request.
+   */
+  compact(input: { authority: ProfileAuthority; providerThreadId: string; signal: AbortSignal }): Promise<void>;
   inspectInteractionAuthority(input: {
     authority: ProfileAuthority;
     provider: ProviderInteractionAuthority;
@@ -568,6 +576,7 @@ export class UnavailableCodexRuntime implements CodexRuntimePort {
   startTurn(): Promise<never> { return Promise.reject(this.#unavailable()); }
   steer(): Promise<never> { return Promise.reject(this.#unavailable()); }
   interrupt(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  compact(): Promise<never> { return Promise.reject(this.#unavailable()); }
   rename(): Promise<never> { return Promise.reject(this.#unavailable()); }
   inspectTurn(): Promise<never> { return Promise.reject(this.#unavailable()); }
   inspectInteractionAuthority(): Promise<never> { return Promise.reject(this.#unavailable()); }
@@ -641,6 +650,7 @@ export class UnavailableClaudeRuntime implements ClaudeRuntimePort {
   startTurn(): Promise<never> { return Promise.reject(this.#unavailable()); }
   steer(): Promise<never> { return Promise.reject(this.#unavailable()); }
   interrupt(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  compact(): Promise<never> { return Promise.reject(this.#unavailable()); }
   inspectInteractionAuthority(): Promise<never> { return Promise.reject(this.#unavailable()); }
   validateInteractionResolution(): Promise<never> { return Promise.reject(this.#unavailable()); }
   resolveInteraction(): Promise<never> { return Promise.reject(this.#unavailable()); }
@@ -696,6 +706,7 @@ export class UnavailableDevinRuntime implements DevinRuntimePort {
   startTurn(): Promise<never> { return Promise.reject(this.#unavailable()); }
   steer(): Promise<never> { return Promise.reject(this.#unavailable()); }
   interrupt(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  compact(): Promise<never> { return Promise.reject(this.#unavailable()); }
   inspectInteractionAuthority(): Promise<never> { return Promise.reject(this.#unavailable()); }
   validateInteractionResolution(): Promise<never> { return Promise.reject(this.#unavailable()); }
   resolveInteraction(): Promise<never> { return Promise.reject(this.#unavailable()); }

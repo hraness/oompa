@@ -175,6 +175,43 @@ describe("ClaudeSessionFactTranslator provider authority", () => {
     });
   });
 
+  test("maps a provider compaction episode onto the shared threadCompaction fact", () => {
+    const value = translator();
+    const completed = value.translate(firstAuthority, {
+      connectionId,
+      outcome: "completed",
+      postTokens: 41_000,
+      preTokens: 262_144,
+      providerThreadId,
+      type: "compaction",
+    });
+    expect(completed.timelineFacts).toEqual([{
+      connectionId,
+      outcome: "completed",
+      postTokens: 41_000,
+      preTokens: 262_144,
+      threadId: providerThreadId,
+      turnId: null,
+      type: "threadCompaction",
+    }]);
+    expect(completed.usageObservations).toEqual([]);
+
+    const failed = value.translate(firstAuthority, {
+      connectionId,
+      errorCode: "Not enough messages to compact",
+      outcome: "failed",
+      providerThreadId,
+      type: "compaction",
+    });
+    expect(failed.timelineFacts).toEqual([{
+      connectionId,
+      outcome: "failed",
+      threadId: providerThreadId,
+      turnId: null,
+      type: "threadCompaction",
+    }]);
+  });
+
   test("splits normalized usage from the neutral timeline with frozen exact authority", () => {
     const value = translator();
     const quota = value.translate(firstAuthority, quotaObserved());

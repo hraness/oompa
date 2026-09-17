@@ -949,6 +949,19 @@ export class CodexAppServerClient {
     );
   }
 
+  /**
+   * Ask the provider to compact `threadId`'s context. The pinned response is
+   * an empty record; the applied outcome arrives later as the routed
+   * `thread/compacted` notification.
+   */
+  async compactThread(threadId: string): Promise<FencedCodexValue<Readonly<Record<string, never>>>> {
+    return this.#closedRequest(
+      "thread/compact/start",
+      { threadId: boundedIdentifier(threadId, "thread id") },
+      parseEmptyResult,
+    );
+  }
+
   async startTurn(input: StartTurnInput): Promise<FencedCodexValue<TurnStartResult>> {
     const params: Record<string, unknown> = {
       threadId: boundedIdentifier(input.threadId, "thread id"),

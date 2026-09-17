@@ -834,6 +834,136 @@ describe("Claude stream client", () => {
     await client.close();
   });
 
+  test("writes one /compact user line while idle and reports its write entry", async () => {
+    const { client, process } = open();
+    let started = 0;
+    await client.compact(() => { started += 1; });
+    expect(started).toBe(1);
+    expect(writtenLines(process)).toEqual([
+      {
+        message: { content: [{ text: "/compact", type: "text" }], role: "user" },
+        type: "user",
+      },
+    ]);
+    await client.close();
+  });
+
+  test("routes the provider's compaction facts for a requested /compact", async () => {
+    const { client, facts, process } = open();
+    const sessionId = "5d0c2f2a-9a2b-4f6b-8d7c-1f2e3d4c5b6a";
+    process.emit({
+      claude_code_version: "2.1.260",
+      model: "claude-fable-5-1",
+      permissionMode: "default",
+      session_id: sessionId,
+      subtype: "init",
+      tools: [],
+      type: "system",
+    });
+    await client.compact();
+    process.emit(
+      {
+        session_id: sessionId,
+        status: "compacting",
+        subtype: "status",
+        type: "system",
+        uuid: "11111110-0000-4000-8000-000000000002",
+      },
+      {
+        compactMetadata: { postTokens: 2_091, preTokens: 25_920, trigger: "manual" },
+        session_id: sessionId,
+        subtype: "compact_boundary",
+        type: "system",
+        uuid: "11111110-0000-4000-8000-000000000003",
+      },
+      {
+        compact_result: "success",
+        session_id: sessionId,
+        status: null,
+        subtype: "status",
+        type: "system",
+        uuid: "11111110-0000-4000-8000-000000000004",
+      },
+      {
+        claude_code_version: "2.1.260",
+        model: "claude-fable-5-1",
+        permissionMode: "default",
+        session_id: sessionId,
+        subtype: "init",
+        tools: [],
+        type: "system",
+        uuid: "11111110-0000-4000-8000-000000000005",
+      },
+    );
+    await settle();
+    expect(facts.map((fact) => fact.type)).toEqual([
+      "sessionBootstrapped",
+      "compaction",
+      "compaction",
+      "sessionBootstrapped",
+    ]);
+    expect(facts[1]).toEqual({ outcome: "started", type: "compaction" });
+    expect(facts[2]).toEqual({
+      outcome: "completed",
+      postTokens: 2_091,
+      preTokens: 25_920,
+      trigger: "manual",
+      type: "compaction",
+    });
+    await client.close();
+  });
+
+  test("routes a provider-reported compaction failure as a bounded fact", async () => {
+    const { client, facts, process } = open();
+    await client.compact();
+    process.emit(
+      { status: "compacting", subtype: "status", type: "system" },
+      {
+        compact_error: "Not enough messages to compact.",
+        compact_result: "failed",
+        status: null,
+        subtype: "status",
+        type: "system",
+      },
+    );
+    await settle();
+    expect(facts).toEqual([
+      { outcome: "started", type: "compaction" },
+      {
+        errorCode: "Not enough messages to compact.",
+        outcome: "failed",
+        type: "compaction",
+      },
+    ]);
+    await client.close();
+  });
+
+  test("refuses to compact while a turn is in flight", async () => {
+    const { client, process } = open();
+    let started = 0;
+    await client.startTurn({ message: "work", turnId: "turn-1" });
+    await expect(client.compact(() => { started += 1; }))
+      .rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(started).toBe(0);
+    expect(process.written).toHaveLength(1);
+    await client.close();
+  });
+
+  test("refuses to compact on a closed or fenced client", async () => {
+    const closed = open();
+    await closed.client.close();
+    await expect(closed.client.compact())
+      .rejects.toMatchObject({ code: "PROCESS_EXITED" });
+    expect(closed.process.written).toEqual([]);
+
+    const fenced = open();
+    fenced.client.fenceWrites();
+    await expect(fenced.client.compact())
+      .rejects.toBeInstanceOf(IndeterminateClaudeEffectError);
+    expect(fenced.process.written).toEqual([]);
+    await fenced.client.close();
+  });
+
   test("interrupts an in-flight turn and marks its result interrupted", async () => {
     const { client, facts, process } = open();
     await client.startTurn({ message: "long job", turnId: "turn-1" });

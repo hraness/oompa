@@ -139,9 +139,9 @@ const withEffectFixture = async (
     store = undefined;
     database = new Database(paths.database, { create: false, strict: true });
     database.exec("PRAGMA foreign_keys=ON");
-    expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
+    expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 62 });
     expect(database.query("SELECT version FROM migrations ORDER BY version").all())
-      .toEqual(Array.from({ length: 61 }, (_, index) => ({ version: index + 1 })));
+      .toEqual(Array.from({ length: 62 }, (_, index) => ({ version: index + 1 })));
     expect(database.query("SELECT DISTINCT format FROM mutation_effect_evidence_provenance").all())
       .toEqual([{ format: "joined_v1" }]);
     expect(readMutationEffectEvidenceProvenance(database, staged.attempt.id))
@@ -267,7 +267,7 @@ const refuseCurrentTamperThroughReopens = async (
 
 for (const kind of ["session.stop", "session.rename"] as const) {
   for (const corruption of corruptions) {
-    test(`current60 refuses anchored ${kind} tamper: ${corruption.name}`, async () => {
+    test(`current62 refuses anchored ${kind} tamper: ${corruption.name}`, async () => {
       await withEffectFixture(kind, async (input) => {
         const { database, staged } = input;
         const json = corruption.json(staged.evidence);
@@ -291,7 +291,7 @@ for (const kind of ["session.stop", "session.rename"] as const) {
   }
 
   for (const mismatch of ["stored evidence kind", "parsed evidence kind"] as const) {
-    test(`current60 refuses anchored ${kind} with mismatched ${mismatch}`, async () => {
+    test(`current62 refuses anchored ${kind} with mismatched ${mismatch}`, async () => {
       await withEffectFixture(kind, async (input) => {
         const { database, staged } = input;
         const otherKind = kind === "session.stop" ? "session.rename" : "session.stop";
@@ -310,7 +310,7 @@ for (const kind of ["session.stop", "session.rename"] as const) {
     });
   }
 
-  test(`valid current60 ${kind} control still enters existing restart containment`, async () => {
+  test(`valid current62 ${kind} control still enters existing restart containment`, async () => {
     await withEffectFixture(kind, async ({ paths, database, staged }) => {
       const expected = snapshot(database);
       const reopened = new StateStore(paths, options);
@@ -331,7 +331,7 @@ for (const kind of ["session.stop", "session.rename"] as const) {
   });
 }
 
-// Unlike the current60 tamper tests, these begin with exact captured canonical41
+// Unlike the current62 tamper tests, these begin with exact captured canonical41
 // bytes. The one negative deliberately changes an original unresolved row BEFORE
 // migration; only that change is synthetic. No current database is restamped,
 // no generator executes, and neither case claims combined49 or native acceptance.
@@ -359,7 +359,7 @@ for (const corrupt of [false, true]) {
       expect(database.query("SELECT * FROM mutation_resolutions ORDER BY attempt_id").all())
         .toEqual([...fixture.resolutions]);
       expect(() => new StateStore(paths, { ...options, readonly: true }))
-        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:41:61");
+        .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:41:62");
       expect(snapshot(database)).toEqual(original);
       const subject = fixture.scenarios["stop-marked_unresolved"];
       if (corrupt) {
@@ -368,7 +368,7 @@ for (const corrupt of [false, true]) {
       }
       const admittedHistory = snapshot(database);
       store = new StateStore(paths, options);
-      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
+      expect(database.query("PRAGMA user_version").get()).toEqual({ user_version: 62 });
       expect(database.query("SELECT DISTINCT format FROM mutation_effect_evidence_provenance").all())
         .toEqual([{ format: "canonical41_v1" }]);
       const afterMigration = snapshot(database);

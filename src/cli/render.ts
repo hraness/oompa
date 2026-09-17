@@ -6,6 +6,7 @@ import {
   autorespondAfterHoursCommandResultSchema,
   notificationEmailCommandResultSchema,
   notificationHoursCommandResultSchema,
+  publicSessionCompactPolicySchema,
   publicSessionListItemSchema,
   publicPeerSessionPolicySchema,
   publicSessionListPageSchema,
@@ -472,6 +473,7 @@ const renderSingleEvent = (event: SessionEvent): string => {
     ].join("\n");
     case "diff_updated": return `Diff: ${String(body.changedFiles)} files, ${String(body.patchBytesObserved)} bytes observed`;
     case "token_usage": return `Tokens: ${body.totalTokens === null ? "unknown" : String(body.totalTokens)} total${body.modelContextWindow === null ? "" : ` of ${String(body.modelContextWindow)}`}${body.providerCost === undefined ? "" : `; provider cost ${String(body.providerCost.amount)} ${body.providerCost.currency}`}`;
+    case "compaction": return `Compaction ${line(body.outcome)} (${line(body.trigger)}${body.strategy === undefined ? "" : `, ${line(body.strategy)}`})${body.preTokens === undefined || body.postTokens === undefined ? "" : `, ${String(body.preTokens)} to ${String(body.postTokens)} tokens`}`;
     case "interaction_requested": return [
       `Interaction required: ${line(body.interactionKind)} ${line(body.interactionId)}`,
       `  revision ${String(body.revision)}${body.blocking ? ", blocking" : ""}`,
@@ -1363,6 +1365,30 @@ const assertCommandSuccessData = (command: LocalCommand, data: unknown): void =>
     ) invalidCommandResponse(command);
     return;
   }
+  if (
+    command.kind === "session.compact-policy.get"
+    || command.kind === "session.compact-policy.set"
+  ) {
+    const parsed = publicSessionCompactPolicySchema.safeParse(data);
+    const exactSession = sessionIdSchema.safeParse(command.session);
+    if (
+      !parsed.success
+      || (exactSession.success && parsed.data.sessionId !== exactSession.data)
+      || (
+        command.kind === "session.compact-policy.set"
+        && (
+          parsed.data.enabled !== command.enabled
+          || (command.triggerTokens !== undefined
+            && parsed.data.triggerTokens !== command.triggerTokens)
+          || (command.minIntervalMs !== undefined
+            && parsed.data.minIntervalMs !== command.minIntervalMs)
+          || (command.expectedRevision !== undefined
+            && parsed.data.revision !== command.expectedRevision + 1)
+        )
+      )
+    ) invalidCommandResponse(command);
+    return;
+  }
   if (command.kind === "session.events") {
     const page = sessionEventPage(data);
     const exactSession = sessionIdSchema.safeParse(command.session);
@@ -1484,6 +1510,10 @@ const publicInteractionData = (command: LocalCommand, data: unknown): unknown =>
     command.kind === "session.peer-policy.get"
     || command.kind === "session.peer-policy.set"
   ) return publicPeerSessionPolicySchema.parse(data);
+  if (
+    command.kind === "session.compact-policy.get"
+    || command.kind === "session.compact-policy.set"
+  ) return publicSessionCompactPolicySchema.parse(data);
   if (command.kind === "device.list") {
     const parsed = parseCloudDeviceList(data);
     return parsed ?? { currentDevicePublicId: null, devices: [] };
@@ -3150,6 +3180,19 @@ export function renderSuccess(command: LocalCommand, data: unknown, json: boolea
     output.writeStdout([
       `Peer policy: ${policy.mode}`,
       `Session: ${policy.sessionId}`,
+      `Revision: ${String(policy.revision)}`,
+      `Updated: ${instant(policy.updatedAt)}`,
+    ].join("\n").concat("\n"));
+  } else if (
+    command.kind === "session.compact-policy.get"
+    || command.kind === "session.compact-policy.set"
+  ) {
+    const policy = publicSessionCompactPolicySchema.parse(publicData);
+    output.writeStdout([
+      `Compact policy: ${policy.enabled ? "on" : "off"}`,
+      `Session: ${policy.sessionId}`,
+      `Trigger tokens: ${String(policy.triggerTokens)}`,
+      `Minimum interval: ${String(policy.minIntervalMs)} ms`,
       `Revision: ${String(policy.revision)}`,
       `Updated: ${instant(policy.updatedAt)}`,
     ].join("\n").concat("\n"));

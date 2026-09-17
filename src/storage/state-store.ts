@@ -58,6 +58,16 @@ import {
 } from "../domain/autorespond-after-hours";
 import { decideProtocolAutorespondAuthority } from "../domain/autorespond-protocol-policy";
 import {
+  AUTO_COMPACT_DEFAULT_MIN_INTERVAL_MS,
+  AUTO_COMPACT_DEFAULT_TRIGGER_TOKENS,
+  AUTO_COMPACT_MAX_MIN_INTERVAL_MS,
+  AUTO_COMPACT_MAX_TRIGGER_TOKENS,
+  AUTO_COMPACT_MIN_INTERVAL_FLOOR_MS,
+  AUTO_COMPACT_MIN_TRIGGER_TOKENS,
+  autoCompactPolicySchema,
+  defaultAutoCompactPolicy,
+} from "../domain/compact-policy";
+import {
   AUTORESPOND_CONSECUTIVE_LIMIT,
   AUTORESPOND_HOUR_MS,
   AUTORESPOND_DAY_MS,
@@ -1841,6 +1851,17 @@ export type PeerSessionPolicyRecord = Readonly<{
   updatedAt: number;
 }>;
 
+/** Durable per-session auto-compaction policy; `enabled:false` by default. */
+export type SessionCompactPolicyRecord = Readonly<{
+  sessionId: SessionId;
+  enabled: boolean;
+  triggerTokens: number;
+  minIntervalMs: number;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+}>;
+
 export type PeerSessionActionRecord = Readonly<{
   id: PeerActionId;
   idempotencyKey: string;
@@ -2275,6 +2296,20 @@ export type SessionHostCapabilityBindingRecord = Readonly<{
 const peerSessionPolicyRowSchema = z.object({
   session_id: sessionIdSchema,
   mode: peerSessionPolicyModeSchema,
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  created_at: unixMillisecondsSchema,
+  updated_at: unixMillisecondsSchema,
+}).strict();
+
+const sessionCompactPolicyRowSchema = z.object({
+  session_id: sessionIdSchema,
+  enabled: z.union([z.literal(0), z.literal(1)]),
+  trigger_tokens: z.number().int()
+    .min(AUTO_COMPACT_MIN_TRIGGER_TOKENS)
+    .max(AUTO_COMPACT_MAX_TRIGGER_TOKENS),
+  min_interval_ms: z.number().int()
+    .min(AUTO_COMPACT_MIN_INTERVAL_FLOOR_MS)
+    .max(AUTO_COMPACT_MAX_MIN_INTERVAL_MS),
   revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   created_at: unixMillisecondsSchema,
   updated_at: unixMillisecondsSchema,
@@ -2734,6 +2769,19 @@ const mapPeerSessionPolicy = (value: unknown): PeerSessionPolicyRecord => {
   return {
     sessionId: row.session_id,
     mode: row.mode,
+    revision: row.revision,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const mapSessionCompactPolicy = (value: unknown): SessionCompactPolicyRecord => {
+  const row = sessionCompactPolicyRowSchema.parse(value);
+  return {
+    sessionId: row.session_id,
+    enabled: row.enabled === 1,
+    triggerTokens: row.trigger_tokens,
+    minIntervalMs: row.min_interval_ms,
     revision: row.revision,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -3909,6 +3957,10 @@ export type MutationEffectEvidence =
   | { kind: "session.send"; providerThreadId: string; baseline: SessionProviderBaseline; clientMessageId: string; messageDigest: string; runtimeProfile?: ReviewedRuntimeProfile | undefined; messageActor?: SessionMessageActor | undefined }
   | { kind: "session.steer"; providerThreadId: string; baseline: SessionProviderBaseline; activeTurnId: string | null; clientMessageId: string; messageDigest: string; messageActor?: SessionMessageActor | undefined }
   | { kind: "session.stop"; providerThreadId: string; providerTimestampUnit?: "unix_milliseconds_v1" | undefined; baseline: SessionProviderBaseline; activeTurnId: string | null }
+  // A compaction request's only durable provider trace is the session event
+  // stream: the proof baseline is the exact stream epoch and high-water
+  // sequence captured before dispatch, not a provider timestamp.
+  | { kind: "session.compact"; providerThreadId: string; baseline: SessionProviderBaseline; streamEpoch: string; streamSequence: number }
   | { kind: "session.rename"; providerThreadId: string; providerTimestampUnit?: "unix_milliseconds_v1" | undefined; baseline: SessionProviderBaseline; requestedName: string }
   | { kind: "session.start"; projectId: ProjectId; clientMessageId: string | null; messageDigest: string | null; presetContract?: PresetContract | undefined; runtimeProfile?: ReviewedRuntimeProfile | undefined; conversationAutomationCapability?: typeof SESSION_CONVERSATION_AUTOMATION_CAPABILITY | undefined }
   | { kind: "session.switch"; daemonGeneration?: number | undefined; requestedAccountId: ProfileId | null; requestedPreset: Preset | null; sourceProfileId: ProfileId; sourceProcessGeneration: number; sourceProvider: Provider; sourceProviderThreadId: string; sourcePreset: Preset; targetProfileId: ProfileId; targetProcessGeneration: number; targetProvider: Provider; targetProviderAccountKey?: string | undefined; targetHostCapabilities?: SessionProviderSwitchHostCapabilities | undefined; targetPreset: Preset; presetContract?: PresetContract | undefined; transcriptDigest: string; seedDigest: string; seedIncludedRecords: number; seedOmittedRecords: number; seedRetentionGapReason?: SessionEventGapReason | undefined; runtimeProfile: ReviewedRuntimeProfile }
@@ -4310,7 +4362,7 @@ type DesktopSwitchPlan =
 // policy, v47/v48 memory authority, and the v49 nullable Work project fence.
 // Private candidate only until the exact governed canonical50 join is proved.
 // Canonical1..50 precede the nine frozen usage units51..59 and joined bridge60.
-const currentSchemaVersion = 61;
+const currentSchemaVersion = 62;
 // A cloud device public id (`isOpaqueIdentifier` in src/cloud/contracts.ts).
 // The ledger keys on it, so the shape is pinned here rather than accepting an
 // arbitrary string from the cloud bridge.
@@ -11173,6 +11225,7 @@ const backfillSchemaVersion40ProviderAccounts = (
     "session.send",
     "session.steer",
     "session.stop",
+    "session.compact",
     "session.rename",
     "session.switch",
     "session.queue",
@@ -11891,7 +11944,7 @@ const assertProviderAccountAuthority = (database: Database): void => {
          ON q.scope_kind='mutation' AND q.scope_id=m.id
        WHERE m.kind IN (
          'account.login','account.logout','account.login-cancel',
-         'session.start','session.send','session.steer','session.stop','session.rename','session.queue'
+         'session.start','session.send','session.steer','session.stop','session.compact','session.rename','session.queue'
        ) AND a.attempt_id IS NULL AND q.scope_id IS NULL`,
     ).get(),
   );
@@ -15268,6 +15321,59 @@ WHEN (
 BEGIN SELECT RAISE(ABORT, 'peer session turn origin quota exceeded'); END;
 `;
 
+/*
+ * v62: one durable auto-compaction policy per session. `enabled` starts off;
+ * the trigger seeds the domain defaults for every session insert, and the
+ * transition guard enforces revision monotonicity plus the domain bounds.
+ * Mutable last-fired state deliberately stays out of this table: the rate
+ * limiter derives the last compaction instant from the session event stream.
+ */
+const schemaVersion62SessionCompactPolicy = `
+CREATE TABLE IF NOT EXISTS session_compact_policies (
+  session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+  enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+  trigger_tokens INTEGER NOT NULL CHECK(trigger_tokens BETWEEN ${String(AUTO_COMPACT_MIN_TRIGGER_TOKENS)} AND ${String(AUTO_COMPACT_MAX_TRIGGER_TOKENS)}),
+  min_interval_ms INTEGER NOT NULL CHECK(min_interval_ms BETWEEN ${String(AUTO_COMPACT_MIN_INTERVAL_FLOOR_MS)} AND ${String(AUTO_COMPACT_MAX_MIN_INTERVAL_MS)}),
+  revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991),
+  created_at INTEGER NOT NULL CHECK(created_at >= 0),
+  updated_at INTEGER NOT NULL CHECK(updated_at >= created_at)
+) STRICT;
+DROP TRIGGER IF EXISTS session_compact_policy_default;
+CREATE TRIGGER session_compact_policy_default
+AFTER INSERT ON sessions
+BEGIN
+  INSERT INTO session_compact_policies(
+    session_id,enabled,trigger_tokens,min_interval_ms,revision,created_at,updated_at
+  )
+  VALUES (
+    NEW.id,0,${String(AUTO_COMPACT_DEFAULT_TRIGGER_TOKENS)},${String(AUTO_COMPACT_DEFAULT_MIN_INTERVAL_MS)},1,NEW.created_at,NEW.created_at
+  );
+END;
+DROP TRIGGER IF EXISTS session_compact_policy_transition_guard;
+CREATE TRIGGER session_compact_policy_transition_guard
+BEFORE UPDATE ON session_compact_policies
+WHEN NOT (
+  NEW.session_id=OLD.session_id
+  AND NEW.created_at=OLD.created_at
+  AND NEW.revision=OLD.revision+1
+  AND NEW.updated_at>=OLD.updated_at
+  AND NEW.enabled IN (0,1)
+  AND NEW.trigger_tokens BETWEEN ${String(AUTO_COMPACT_MIN_TRIGGER_TOKENS)} AND ${String(AUTO_COMPACT_MAX_TRIGGER_TOKENS)}
+  AND NEW.min_interval_ms BETWEEN ${String(AUTO_COMPACT_MIN_INTERVAL_FLOOR_MS)} AND ${String(AUTO_COMPACT_MAX_MIN_INTERVAL_MS)}
+)
+BEGIN SELECT RAISE(ABORT, 'illegal session compact policy transition'); END;
+DROP TRIGGER IF EXISTS session_compact_policy_delete_guard;
+CREATE TRIGGER session_compact_policy_delete_guard
+BEFORE DELETE ON session_compact_policies
+WHEN EXISTS (SELECT 1 FROM sessions WHERE id=OLD.session_id)
+BEGIN SELECT RAISE(ABORT, 'session compact policy cannot be deleted'); END;
+`;
+
+const sessionCompactPolicyObjects = schemaCohortObjects(schemaVersion62SessionCompactPolicy);
+if (sessionCompactPolicyObjects.length !== 4) {
+  throw new Error("STATE_COMPACT_POLICY_DEFINITION_INVALID");
+}
+
 const schemaVersion40QueuePeerProvenance = `
 CREATE INDEX IF NOT EXISTS queue_peer_action
   ON queue_entries(peer_action_id) WHERE peer_action_id IS NOT NULL;
@@ -15526,6 +15632,21 @@ const applySchemaVersion40PeerSessions = (database: Database): void => {
      SELECT id,'coordinate',1,created_at,created_at FROM sessions ORDER BY id`,
   ).run();
   database.exec(schemaVersion40QueuePeerProvenance);
+};
+
+// The v62 step is additive only: install the exact objects, backfill one
+// default policy row per session the AFTER INSERT trigger never saw, then
+// prove the surface inside the caller's transaction.
+const applySessionCompactPolicySchema = (database: Database): void => {
+  database.exec(schemaVersion62SessionCompactPolicy);
+  database.query(
+    `INSERT OR IGNORE INTO session_compact_policies(
+       session_id,enabled,trigger_tokens,min_interval_ms,revision,created_at,updated_at
+     )
+     SELECT id,0,${String(AUTO_COMPACT_DEFAULT_TRIGGER_TOKENS)},${String(AUTO_COMPACT_DEFAULT_MIN_INTERVAL_MS)},1,created_at,created_at
+     FROM sessions ORDER BY id`,
+  ).run();
+  assertSchemaCohortObjects(database, sessionCompactPolicyObjects, "joined62");
 };
 
 /*
@@ -19356,12 +19477,19 @@ const joinedProviderRootObjects = privateTask40RootObjects.filter((object) =>
   ![...JOINED_EVIDENCE_PREDECESSOR_GUARDS, ...PROVIDER_LOGIN_BINDING_PREDECESSOR_GUARDS]
     .some((guard) => guard.name === object.name));
 
-const assertJoinedStateSchema = (database: Database): void => {
-  assertSchemaCohortObjects(database, joinedQueueMessageScrubObjects, "joined60");
+// The joined surface is identical at the v61 predecessor boundary and the
+// current boundary except for the ledger tail and the additive v62 compact
+// policy objects, so one parameterized assertion serves both.
+const assertJoinedStateSchemaSurface = (
+  database: Database,
+  finalVersion: 61 | 62,
+): void => {
+  const cohort = `joined${String(finalVersion)}`;
+  assertSchemaCohortObjects(database, joinedQueueMessageScrubObjects, cohort);
   assertSchemaMigrationLedgerTail(database,
-    Array.from({ length: 27 }, (_, index) => index + 35), "STATE_SCHEMA_JOIN_LEDGER_INVALID");
+    Array.from({ length: finalVersion - 34 }, (_, index) => index + 35), "STATE_SCHEMA_JOIN_LEDGER_INVALID");
   assertJoinedCanonicalObjects(database);
-  assertSchemaCohortObjects(database, joinedProviderRootObjects, "joined60");
+  assertSchemaCohortObjects(database, joinedProviderRootObjects, cohort);
   assertEffectEvidenceProvenanceSchema(database);
   assertSessionSwitchExecutionContextSchema(database);
   assertSchemaVersion42SessionSwitch(database, "joined");
@@ -19369,6 +19497,9 @@ const assertJoinedStateSchema = (database: Database): void => {
   assertProviderLoginBindingTransitionSchema(database);
   assertTerminalAttachmentAcknowledgmentSchema(database);
   assertAttachmentCustodySchema(database, "joined", "acknowledged_v1");
+  if (finalVersion >= 62) {
+    assertSchemaCohortObjects(database, sessionCompactPolicyObjects, cohort);
+  }
 };
 
 // Schema 61 removes every retired_provider_* refusal trigger installed by the
@@ -19383,6 +19514,12 @@ const dropRetiredProviderAdmissionTriggers = (database: Database): void => {
   );
   for (const { name } of names) database.exec(`DROP TRIGGER "${name.replaceAll('"', '""')}"`);
 };
+
+const assertJoined61StateSchema = (database: Database): void =>
+  assertJoinedStateSchemaSurface(database, 61);
+
+const assertJoinedStateSchema = (database: Database): void =>
+  assertJoinedStateSchemaSurface(database, 62);
 
 const migrateWritableDatabase = (
   database: Database,
@@ -19418,6 +19555,18 @@ const migrateWritableDatabase = (
       // historical installers, move a ledger or reconstruct missing proof.
       return hasPendingSecurityScrub(database);
     }
+    if (initialVersion === 61) {
+      // The released joined-61 boundary. Its complete surface is proved before
+      // the additive v62 step; the joined installers below are not re-entrant
+      // and must not see this cohort.
+      assertJoined61StateSchema(database);
+      applySessionCompactPolicySchema(database);
+      database.query("INSERT INTO migrations(version,applied_at) VALUES (?,?)")
+        .run(62, unixMillisecondsSchema.parse(now()));
+      database.exec("PRAGMA user_version=62");
+      assertJoinedStateSchema(database);
+      return hasPendingSecurityScrub(database);
+    }
     if (initialVersion === 60) {
       // Devin is a supported provider again. Schema 61 drops the additive
       // refusal triggers that fenced the retired provider; live Devin
@@ -19429,6 +19578,10 @@ const migrateWritableDatabase = (
       applyJoinedQueueTranscriptGuard(database, schemaVersion43FinalizationTriggerSql("queue_transcript_finalization_guard"));
       database.query("INSERT INTO migrations(version,applied_at) VALUES(61,?)").run(now());
       database.exec("PRAGMA user_version=61");
+      applySessionCompactPolicySchema(database);
+      database.query("INSERT INTO migrations(version,applied_at) VALUES (?,?)")
+        .run(62, unixMillisecondsSchema.parse(now()));
+      database.exec("PRAGMA user_version=62");
       assertJoinedStateSchema(database);
       return hasPendingSecurityScrub(database);
     }
@@ -20437,6 +20590,10 @@ const migrateWritableDatabase = (
     dropRetiredProviderAdmissionTriggers(database);
     database.query("INSERT INTO migrations(version,applied_at) VALUES(61,?)").run(now());
     database.exec("PRAGMA user_version=61");
+    applySessionCompactPolicySchema(database);
+    database.query("INSERT INTO migrations(version,applied_at) VALUES (?,?)")
+      .run(62, unixMillisecondsSchema.parse(now()));
+    database.exec("PRAGMA user_version=62");
     assertJoinedStateSchema(database);
     return hasPendingSecurityScrub(database);
   }).immediate();
@@ -23260,6 +23417,17 @@ export class PeerSessionRefusalError extends Error {
   constructor(readonly code: PeerSessionRefusalCode) {
     super(code);
     this.name = "PeerSessionRefusalError";
+  }
+}
+
+export type SessionCompactPolicyErrorCode =
+  | "SESSION_COMPACT_POLICY_NOT_FOUND"
+  | "SESSION_COMPACT_POLICY_REVISION_CONFLICT";
+
+export class SessionCompactPolicyError extends Error {
+  constructor(readonly code: SessionCompactPolicyErrorCode) {
+    super(code);
+    this.name = "SessionCompactPolicyError";
   }
 }
 
@@ -26959,7 +27127,7 @@ export class StateStore {
          LEFT JOIN mutation_resolutions resolution ON resolution.attempt_id=mutation.id
          WHERE mutation.authority_id=?
            AND mutation.kind IN (
-             'session.send','session.steer','session.stop','session.rename',
+             'session.send','session.steer','session.stop','session.compact','session.rename',
              'session.queue','session.switch'
            )
            AND mutation.state IN ('prepared','effect_started','ambiguous')
@@ -39095,6 +39263,101 @@ export class StateStore {
     return set.immediate();
   }
 
+  /**
+   * The durable auto-compaction policy for one session. A session row always
+   * implies a policy row (the insert trigger and the v62 backfill guarantee
+   * it), so an absent row only means the store was asked about a session that
+   * does not exist; the read path still answers the domain default.
+   */
+  readSessionCompactPolicy(sessionId: SessionId): SessionCompactPolicyRecord {
+    const parsedSessionId = sessionIdSchema.parse(sessionId);
+    const row = this.#database.query(
+      `SELECT session_id,enabled,trigger_tokens,min_interval_ms,revision,created_at,updated_at
+       FROM session_compact_policies WHERE session_id=?`,
+    ).get(parsedSessionId);
+    if (row === null) {
+      return {
+        sessionId: parsedSessionId,
+        ...defaultAutoCompactPolicy(),
+        revision: 0,
+        createdAt: 0,
+        updatedAt: 0,
+      };
+    }
+    return mapSessionCompactPolicy(row);
+  }
+
+  requireSessionCompactPolicy(sessionId: SessionId): SessionCompactPolicyRecord {
+    const parsedSessionId = sessionIdSchema.parse(sessionId);
+    const row = this.#database.query(
+      `SELECT session_id,enabled,trigger_tokens,min_interval_ms,revision,created_at,updated_at
+       FROM session_compact_policies WHERE session_id=?`,
+    ).get(parsedSessionId);
+    if (row === null) throw new SessionCompactPolicyError("SESSION_COMPACT_POLICY_NOT_FOUND");
+    return mapSessionCompactPolicy(row);
+  }
+
+  setSessionCompactPolicy(input: Readonly<{
+    sessionId: SessionId;
+    expectedRevision: number;
+    enabled: boolean;
+    triggerTokens: number;
+    minIntervalMs: number;
+  }>): SessionCompactPolicyRecord {
+    const sessionId = sessionIdSchema.parse(input.sessionId);
+    const expectedRevision = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+      .parse(input.expectedRevision);
+    const policy = autoCompactPolicySchema.parse({
+      enabled: input.enabled,
+      triggerTokens: input.triggerTokens,
+      minIntervalMs: input.minIntervalMs,
+    });
+    const set = this.#database.transaction(() => {
+      const now = unixMillisecondsSchema.parse(this.#now());
+      const changed = this.#database.query(
+        `UPDATE session_compact_policies
+         SET enabled=?,trigger_tokens=?,min_interval_ms=?,revision=revision+1,updated_at=MAX(updated_at,?)
+         WHERE session_id=? AND revision=?`,
+      ).run(
+        policy.enabled ? 1 : 0,
+        policy.triggerTokens,
+        policy.minIntervalMs,
+        now,
+        sessionId,
+        expectedRevision,
+      );
+      if (changed.changes !== 1) {
+        if (this.#database.query(
+          "SELECT 1 FROM session_compact_policies WHERE session_id=?",
+        ).get(sessionId) === null) {
+          throw new SessionCompactPolicyError("SESSION_COMPACT_POLICY_NOT_FOUND");
+        }
+        throw new SessionCompactPolicyError("SESSION_COMPACT_POLICY_REVISION_CONFLICT");
+      }
+      return this.requireSessionCompactPolicy(sessionId);
+    });
+    return set.immediate();
+  }
+
+  /**
+   * The recorded instant of the session's newest `compaction` timeline event
+   * that actually consumed the dispatch budget — a `requested` or `completed`
+   * outcome. A `failed` outcome never rate-limits the next evaluation.
+   */
+  readLatestSessionCompactionAt(sessionId: SessionId): number | null {
+    const parsedSessionId = sessionIdSchema.parse(sessionId);
+    const row = z.object({
+      recorded_at: unixMillisecondsSchema,
+    }).strict().safeParse(this.#database.query(
+      `SELECT recorded_at
+       FROM session_events
+       WHERE session_id=? AND json_extract(event_json,'$.body.type')='compaction'
+         AND json_extract(event_json,'$.body.outcome') IN ('requested','completed')
+       ORDER BY sequence DESC LIMIT 1`,
+    ).get(parsedSessionId));
+    return row.success ? row.data.recorded_at : null;
+  }
+
   #requirePeerSession(
     sessionId: SessionId,
     retiredProviderCode?: PeerSessionRefusalCode,
@@ -43403,7 +43666,7 @@ export class StateStore {
         transcript: SessionUserMessageIntentInput & Readonly<{ providerConnectionId: string }>;
       }>
     | Readonly<{
-        evidence: Extract<MutationEffectEvidence, { kind: "session.stop" | "session.rename" }>;
+        evidence: Extract<MutationEffectEvidence, { kind: "session.stop" | "session.compact" | "session.rename" }>;
         message?: never;
         transcript?: never;
       }>
@@ -46505,6 +46768,7 @@ export class StateStore {
             "session.send",
             "session.steer",
             "session.stop",
+            "session.compact",
             "session.rename",
             "session.queue",
             "session.switch",
@@ -46583,7 +46847,7 @@ export class StateStore {
           }
         }
         let authorityResolved = false;
-        if (["session.send", "session.steer", "session.stop", "session.rename"].includes(kind)) {
+        if (["session.send", "session.steer", "session.stop", "session.compact", "session.rename"].includes(kind)) {
           const parsedSession = sessionIdSchema.safeParse(authorityId);
           const primary = providerAuthorities.find((value) => value.role === "primary");
           if (
@@ -51834,7 +52098,7 @@ export class StateStore {
            AND NOT ${sessionSendOwnedSql("mutation_attempts.id", "mutation_attempts.idempotency_key", "mutation_attempts.request_format")}
            AND kind IN (
              'session.start','session.send','session.steer','session.stop',
-             'session.rename','session.queue','session.switch'
+             'session.compact','session.rename','session.queue','session.switch'
            )
            AND EXISTS(
              SELECT 1 FROM mutation_provider_authorities evidence
@@ -52109,7 +52373,7 @@ export class StateStore {
         `UPDATE mutation_attempts
          SET state='cancelled',updated_at=MAX(updated_at,?)
          WHERE state='prepared'
-           AND kind IN ('session.send','session.steer','session.stop','session.rename')
+           AND kind IN ('session.send','session.steer','session.stop','session.compact','session.rename')
            AND NOT ${sessionSendOwnedSql("mutation_attempts.id", "mutation_attempts.idempotency_key", "mutation_attempts.request_format")}
            AND EXISTS(
              SELECT 1 FROM mutation_provider_authorities evidence

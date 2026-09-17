@@ -29,6 +29,7 @@ export type ClaudeEffectOperation =
   | "turn/start"
   | "turn/steer"
   | "turn/interrupt"
+  | "session/compact"
   | "interaction/resolve";
 
 /** Local dispatch uncertainty, never a provider rejection or permission to replay. */

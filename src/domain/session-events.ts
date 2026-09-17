@@ -252,6 +252,22 @@ export const sessionEventBodySchema = z.discriminatedUnion("type", [
       currency: z.string().regex(/^[A-Z]{3}$/u),
     }).strict().optional(),
   }).strict(),
+  /**
+   * One provider-native context compaction observed on this session. Outcome
+   * and trigger are closed enums, strategy is a bounded Oompa-owned label,
+   * and token counts are exact nonnegative integers. The turn identifier is
+   * null until the provider names the turn a request or failure belongs to.
+   * No transcript text, reasoning, or provider payload is ever retained.
+   */
+  z.object({
+    type: z.literal("compaction"),
+    outcome: z.enum(["requested", "completed", "failed"]),
+    trigger: z.enum(["manual", "policy", "provider"]),
+    strategy: boundedText(64).optional(),
+    preTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    postTokens: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    turnId: publicProviderIdentifierSchema.nullable(),
+  }).strict(),
   z.object({
     type: z.literal("interaction_requested"),
     interactionId: z.string().uuid(),
