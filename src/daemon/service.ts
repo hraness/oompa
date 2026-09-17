@@ -11070,12 +11070,25 @@ export class OompaService {
     if (observedReadiness !== undefined) {
       const settledAuthority = this.#providerAuthority(profile, "devin");
       if (settledAuthority.processGeneration === command.providerGeneration) {
-        this.#store.observeProviderAccountReadiness({
-          profileId: profile.id,
-          provider: "devin",
-          expectedBindingGeneration: settledAuthority.bindingGeneration,
-          readiness: observedReadiness,
-        });
+        try {
+          this.#store.observeProviderAccountReadiness({
+            profileId: profile.id,
+            provider: "devin",
+            expectedBindingGeneration: settledAuthority.bindingGeneration,
+            readiness: observedReadiness,
+          });
+        } catch (error: unknown) {
+          // The login receipt is already durable. A concurrent rotation or a
+          // newer readiness observation supersedes this one; neither may turn
+          // a settled login into a command failure.
+          if (
+            !(error instanceof Error)
+            || ![
+              "PROVIDER_ACCOUNT_AUTHORITY_STALE",
+              "PROVIDER_READINESS_OBSERVATION_STALE",
+            ].includes(error.message)
+          ) throw error;
+        }
       }
     }
     return {
