@@ -56,6 +56,7 @@ export interface HeroStep {
 }
 
 export interface HeroPillar {
+  readonly icon: string;
   readonly label: string;
   readonly summary: string;
 }
@@ -428,14 +429,17 @@ export const publicContent: PublicContent = {
     },
     pillars: [
       {
+        icon: "agents-one-place",
         label: "See the whole workspace",
         summary: "A grid of sessions shows what is running and what needs your attention. Read and reply inside each card.",
       },
       {
+        icon: "next-turn",
         label: "Pick up the next turn",
         summary: "Send a follow-up from the browser or terminal. The session runs on its machine, even after you close the tab.",
       },
       {
+        icon: "separate-accounts",
         label: "Keep accounts separate",
         summary: "Choose the provider profile for the work. Each managed profile has its own configuration; Oompa does not rotate accounts for you.",
       },

@@ -76,7 +76,7 @@ test("all finite site slots compile through the public collector without runtime
   expect(result.code).not.toContain("@stylexjs/stylex/lib/stylex-inject");
   expect(result.code).not.toContain(root);
   expect([...slots.keys()]).toEqual([
-    "marketingPage", "shellTranscript", "installNote", "resourceFrame", "askAi",
+    "marketingPage", "topicIcon", "shellTranscript", "installNote", "resourceFrame", "askAi",
     "reference", "referenceIntro", "referenceHeading", "referenceH2", "proseH3", "referenceText", "proseMeasure", "proseLink", "focusable",
     "inlineCode", "codeBlock", "codeContent", "installCommand", "notice", "noticeStrong", "sectionNav", "sectionNavLink",
     "documentationSection", "documentationHeading", "documentationBody", "documentationH3", "spacedListItem", "heroNotes", "heroNotesParagraph", "commandList",

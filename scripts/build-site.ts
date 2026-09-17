@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { constants, type Stats } from "node:fs";
-import { copyFile, cp, lstat, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, mkdtemp, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -495,6 +495,24 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(source, destination);
   }
+
+  const topicIconsDirectory = join(options.repositoryRoot, "site", "icons");
+  try {
+    const iconNames = (await readdir(topicIconsDirectory)).sort();
+    assert.ok(iconNames.length <= 32, `Site topic icon count ${iconNames.length} exceeds 32`);
+    for (const name of iconNames) {
+      assert.match(name, /^[a-z0-9-]+\.svg$/u, `Unexpected site topic icon name ${name}`);
+      const source = join(topicIconsDirectory, name);
+      const bytes = await readFile(source);
+      assert.ok(bytes.byteLength <= 128 * 1024, `Site topic icon ${name} exceeds 128 KiB`);
+      const destination = join(options.repositoryRoot, "dist/site/icons", name);
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, bytes, { flag: "wx", mode: 0o644 });
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
   // The /pr/ page renders this committed snapshot; publish the raw dataset
   // beside it so the feed stays inspectable without the markup.
   for (const name of ["snapshot.json", "history.json"]) {
