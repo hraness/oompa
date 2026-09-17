@@ -4,11 +4,12 @@ import {
 } from "@hraness/site-footer";
 import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 import { getDesignPaletteTheme } from "@hraness/design-kit";
+import { MarketingSiteFooter } from "@hraness/design-kit/react/server";
 import { AskAiAboutThis } from "@hraness/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { sitePresentationClasses, sitePresentationStyles, type SitePresentationSlot } from "./presentation.stylex.ts";
-import { renderMarketingHeader, renderMarketingPage } from "./marketing.tsx";
+import { OompaMark, oompaSiteLinks, renderMarketingHeader, renderMarketingPage } from "./marketing.tsx";
 import { docsPages, docsPathForSection, docsReferenceSections, type DocsPage } from "./docs-content.ts";
 import { renderProductPreview } from "./product-preview.tsx";
 import { docsClasses } from "./docs.stylex.ts";
@@ -64,6 +65,17 @@ export const renderOompaSiteFooter = (
     ? `${footer}\n<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
     : footer;
 };
+
+/** The in-flow Oompa content footer, rendered immediately before the shared network footer on every page that carries it. */
+export const renderOompaContentFooter = (content: PublicContent, currentPath: string): string =>
+  renderToStaticMarkup(createElement(MarketingSiteFooter, {
+    ariaLabel: content.productName,
+    brand: createElement(OompaMark),
+    brandHref: "/",
+    brandLabel: `${content.productName} home`,
+    links: oompaSiteLinks(content, currentPath),
+    name: content.productName,
+  }));
 
 export const renderAskAiAboutThis = (canonicalUrl: string): string =>
   renderToStaticMarkup(createElement(AskAiAboutThis, {
@@ -216,6 +228,8 @@ export const renderHead = (
 <meta property="og:image" content="${escapeHtml(image.src)}">
 ${image.type === undefined ? "" : `<meta property="og:image:type" content="${escapeHtml(image.type)}">\n`}${image.width === undefined ? "" : `<meta property="og:image:width" content="${image.width.toString()}">\n`}${image.height === undefined ? "" : `<meta property="og:image:height" content="${image.height.toString()}">\n`}<meta property="og:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(options.title)}">
+<meta name="twitter:description" content="${escapeHtml(options.description)}">
 <meta name="twitter:image" content="${escapeHtml(image.src)}">
 <meta name="twitter:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="theme-color" content="${escapeHtml(options.themeColor ?? defaultPalette.background)}">
@@ -255,6 +269,7 @@ ${renderMarketingPage(content)}
 </main>
 ${renderAskAiAboutThis(`${content.siteUrl}/`)}
 ${renderProjectResources(content)}
+${renderOompaContentFooter(content, "/")}
 ${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>
@@ -315,6 +330,7 @@ ${renderMarketingHeader(content, "/privacy/")}
 </main>
 ${renderAskAiAboutThis(`${content.siteUrl}/privacy/`)}
 ${renderProjectResources(content)}
+${renderOompaContentFooter(content, "/privacy/")}
 ${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 </body>
@@ -362,6 +378,7 @@ ${renderMarketingHeader(content, page.path)}
 </main></div>
 ${renderAskAiAboutThis(`${content.siteUrl}${page.path}`)}
 ${renderProjectResources(content)}
+${renderOompaContentFooter(content, page.path)}
 ${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>

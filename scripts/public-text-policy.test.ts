@@ -362,7 +362,7 @@ describe("public text policy", () => {
     }
   });
 
-  test("scans SVG and TOML text and rejects unreviewed file types", async () => {
+  test("scans SVG, TOML, and linker-script text and rejects unreviewed file types", async () => {
     const root = await mkdtemp(join(tmpdir(), "oompa-public-policy-"));
     const svg = join(root, "image.svg");
     const token = ["github", "pat"].join("_") + "_" + "abcdefghijklmnopqrstuvwxyz123456";
@@ -376,6 +376,12 @@ describe("public text policy", () => {
       await writeFile(toml, `credential = "${token}"\n`, "utf8");
       await expect(assertPublicTree(root)).rejects.toMatchObject({ code: "SECRET_SHAPE" });
       await unlink(toml);
+      const linkerScript = join(root, "fixture.ld");
+      await writeFile(linkerScript, "SECTIONS { /DISCARD/ : { *(.comment) } }\n", "utf8");
+      await expect(assertPublicTree(root)).resolves.toBeUndefined();
+      await writeFile(linkerScript, `credential = "${token}"\n`, "utf8");
+      await expect(assertPublicTree(root)).rejects.toMatchObject({ code: "SECRET_SHAPE" });
+      await unlink(linkerScript);
       await writeFile(join(root, "payload.bin"), "ordinary bytes", "utf8");
       const error = await assertPublicTree(root).then(
         () => new Error("Expected the public-tree policy to reject an unreviewed file."),
@@ -690,7 +696,8 @@ describe("public text policy", () => {
   test("permits only the two verified authority-supervisor binary names", async () => {
     const root = await mkdtemp(join(tmpdir(), "oompa-public-policy-authority-artifacts-"));
     const repositoryRoot = join(import.meta.dir, "..");
-    const sourceRelativePath = join("scripts", "authority-supervisor.zig");
+    const linkerScriptRelativePath = join("scripts", "authority-supervisor.ld");
+    const sourceRelativePath = join("scripts", "authority-supervisor.rs");
     const binaryDirectory = join("scripts", "authority-supervisor-bin");
     const binaries = [
       "authority-supervisor-linux-x64-musl",
@@ -698,12 +705,14 @@ describe("public text policy", () => {
     ];
     try {
       await mkdir(join(root, binaryDirectory), { recursive: true, mode: 0o700 });
-      await writeFile(
-        join(root, sourceRelativePath),
-        await readFile(join(repositoryRoot, sourceRelativePath)),
-        { mode: 0o644 },
-      );
-      await chmod(join(root, sourceRelativePath), 0o644);
+      for (const relativePath of [linkerScriptRelativePath, sourceRelativePath]) {
+        await writeFile(
+          join(root, relativePath),
+          await readFile(join(repositoryRoot, relativePath)),
+          { mode: 0o644 },
+        );
+        await chmod(join(root, relativePath), 0o644);
+      }
       for (const binary of binaries) {
         const destination = join(root, binaryDirectory, binary);
         await writeFile(

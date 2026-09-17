@@ -20,6 +20,7 @@ import {
   paletteAttributes,
   renderHead,
   renderOompaAnalyticsScript,
+  renderOompaContentFooter,
   renderOompaSiteFooter,
 } from "./template.ts";
 import { publicContent, type PublicContent } from "./content.ts";
@@ -263,6 +264,7 @@ ${renderMarketingHeader(content, "/pr/")}
     <p class="${prClasses("methodology")}">A scheduled collector polls official feeds, public APIs, and open OSINT indexes (NWS, NHC, USGS, NOAA, FEMA, LUMA, AAA, USCG/DVIDS, IODA, GDACS, GDELT, FCC, CDC, PR Salud, and Puerto Rico newsrooms), normalizes each item into a typed signal with severity, regions, provenance, and a source link, then rebuilds this page. An optional AI pass translates Spanish items and writes the situation brief; it is labeled and never overrides an official severity. Source failures appear in the table above rather than being silently dropped. The raw snapshot is published at <a class="${prClasses("sourceLink")}" href="/pr/data/snapshot.json">/pr/data/snapshot.json</a>.</p>
   </section>
 </main>
+${renderOompaContentFooter(content, "/pr/")}
 ${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>

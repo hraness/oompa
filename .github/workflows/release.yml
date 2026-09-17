@@ -132,26 +132,19 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           VERIFIED_SHA: ${{ steps.identity.outputs.sha }}
         run: bun run ./scripts/check-commit-ci-run.ts
-      - name: Download pinned Zig 0.16.0 for authority supervisor (Linux)
+      - name: Install pinned Rust 1.97.1 for authority supervisor (Linux)
         if: runner.os == 'Linux'
         run: |
-          OOMPA_ZIG_DIRECTORY="$RUNNER_TEMP/oompa-zig-0.16.0"
-          OOMPA_ZIG_ARCHIVE="$OOMPA_ZIG_DIRECTORY/zig-x86_64-linux-0.16.0.tar.xz"
-          OOMPA_ZIG_SHA256="70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
-          mkdir -p "$OOMPA_ZIG_DIRECTORY"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            --connect-timeout 10 --max-time 180 --retry 2 --retry-all-errors --retry-delay 1 \
-            --output "$OOMPA_ZIG_ARCHIVE" \
-            "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"
-          printf '%s  %s\n' "$OOMPA_ZIG_SHA256" "$OOMPA_ZIG_ARCHIVE" | sha256sum --check --status
-          tar -xJf "$OOMPA_ZIG_ARCHIVE" -C "$OOMPA_ZIG_DIRECTORY"
-          test -x "$OOMPA_ZIG_DIRECTORY/zig-x86_64-linux-0.16.0/zig"
+          rustup toolchain install 1.97.1 --profile minimal \
+            --target x86_64-unknown-linux-musl \
+            --target aarch64-unknown-linux-musl
+          test "$(rustup run 1.97.1 rustc --version)" = "rustc 1.97.1 (8bab26f4f 2026-07-14)"
 
       - name: Rebuild and verify authority-supervisor artifacts (Linux)
         if: runner.os == 'Linux'
         run: >-
           bun ./scripts/verify-authority-supervisor-build.ts
-          --zig "$RUNNER_TEMP/oompa-zig-0.16.0/zig-x86_64-linux-0.16.0/zig"
+          --rustc "$(rustup which --toolchain 1.97.1 rustc)"
 
       - name: Enable isolated user namespaces for native custody checks
         if: runner.os == 'Linux'

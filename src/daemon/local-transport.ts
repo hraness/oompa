@@ -1,9 +1,10 @@
 import { timingSafeEqual, randomBytes, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { chmod, lstat, open, rename, unlink } from "node:fs/promises";
+import { chmod, unlink } from "node:fs/promises";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname } from "node:path";
 
+import { assertOwnedPath, readOwnedFileStable } from "@hraness/local-custody/private-paths";
+import { publishPrivateFile } from "@hraness/local-custody/atomic-publish";
 import {
   commandEnvelopeSchema,
   commandResponseSchema,
@@ -74,20 +75,12 @@ const boundedTimeoutMs = (value: number | undefined, fallback: number): number =
   return candidate;
 };
 
-const currentUid = (): number | undefined => (typeof process.getuid === "function" ? process.getuid() : undefined);
-
 async function validateOwnedFile(path: string, kind: "file" | "socket", mode?: number): Promise<void> {
-  const metadata = await lstat(path);
-  const expected = kind === "file" ? metadata.isFile() : metadata.isSocket();
-  if (!expected || metadata.isSymbolicLink() || metadata.nlink !== 1) {
-    throw new Error(`Unsafe local ${kind}: ${path}`);
-  }
-  const uid = currentUid();
-  if (uid !== undefined && metadata.uid !== uid) {
-    throw new Error(`Local ${kind} is owned by another user: ${path}`);
-  }
-  if (mode !== undefined && (metadata.mode & 0o777) !== mode) {
-    throw new Error(`Local ${kind} has unsafe permissions: ${path}`);
+  try {
+    await assertOwnedPath(path, { kind, ...(mode === undefined ? {} : { exactMode: mode }) });
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error;
+    throw new Error(`Unsafe local ${kind}: ${path}`, { cause: error });
   }
 }
 
@@ -103,16 +96,7 @@ async function removeStaleEndpoint(paths: StatePaths): Promise<void> {
 }
 
 async function publishCapability(paths: StatePaths, capability: string): Promise<void> {
-  const temporary = join(dirname(paths.capability), `.${basename(paths.capability)}.${randomUUID()}.tmp`);
-  const handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
-  try {
-    await handle.writeFile(`${capability}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  await rename(temporary, paths.capability);
-  await validateOwnedFile(paths.capability, "file", 0o600);
+  await publishPrivateFile(dirname(paths.capability), basename(paths.capability), `${capability}\n`);
 }
 
 const publicFailureCodes = [
@@ -586,16 +570,10 @@ export class LocalDaemonShutdownTimeoutError extends Error {
 
 async function readCapability(path: string): Promise<string> {
   await validateOwnedFile(path, "file", 0o600);
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    const metadata = await handle.stat();
-    if (metadata.size > 128) throw new Error("Local capability file is oversized.");
-    const value = (await handle.readFile("utf8")).trim();
-    if (!/^[A-Za-z0-9_-]{43}$/u.test(value)) throw new Error("Local capability file is malformed.");
-    return value;
-  } finally {
-    await handle.close();
-  }
+  const bytes = (await readOwnedFileStable(path, 128)).bytes;
+  const value = bytes.toString("utf8").trim();
+  if (!/^[A-Za-z0-9_-]{43}$/u.test(value)) throw new Error("Local capability file is malformed.");
+  return value;
 }
 
 const throwIfClientAborted = (signal: AbortSignal | undefined): void => {

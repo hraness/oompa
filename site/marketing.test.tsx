@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { hranessAttribution } from "@hraness/site-footer";
 import { parseHTML } from "linkedom";
 import { findSection, publicContent, type PublicContent } from "./content.ts";
 import { findDocsPage, type DocsPath } from "./docs-content.ts";
@@ -26,8 +25,13 @@ describe("public server marketing composition", () => {
       const { document } = parseHTML(renderMarketingHeader(publicContent, currentPath));
       const header = document.querySelector("header");
       expect(header?.getAttribute("data-hraness-marketing")).toBe("header");
-      expect(header?.querySelector(".hraness-marketing-header__brand")?.textContent).toBe(`🟠 ${publicContent.productName}`);
-      expect(header?.querySelector(".hraness-marketing-header__brand")?.getAttribute("href")).toBe("/");
+      const brand = header?.querySelector(".hraness-marketing-header__brand");
+      expect(brand?.textContent).toBe(publicContent.productName);
+      expect(brand?.getAttribute("href")).toBe("/");
+      expect(brand?.getAttribute("data-foil")).toBe("");
+      const mark = brand?.querySelector('svg[aria-hidden="true"] > circle');
+      expect(mark?.getAttribute("fill")).toBe("#f58220");
+      expect(mark?.getAttribute("stroke")).toBe("#ad430d");
       const links = [...document.querySelectorAll('nav[aria-label="Site"] > a')];
       expect(links.map((link) => [link.getAttribute("href"), link.textContent])).toEqual([
         ["/#product-preview", "Product"], ["/docs/", "Docs"], ["/docs/status/", "Status"],
@@ -156,7 +160,7 @@ describe("public server marketing composition", () => {
     const { document } = parseHTML(html);
     expect(document.querySelector('[data-hraness-marketing="maker"], .hraness-marketing-maker, #maker, #maker-heading')).toBeNull();
     expect(html).not.toContain("Built by");
-    expect(html).not.toContain(hranessAttribution.title);
+    expect(html).not.toContain("by Hraness");
   });
 
   test("styles FAQ anchors without adding focus overrides", () => {

@@ -42,8 +42,10 @@ export const prSignalSchema = z.object({
   severity: prSeveritySchema,
   title: z.string().min(1).max(500),
   titleEn: z.string().max(500).optional(),
+  titleEs: z.string().max(500).optional(),
   summary: z.string().max(4000).optional(),
   summaryEn: z.string().max(4000).optional(),
+  summaryEs: z.string().max(4000).optional(),
   url: z.string().url().max(2048).optional(),
   regions: z.array(regionSlug).max(40),
   lang: z.enum(["es", "en"]),
@@ -51,6 +53,7 @@ export const prSignalSchema = z.object({
   expiresAt: isoTimestamp.optional(),
   metrics: z.record(z.string().max(48), z.number()).optional(),
   clusterKey: z.string().max(120).optional(),
+  relevance: z.enum(["relevant", "marginal", "noise"]).optional(),
 }).strict();
 export type PrSignal = z.infer<typeof prSignalSchema>;
 

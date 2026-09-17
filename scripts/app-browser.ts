@@ -186,6 +186,7 @@ const sitePublicSupport = [
   "analytics.js", "appearance.js", "site.js", "favicon.svg", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
   ".well-known/security.txt", ".well-known/hra.json",
   "pr/data/snapshot.json", "pr/data/history.json",
+  "icons/agents-one-place.svg", "icons/next-turn.svg", "icons/separate-accounts.svg",
   "fonts/nebula-sans/LICENSE.txt", "fonts/nebula-sans/PROVENANCE.md",
   "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md",
   ...sitePresetAttributions.map(([path]) => path),

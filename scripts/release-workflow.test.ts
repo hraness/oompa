@@ -420,7 +420,7 @@ describe("release workflow", () => {
     const exactArtifactSteps = releaseExactArtifact.steps
       .map((step, index) => asRecord(step, `release exact-artifact step ${index}`));
     const authoritySteps = [
-      "Download pinned Zig 0.16.0 for authority supervisor (Linux)",
+      "Install pinned Rust 1.97.1 for authority supervisor (Linux)",
       "Rebuild and verify authority-supervisor artifacts (Linux)",
       "Enable isolated user namespaces for native custody checks",
       "Restore Ubuntu user-namespace restriction",
@@ -451,24 +451,23 @@ describe("release workflow", () => {
       expect(releaseStep.run).toBe(ciStep.run);
     }
 
-    const zigDownload = String(exactlyOneStep(
+    const rustInstall = String(exactlyOneStep(
       ciSteps,
-      "Download pinned Zig 0.16.0 for authority supervisor (Linux)",
+      "Install pinned Rust 1.97.1 for authority supervisor (Linux)",
       "CI check",
     ).run);
-    expect(zigDownload).toContain(
-      'OOMPA_ZIG_SHA256="70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"',
+    expect(rustInstall).toContain("rustup toolchain install 1.97.1 --profile minimal");
+    expect(rustInstall).toContain("--target x86_64-unknown-linux-musl");
+    expect(rustInstall).toContain("--target aarch64-unknown-linux-musl");
+    expect(rustInstall).toContain(
+      'test "$(rustup run 1.97.1 rustc --version)" = "rustc 1.97.1 (8bab26f4f 2026-07-14)"',
     );
-    expect(zigDownload).toContain(
-      '"https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"',
-    );
-    expect(zigDownload).toContain("sha256sum --check --status");
     expect(String(exactlyOneStep(
       ciSteps,
       "Rebuild and verify authority-supervisor artifacts (Linux)",
       "CI check",
     ).run)).toBe(
-      'bun ./scripts/verify-authority-supervisor-build.ts --zig "$RUNNER_TEMP/oompa-zig-0.16.0/zig-x86_64-linux-0.16.0/zig"',
+      'bun ./scripts/verify-authority-supervisor-build.ts --rustc "$(rustup which --toolchain 1.97.1 rustc)"',
     );
     const enableNamespaces = String(exactlyOneStep(
       ciSteps,
@@ -510,7 +509,7 @@ describe("release workflow", () => {
     const verifyOrder = [
       "Install exact locked dependencies without lifecycle scripts",
       "Require the exact commit's successful CI run",
-      "Download pinned Zig 0.16.0 for authority supervisor (Linux)",
+      "Install pinned Rust 1.97.1 for authority supervisor (Linux)",
       "Rebuild and verify authority-supervisor artifacts (Linux)",
       "Enable isolated user namespaces for native custody checks",
       custodyTestName,
@@ -694,8 +693,8 @@ describe("release workflow", () => {
     expect(thirdPartyNotices).toContain("The admitted `v0.8.4` release records its own build graph");
     expect(thirdPartyNotices).not.toContain("The admitted `v0.8.5` release records its build graph");
     expect(thirdPartyNotices).toContain("bound the immutable source tag");
-    expect(thirdPartyNotices).toContain("`@hraness/site-footer` v0.13.0");
-    expect(thirdPartyNotices).toContain("`@hraness/design-kit` v0.6.2");
+    expect(thirdPartyNotices).toContain("`@hraness/site-footer` v0.14.0");
+    expect(thirdPartyNotices).toContain("`@hraness/design-kit` v0.9.0");
     expect(thirdPartyNotices).toContain("`@hraness/ui` v0.5.6");
     expect(thirdPartyNotices).toContain("`@hraness/direct` v0.7.0");
     expect(thirdPartyNotices).toContain("not a runtime dependency of the Oompa CLI or the authenticated app");
@@ -1253,7 +1252,7 @@ describe("release workflow", () => {
 
     const parsedSteps = steps.map((step, index) => asRecord(step, `CI step ${index}`));
     const linuxStepNames = new Set([
-      "Download pinned Zig 0.16.0 for authority supervisor (Linux)",
+      "Install pinned Rust 1.97.1 for authority supervisor (Linux)",
       "Rebuild and verify authority-supervisor artifacts (Linux)",
       "Enable isolated user namespaces for native custody checks",
       "Restore Ubuntu user-namespace restriction",
@@ -1271,7 +1270,7 @@ describe("release workflow", () => {
       "Fetch only governed CI history",
       "Install Bun",
       "Install dependencies",
-      "Download pinned Zig 0.16.0 for authority supervisor (Linux)",
+      "Install pinned Rust 1.97.1 for authority supervisor (Linux)",
       "Rebuild and verify authority-supervisor artifacts (Linux)",
       "Enable isolated user namespaces for native custody checks",
       "Run the repository gate",

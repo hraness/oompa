@@ -213,7 +213,8 @@ function staticSiteFixture(sanitized = false) {
     ...attributions.map(([path, source]) => [path, preset.get(source)!] as const),
     ...["analytics.js", "appearance.js", "site.js", "favicon.svg", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
       ".well-known/security.txt", ".well-known/hra.json", "fonts/nebula-sans/LICENSE.txt", "fonts/nebula-sans/PROVENANCE.md",
-      "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md", "pr/data/snapshot.json", "pr/data/history.json", ...docsRoutes.map((path) => `${path}/index.md`)].map((path) => [path, Buffer.from(`support:${path}`)] as const),
+      "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md", "pr/data/snapshot.json", "pr/data/history.json",
+      "icons/agents-one-place.svg", "icons/next-turn.svg", "icons/separate-accounts.svg", ...docsRoutes.map((path) => `${path}/index.md`)].map((path) => [path, Buffer.from(`support:${path}`)] as const),
   ]);
   return { files, publicFonts, preset, foundation, fontPaths, texturePaths, attributions, css, html };
 }

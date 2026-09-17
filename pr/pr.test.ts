@@ -297,19 +297,40 @@ describe("pipeline", () => {
     expect(snapshot.signals).toHaveLength(0);
     expect(snapshot.health[0]?.ok).toBe(true);
   });
+
+  test("drops expired signals and keeps live and unexpired ones", async () => {
+    const snapshot = await collectSnapshot({
+      now,
+      ai: null,
+      sources: [okSource("a-ok", [
+        signal({ id: "expired-alert-001", expiresAt: "2026-09-16T17:00:00Z" }),
+        signal({ id: "expiring-alert-002", expiresAt: "2026-09-16T19:00:00Z" }),
+        signal({ id: "no-expiry-signal03" }),
+      ])],
+    });
+    const ids = snapshot.signals.map((s) => s.id);
+    expect(ids).toContain("expiring-alert-002");
+    expect(ids).toContain("no-expiry-signal03");
+    expect(ids).not.toContain("expired-alert-001");
+    expect(snapshot.signals).toHaveLength(2);
+  });
 });
 
 describe("ai gating", () => {
   test("is disabled without keys or with an explicit none", () => {
     expect(resolvePulseAi({})).toBeNull();
-    expect(resolvePulseAi({ PR_PULSE_AI_PROVIDER: "none", ANTHROPIC_API_KEY: "sk-ant-x" })).toBeNull();
+    expect(resolvePulseAi({ PR_PULSE_AI_PROVIDER: "none", AI_GATEWAY_API_KEY: "vck_x" })).toBeNull();
     expect(resolvePulseAi({ PR_PULSE_AI_PROVIDER: "auto" })).toBeNull();
+    expect(resolvePulseAi({ PR_PULSE_AI_PROVIDER: "gateway" })).toBeNull();
   });
   test("selects a provider only with its key present", () => {
+    expect(resolvePulseAi({ AI_GATEWAY_API_KEY: "vck_x" })?.provider).toBe("vercel-ai-gateway");
+    expect(resolvePulseAi({ AI_GATEWAY_API_KEY: "vck_x" })?.model).toBe("anthropic/claude-haiku-4-5");
     expect(resolvePulseAi({ ANTHROPIC_API_KEY: "sk-ant-x" })?.provider).toBe("anthropic");
     expect(resolvePulseAi({ OPENAI_API_KEY: "sk-x" })?.provider).toBe("openai");
     expect(resolvePulseAi({ PR_PULSE_AI_PROVIDER: "openai" })).toBeNull();
     expect(resolvePulseAi({ PR_PULSE_AI_PROVIDER: "openai", OPENAI_API_KEY: "sk-x", PR_PULSE_AI_MODEL: "gpt-5-nano" })?.model).toBe("gpt-5-nano");
+    expect(resolvePulseAi({ AI_GATEWAY_API_KEY: "vck_x", ANTHROPIC_API_KEY: "sk-ant-x" })?.provider).toBe("vercel-ai-gateway");
   });
 });
 

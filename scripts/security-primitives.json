@@ -1,7 +1,4 @@
 {
-  "src/claude/account.ts": {
-    "O_NOFOLLOW": 1
-  },
   "src/claude/host-tool-bridge.ts": {
     "timingSafeEqual": 1,
     "O_NOFOLLOW": 2,
@@ -86,9 +83,8 @@
   },
   "src/daemon/local-transport.ts": {
     "timingSafeEqual": 1,
-    "O_NOFOLLOW": 2,
-    "mode0600": 6,
-    "validateOwnedFile": 6
+    "mode0600": 4,
+    "validateOwnedFile": 5
   },
   "src/daemon/personal-session-discovery.ts": {
     "O_NOFOLLOW": 1,

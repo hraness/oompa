@@ -136,6 +136,12 @@ const createFixtureRoot = async (registerRoot: (root: string) => void = (root) =
       await writeFile(join(root, "site", asset), `fixture:${asset}\n`, "utf8");
     }),
   );
+  await mkdir(join(root, "site", "icons"), { recursive: true });
+  await Promise.all(
+    ["agents-one-place.svg", "next-turn.svg", "separate-accounts.svg"].map(async (asset) => {
+      await writeFile(join(root, "site", "icons", asset), `<svg aria-label="${asset}"></svg>\n`, "utf8");
+    }),
+  );
   return root;
 };
 
@@ -378,6 +384,9 @@ describe("static-site build", () => {
       "dist/site/pr/index.html",
       "dist/site/pr/data/snapshot.json",
       "dist/site/pr/data/history.json",
+      "dist/site/icons/agents-one-place.svg",
+      "dist/site/icons/next-turn.svg",
+      "dist/site/icons/separate-accounts.svg",
       ...docsPaths.flatMap((path) => [`dist/site${path}index.html`, `dist/site${path}index.md`]),
       ...allAttributionPaths.map((path) => `dist/site/fonts/${path}`),
       "dist/site/marketing-preset/LICENSE",

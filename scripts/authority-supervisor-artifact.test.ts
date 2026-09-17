@@ -46,12 +46,14 @@ const elf = (machine: number): Buffer => {
   return value;
 };
 
-const sourceRelativePath = "scripts/authority-supervisor.zig";
+const linkerScriptRelativePath = "scripts/authority-supervisor.ld";
+const sourceRelativePath = "scripts/authority-supervisor.rs";
 const x64RelativePath = "scripts/authority-supervisor-bin/authority-supervisor-linux-x64-musl";
 const arm64RelativePath = "scripts/authority-supervisor-bin/authority-supervisor-linux-arm64-musl";
 
 const fixtureManifest = (
   source: Buffer,
+  linkerScript: Buffer,
   x64: Buffer,
   arm64: Buffer,
 ): AuthoritySupervisorArtifactManifest => ({
@@ -75,8 +77,15 @@ const fixtureManifest = (
       target: "x86_64-linux-musl",
     },
   },
-  compiler: { name: "zig", version: "0.16.0" },
-  schemaVersion: 1,
+  compiler: { name: "rustc", version: "1.97.1" },
+  linkerScript: {
+    byteLength: linkerScript.byteLength,
+    maximumByteLength: 1024,
+    mode: 0o644,
+    relativePath: linkerScriptRelativePath,
+    sha256: digest(linkerScript),
+  },
+  schemaVersion: 2,
   source: {
     byteLength: source.byteLength,
     maximumByteLength: 1024,
@@ -88,6 +97,7 @@ const fixtureManifest = (
 
 const makeFixture = async (): Promise<Readonly<{
   arm64Path: string;
+  linkerScriptPath: string;
   manifest: AuthoritySupervisorArtifactManifest;
   root: string;
   sourcePath: string;
@@ -95,21 +105,26 @@ const makeFixture = async (): Promise<Readonly<{
 }>> => {
   const root = await mkdtemp(join(tmpdir(), "oompa-authority-artifact-"));
   const source = Buffer.from("//! fixture authority supervisor\n", "utf8");
+  const linkerScript = Buffer.from("SECTIONS { /DISCARD/ : { *(.comment) } }\n", "utf8");
   const x64 = elf(62);
   const arm64 = elf(183);
+  const linkerScriptPath = join(root, linkerScriptRelativePath);
   const sourcePath = join(root, sourceRelativePath);
   const x64Path = join(root, x64RelativePath);
   const arm64Path = join(root, arm64RelativePath);
   await mkdir(join(root, "scripts", "authority-supervisor-bin"), { recursive: true, mode: 0o700 });
+  await writeFile(linkerScriptPath, linkerScript, { mode: 0o644 });
   await writeFile(sourcePath, source, { mode: 0o644 });
   await writeFile(x64Path, x64, { mode: 0o755 });
   await writeFile(arm64Path, arm64, { mode: 0o755 });
+  await chmod(linkerScriptPath, 0o644);
   await chmod(sourcePath, 0o644);
   await chmod(x64Path, 0o755);
   await chmod(arm64Path, 0o755);
   return {
     arm64Path,
-    manifest: fixtureManifest(source, x64, arm64),
+    linkerScriptPath,
+    manifest: fixtureManifest(source, linkerScript, x64, arm64),
     root,
     sourcePath,
     x64Path,
@@ -258,6 +273,16 @@ describe("authority supervisor artifact resolver", () => {
       await writeFile(fixture.sourcePath, "//! fixture authority supervisor\n", { mode: 0o644 });
       await chmod(fixture.sourcePath, 0o644);
 
+      await writeFile(
+        fixture.linkerScriptPath,
+        Buffer.alloc(fixture.manifest.linkerScript.byteLength, 0x78),
+      );
+      await expect(resolveFixture(fixture)).rejects.toMatchObject({
+        code: "authority_supervisor_source_hash_mismatch",
+      });
+      await writeFile(fixture.linkerScriptPath, "SECTIONS { /DISCARD/ : { *(.comment) } }\n", { mode: 0o644 });
+      await chmod(fixture.linkerScriptPath, 0o644);
+
       await chmod(fixture.x64Path, 0o700);
       await expect(resolveFixture(fixture)).rejects.toMatchObject({
         code: "authority_supervisor_binary_invalid",
@@ -290,7 +315,7 @@ describe("authority supervisor artifact resolver", () => {
 
       const wrongPath: AuthoritySupervisorArtifactManifest = {
         ...fixture.manifest,
-        source: { ...fixture.manifest.source, relativePath: "scripts/other.zig" },
+        source: { ...fixture.manifest.source, relativePath: "scripts/other.rs" },
       };
       await expect(resolveFixture(fixture, { manifest: wrongPath })).rejects.toMatchObject({
         code: "authority_supervisor_manifest_invalid",
@@ -375,13 +400,14 @@ describe("authority supervisor artifact resolver", () => {
     }
   });
 
-  test("checks the checked-in source and both tracked helper binaries", async () => {
+  test("checks the source closure and both tracked helper binaries", async () => {
     const repositoryRoot = resolve(import.meta.dir, "..");
     const owner = testOwner();
     expect(Object.isFrozen(authoritySupervisorArtifactManifest)).toBeTrue();
     expect(Object.isFrozen(authoritySupervisorArtifactManifest.artifacts)).toBeTrue();
     expect(Object.isFrozen(authoritySupervisorArtifactManifest.artifacts.x64)).toBeTrue();
     expect(Object.isFrozen(authoritySupervisorArtifactManifest.artifacts.arm64)).toBeTrue();
+    expect(Object.isFrozen(authoritySupervisorArtifactManifest.linkerScript)).toBeTrue();
     expect(Object.isFrozen(authoritySupervisorArtifactManifest.source)).toBeTrue();
     await expect(resolveAuthoritySupervisorArtifactForTesting({
       architecture: "x64",

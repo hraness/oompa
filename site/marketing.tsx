@@ -8,10 +8,11 @@ import {
   MarketingSiteHeader,
   MarketingTrustBoundary,
   ProductHero,
+  type MarketingLink,
 } from "@hraness/design-kit/react/server";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { isAdmittedRelease, type InlineContent, type PublicContent } from "./content.ts";
+import { isAdmittedRelease, type HeroPillar, type InlineContent, type PublicContent } from "./content.ts";
 import { ProductPreview } from "./product-preview.tsx";
 import { productHeroClassName, mobileHeaderFlowClassName } from "./marketing.stylex.ts";
 import { sitePresentationClasses, type SitePresentationSlot } from "./presentation.stylex.ts";
@@ -35,27 +36,63 @@ function inlineContent(content: readonly InlineContent[]): ReactNode {
   });
 }
 
+/** The authored Oompa mark: the favicon's orange circle. Decorative inside brand links that carry their own accessible name. */
+export const OompaMark = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#f58220" stroke="#ad430d" strokeWidth={2}/></svg>
+);
+
+/** The public site navigation shared by the marketing header and the in-flow content footer. */
+export const oompaSiteLinks = (content: PublicContent, currentPath: string): readonly MarketingLink[] => [
+  { href: "/#product-preview", label: "Product", current: currentPath === "/" },
+  { href: "/docs/", label: "Docs", current: currentPath.startsWith("/docs/") },
+  { href: "/docs/status/", label: "Status" },
+  { href: content.links.github, label: "GitHub" },
+];
+
 export function renderMarketingHeader(content: PublicContent, currentPath: string): string {
   return renderToStaticMarkup(
     <MarketingSiteHeader
       className={`${mobileHeaderFlowClassName()} hraness-material-chrome${currentPath === "/" ? " hraness-marketing-header-surface" : ""}`}
       trailing={<SiteAppearanceMenu />}
       action={{ emphasis: "primary", href: content.links.app, label: "Open Oompa" }}
-      brand={<><span aria-hidden="true">🟠</span> {content.productName}</>}
+      brand={<><OompaMark />{content.productName}</>}
       brandHref="/"
-      links={[
-        { href: "/#product-preview", label: "Product", current: currentPath === "/" },
-        { href: "/docs/", label: "Docs", current: currentPath.startsWith("/docs/") },
-        { href: "/docs/status/", label: "Status" },
-        { href: content.links.github, label: "GitHub" },
-      ]}
+      links={oompaSiteLinks(content, currentPath)}
     />,
   );
 }
 
+/** Match the escaping React applies to text children so authored labels line up
+ * with their serialized form inside the pillar definition terms. */
+function escapeMarkupText(text: string): string {
+  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/** Insert each pillar's decorative topic icon before its definition term. The
+ * design-kit pillar contract stays text-only, so icons join the emitted markup
+ * inside the owning item rather than replacing the shared component. */
+function injectPillarIcons(html: string, pillars: readonly HeroPillar[]): string {
+  const iconClass = sitePresentationClasses("topicIcon");
+  let rendered = html;
+  for (const pillar of pillars) {
+    if (!/^[a-z0-9-]+$/u.test(pillar.icon)) throw new Error(`Pillar icon must be a lowercase-hyphen slug: ${pillar.icon}`);
+    const labelNeedle = `>${escapeMarkupText(pillar.label)}</dt>`;
+    const labelIndex = rendered.indexOf(labelNeedle);
+    if (labelIndex === -1) throw new Error(`Pillar label missing from rendered marketing page: ${pillar.label}`);
+    const termStart = rendered.lastIndexOf("<dt", labelIndex);
+    const openTag = rendered.slice(termStart, labelIndex + 1);
+    if (termStart === -1 || !/^<dt\s[^<]*>$/u.test(openTag)) {
+      throw new Error(`Pillar label is not inside a rendered term: ${pillar.label}`);
+    }
+    const icon = `<img alt="" aria-hidden="true" class="${iconClass}" decoding="async" height="88" loading="lazy" src="/icons/${pillar.icon}.svg" width="88" />`;
+    rendered = rendered.slice(0, termStart) + icon + rendered.slice(termStart);
+  }
+  return rendered;
+}
+
 /** The homepage explains the product; procedural and operator detail lives in docs. */
 export function renderMarketingPage(content: PublicContent): string {
-  return renderToStaticMarkup(
+  const html = renderToStaticMarkup(
     <MarketingPage className={sitePresentationClasses("marketingPage")}>
       <ProductHero
         actions={[
@@ -117,4 +154,5 @@ export function renderMarketingPage(content: PublicContent): string {
       />
     </MarketingPage>,
   );
+  return injectPillarIcons(html, content.hero.pillars);
 }
