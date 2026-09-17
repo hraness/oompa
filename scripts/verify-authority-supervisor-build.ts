@@ -28,6 +28,15 @@ const verificationError = (code: AuthoritySupervisorBuildVerificationErrorCode):
 const sameBytes = (left: Uint8Array, right: Uint8Array): boolean =>
   left.byteLength === right.byteLength && Buffer.compare(left, right) === 0;
 
+const emitCapture = (target: string, bytes: Uint8Array): void => {
+  const encoded = Buffer.from(bytes).toString("base64");
+  const chunkSize = 4_096;
+  const chunks = Math.ceil(encoded.length / chunkSize);
+  for (let index = 0; index < chunks; index += 1) {
+    process.stderr.write(`AUTHORITY_SUPERVISOR_CAPTURE ${target} ${String(index + 1)}/${String(chunks)} ${encoded.slice(index * chunkSize, (index + 1) * chunkSize)}\n`);
+  }
+};
+
 const compilerOutput = async (
   arguments_: readonly string[],
   workingDirectory: string,
@@ -123,6 +132,7 @@ export async function verifyAuthoritySupervisorBuild(
   }
 
   const temporaryDirectory = await mkdtemp(join(tmpdir(), "hra-authority-supervisor-build-"));
+  let artifactMismatch = false;
   try {
     const sourcePath = authoritySupervisorArtifactManifest.source.relativePath;
     for (const artifact of artifacts) {
@@ -145,8 +155,15 @@ export async function verifyAuthoritySupervisorBuild(
         return verificationError("authority_supervisor_build_nondeterministic");
       }
       if (!sameBytes(first, tracked)) {
-        return verificationError("authority_supervisor_build_artifact_mismatch");
+        if (process.env.OOMPA_AUTHORITY_SUPERVISOR_CAPTURE !== "1") {
+          return verificationError("authority_supervisor_build_artifact_mismatch");
+        }
+        emitCapture(artifact.target, first);
+        artifactMismatch = true;
       }
+    }
+    if (artifactMismatch) {
+      return verificationError("authority_supervisor_build_artifact_mismatch");
     }
   } finally {
     await rm(temporaryDirectory, { force: true, recursive: true });
