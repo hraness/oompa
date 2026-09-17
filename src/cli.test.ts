@@ -3886,7 +3886,7 @@ describe("CLI entry point", () => {
               data: {
                 account: { id: accountId, label: "Personal" },
                 authentication: { provider: "devin", signedIn: false },
-                nextCommand: `hra account login ${accountId} --provider devin`,
+                nextCommand: `oompa account login ${accountId} --provider devin`,
                 providerGeneration: 7,
                 usage: {
                   allowance: "unknown",
