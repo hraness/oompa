@@ -6,7 +6,7 @@ The Codex provider-session runtime uses Effect 3.22.1, licensed under the MIT Li
 
 The static oompa.app analytics asset incorporates `@hraness/posthog` version 0.1.2 and its `posthog-js` version 1.412.1 dependency. Both are licensed under the MIT License. Oompa pins the immutable `@hraness/posthog` GitHub release tag, and `bun.lock` binds the exact dependency graph used to build the self-hosted browser asset.
 
-The oompa.app site and browser app use the MIT-licensed `@hraness/ui` v0.5.6 and `@hraness/design-kit` v0.6.2 packages for shared semantic themes and appearance controls. The site also uses the MIT-licensed `@hraness/site-footer` v0.9.0 package. `bun.lock` binds their exact immutable release tags.
+The oompa.app site and browser app use the MIT-licensed `@hraness/ui` v0.5.6 and `@hraness/design-kit` v0.6.2 packages for shared semantic themes and appearance controls. The site also uses the MIT-licensed `@hraness/site-footer` v0.13.0 package. `bun.lock` binds their exact immutable release tags.
 
 The isolated product examples on oompa.app incorporate MIT-licensed `@hraness/direct` v0.7.0, copyright 2026 Hraness contributors. Its full license is preserved in the example's JavaScript bundle. Direct is a pinned development dependency, not a runtime dependency of the Oompa CLI or the authenticated app.
 

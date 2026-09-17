@@ -4,6 +4,7 @@ import { parseHTML } from "linkedom";
 
 import {
   HRANESS_HOME_URL,
+  hranessAttribution,
   hranessSocialLinks,
 } from "@hraness/site-footer";
 
@@ -1384,11 +1385,12 @@ describe("public content contract", () => {
       ...hranessSocialLinks.map(({ href }) => href),
     ];
 
-    for (const document of [
+    const pages = [
       renderSiteHtml(),
       renderPrivacyHtml(),
       ...docsPages.map((page) => renderDocsHtml(page)),
-    ]) {
+    ];
+    for (const document of [...pages, renderPrHtml()]) {
       expect(document.match(/<footer\b/gu)).toHaveLength(1);
       const footer = /<footer\b[\s\S]*?<\/footer>/u.exec(document)?.[0];
       expect(footer).toContain('data-slot="hraness-site-footer"');
@@ -1401,6 +1403,14 @@ describe("public content contract", () => {
         [...(footer?.matchAll(/<a\b[^>]*\shref="([^"]+)"/gu) ?? [])]
           .map((match) => match[1]),
       ).toEqual(expectedHrefs);
+      expect(footer?.match(/data-slot="hraness-attribution"/gu)).toHaveLength(1);
+      expect(footer).toContain(htmlText(hranessAttribution.title));
+      expect(footer).toContain(htmlText(hranessAttribution.subtitle));
+      expect(document.match(/Built by/gu)).toHaveLength(1);
+      expect(document).not.toContain("Ben Guo");
+      expect(document).not.toContain("hraness-marketing-maker");
+    }
+    for (const document of pages) {
       expect(elementPosition(document, "aside.project-resources")).toBeLessThan(
         elementPosition(document, 'footer[data-slot="hraness-site-footer"]'),
       );
