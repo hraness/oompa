@@ -139,10 +139,21 @@ jobs:
           OOMPA_ZIG_ARCHIVE="$OOMPA_ZIG_DIRECTORY/zig-x86_64-linux-0.16.0.tar.xz"
           OOMPA_ZIG_SHA256="70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
           mkdir -p "$OOMPA_ZIG_DIRECTORY"
-          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
-            --connect-timeout 10 --max-time 180 --retry 2 --retry-all-errors --retry-delay 1 \
-            --output "$OOMPA_ZIG_ARCHIVE" \
-            "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"
+          # The upstream mirror is sometimes slow. Resume partial downloads
+          # across bounded attempts instead of restarting a 55 MB fetch under a
+          # three-minute cap; the exact SHA-256 check below stays the gate.
+          attempt=0
+          until curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --connect-timeout 10 --max-time 600 --speed-limit 10240 --speed-time 60 \
+            --continue-at - --output "$OOMPA_ZIG_ARCHIVE" \
+            "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 5 ]; then
+              echo "::error::The pinned Zig archive did not finish downloading after $attempt attempts"
+              exit 28
+            fi
+            sleep 15
+          done
           printf '%s  %s\n' "$OOMPA_ZIG_SHA256" "$OOMPA_ZIG_ARCHIVE" | sha256sum --check --status
           tar -xJf "$OOMPA_ZIG_ARCHIVE" -C "$OOMPA_ZIG_DIRECTORY"
           test -x "$OOMPA_ZIG_DIRECTORY/zig-x86_64-linux-0.16.0/zig"
