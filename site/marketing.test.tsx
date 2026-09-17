@@ -28,6 +28,7 @@ describe("public server marketing composition", () => {
       const brand = header?.querySelector(".hraness-marketing-header__brand");
       expect(brand?.textContent).toBe(publicContent.productName);
       expect(brand?.getAttribute("href")).toBe("/");
+      expect(brand?.getAttribute("data-foil")).toBe("");
       const mark = brand?.querySelector('svg[aria-hidden="true"] > circle');
       expect(mark?.getAttribute("fill")).toBe("#f58220");
       expect(mark?.getAttribute("stroke")).toBe("#ad430d");
