@@ -6,6 +6,16 @@
   "outputDirectory": "dist/site",
   "redirects": [
     {
+      "source": "/pr",
+      "destination": "https://hraness.com/pr",
+      "permanent": true
+    },
+    {
+      "source": "/pr/",
+      "destination": "https://hraness.com/pr",
+      "permanent": true
+    },
+    {
       "source": "/:path((?!\\.well-known(?:/|$))(?:[^/]+/)*[^/\\.]+)",
       "destination": "/:path/",
       "permanent": true

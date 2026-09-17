@@ -287,7 +287,6 @@ export const siteDocumentPaths: readonly string[] = [
   "/docs/reference/",
   "/docs/status/",
   "/privacy/",
-  "/pr/",
 ];
 
 export const publicReleaseState: "live" | "release-ready" | "staged" = "live";

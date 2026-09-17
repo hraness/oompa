@@ -16,6 +16,7 @@
 # Guidelines
 
 - The pulse runs only in the scheduled `pr-pulse` GitHub Actions job or manually. It is the single writer of `pr/data/`; the static site renders the committed JSON at build time with no build-time or runtime network access.
+- `hraness.com/pr` is the canonical board: `vercel.json` permanently redirects `/pr`, `/pr/`, and `/pr/index.html` there at the edge. `/pr/data/snapshot.json` must keep serving with its CORS header — the native hraness board polls it as the live feed, so never let the redirect rules cover `pr/data/`.
 - Every collector must fetch through `http.ts`, keep responses bounded, and surface failures as source health rather than aborting the pulse.
 - Parse every upstream payload from `unknown` with Zod before it becomes a signal. Keep signal ids stable and bounded; dedupe by id.
 - Keep all source and resource URLs HTTPS-only. Preserve each signal's source identity and link; media headlines are not authoritative without provenance.
