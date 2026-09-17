@@ -766,6 +766,44 @@ describe("pinned Devin runtime manager", () => {
     await manager.close();
   });
 
+  test("sends /compact as a between-turns prompt and fences mid-turn and terminal compaction", async () => {
+    const { facts, manager, processes } = harness();
+    const providerThreadId = await startSession(manager);
+    const process = processes[0];
+    if (process === undefined) throw new Error("expected one Devin process");
+
+    const activeTurnId = await startTurn(manager, providerThreadId, "first");
+    await waitFor(() => process.promptRequestId !== undefined);
+    await expect(manager.compact({
+      authority,
+      providerThreadId,
+      signal: signal(),
+    })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await manager.interrupt({ activeTurnId, authority, providerThreadId, signal: signal() });
+    await waitFor(() => facts.some((fact) =>
+      fact.type === "turnCompleted" && fact.turn.id === activeTurnId));
+
+    const factCountBeforeCompact = facts.length;
+    const compacted = manager.compact({
+      authority,
+      providerThreadId,
+      signal: signal(),
+    });
+    await waitFor(() => process.promptRequestId !== undefined);
+    const prompt = process.received.filter((entry) => method(entry) === "session/prompt").at(-1);
+    expect(prompt).toMatchObject({
+      params: {
+        prompt: [{ text: "/compact", type: "text" }],
+        sessionId: providerThreadId,
+      },
+    });
+    process.completePrompt("end_turn");
+    await compacted;
+    expect(facts.slice(factCountBeforeCompact).some((fact) =>
+      fact.type === "turnStarted" || fact.type === "turnCompleted")).toBe(false);
+    await manager.close();
+  });
+
   test("fails a missing load root and fences a post-spawn authority change while joining the child", async () => {
     const withoutRoot = harness();
     await expect(withoutRoot.manager.observeSession({
