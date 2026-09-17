@@ -7,6 +7,9 @@ const mono = 'ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monosp
  * and design-kit's marketing recipes remain independently owned boundaries. */
 export const sitePresentationStyles = stylex.create({
   marketingPage: { "padding-block-end": "clamp(2rem, 6vw, 4rem)" },
+  topicIcon: {
+    blockSize: "5.5rem", display: "block", inlineSize: "5.5rem", marginBlockEnd: "1.125rem",
+  },
   shellTranscript: {
     "margin-block-start": 0, "margin-block-end": 0, marginInlineStart: 0, marginInlineEnd: 0,
     borderTopLeftRadius: 0, borderTopRightRadius: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
