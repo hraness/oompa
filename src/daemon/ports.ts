@@ -706,6 +706,7 @@ export class UnavailableDevinRuntime implements DevinRuntimePort {
   startTurn(): Promise<never> { return Promise.reject(this.#unavailable()); }
   steer(): Promise<never> { return Promise.reject(this.#unavailable()); }
   interrupt(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  compact(): Promise<never> { return Promise.reject(this.#unavailable()); }
   inspectInteractionAuthority(): Promise<never> { return Promise.reject(this.#unavailable()); }
   validateInteractionResolution(): Promise<never> { return Promise.reject(this.#unavailable()); }
   resolveInteraction(): Promise<never> { return Promise.reject(this.#unavailable()); }

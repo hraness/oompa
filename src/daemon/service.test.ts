@@ -18704,7 +18704,7 @@ describe("OompaService", () => {
       ).all()).toEqual([...canonical24ResetFixture.migrations]);
       expect(inspector.query(
         "SELECT version FROM migrations WHERE version>=25 ORDER BY version",
-      ).all()).toEqual(Array.from({ length: 37 }, (_, index) => ({ version: index + 25 })));
+      ).all()).toEqual(Array.from({ length: 38 }, (_, index) => ({ version: index + 25 })));
     } finally {
       inspector.close(false);
     }
@@ -24406,7 +24406,7 @@ describe("OompaService", () => {
 
   test("an enabled compact policy dispatches exactly once per usage bucket", async () => {
     let now = 10_000_000;
-    const value = await fixture(undefined, new FakeCloud(), () => undefined, () => now);
+    const value = await fixture(new FakeCloud(), () => undefined, () => now);
     const { service, codex, store } = value;
     const { sessionId } = await createIdleSession(value, "Auto compact on");
     const session = store.requireSession(sessionId);

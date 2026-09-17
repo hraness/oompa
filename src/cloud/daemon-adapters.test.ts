@@ -738,6 +738,7 @@ class FakeDevin implements DevinRuntimePort {
   startTurn(): Promise<never> { return Promise.reject(this.#unused()); }
   steer(): Promise<void> { return Promise.reject(this.#unused()); }
   interrupt(): Promise<void> { return Promise.reject(this.#unused()); }
+  compact(): Promise<void> { return Promise.reject(this.#unused()); }
   inspectInteractionAuthority(): ReturnType<DevinRuntimePort["inspectInteractionAuthority"]> { return Promise.reject(this.#unused()); }
   validateInteractionResolution(): Promise<{ responseDigest: string }> { return Promise.reject(this.#unused()); }
   resolveInteraction(): Promise<{ responseWritten: true }> { return Promise.reject(this.#unused()); }

@@ -279,7 +279,7 @@ describe("automatic pointer-only storage", () => {
       expect(value.historicalAfter).toEqual(value.historicalBefore);
       expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 62 });
       expect(db.query("SELECT version FROM migrations WHERE version>40 ORDER BY version").all())
-        .toEqual(Array.from({ length: 21 }, (_, index) => ({ version: index + 41 })));
+        .toEqual(Array.from({ length: 22 }, (_, index) => ({ version: index + 41 })));
       value.store.settleAutomaticPointerMove(value.request());
       db.exec("DROP TRIGGER automatic_pointer_move_anchor_insert_guard");
       const snapshot = () => ({ schema: db.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all(),
