@@ -44,7 +44,7 @@ const manifest = (scripts: Record<string, string> = {
   bin: { oompa: "./src/cli.ts" },
   name: "@hraness/oompa",
   scripts,
-  version: "0.8.4",
+  version: "0.8.5",
 });
 
 type UstarFixtureEntry = Readonly<{
@@ -543,7 +543,7 @@ describe("lifecycle-free Bun install normalizer", () => {
       { cwd: packageSource, environment },
     );
     expect(oompaPack.exitCode).toBe(0);
-    const oompaArchive = join(archiveDirectory, "hraness-oompa-0.8.4.tgz");
+    const oompaArchive = join(archiveDirectory, "hraness-oompa-0.8.5.tgz");
     let installedCli: string | undefined;
     const installAndNormalize = async (): Promise<void> => {
       const installation = await run(
@@ -608,7 +608,7 @@ describe("lifecycle-free Bun install normalizer", () => {
       { cwd: packageSource },
     );
     expect(packed.exitCode).toBe(0);
-    const archive = join(archiveDirectory, "hraness-oompa-0.8.4.tgz");
+    const archive = join(archiveDirectory, "hraness-oompa-0.8.5.tgz");
     const environment = {
       ...process.env,
       BUN_INSTALL: globalInstall,

@@ -10,6 +10,7 @@ Do not open a public issue for a suspected vulnerability. Use GitHub's private v
 
 | Version | Status |
 | --- | --- |
+| `v0.8.5` candidate | Not admitted or supported as a public release. Use the admitted predecessor; daemon and hosted rollout gates remain unchanged. |
 | `v0.8.4` | Fully admitted beta. Supported and receives security fixes. Daemon and hosted command-writer rollout remains capacity-gated. |
 | `v0.8.3` | Superseded by `v0.8.4`. Unsupported. Do not bypass the update runbook to migrate. |
 | `v0.8.0` through `v0.8.2` | Canonical GitHub predecessors, superseded by `v0.8.3`. Unsupported. Do not bypass the update runbook to migrate. |
