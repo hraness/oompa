@@ -13,6 +13,8 @@
 - `docs/attachments.md` documents message file and image attachments end to end, including the contract a browser client follows.
 - `docs/local-efficiency-plugin.md` documents cross-machine marketplace installation and maintainer validation.
 - `docs/cloud-efficiency-plugin.md` documents Cloud routing, environment profiles, installation, and pilot operation.
+- `docs/hosted-autorespond.md` documents the hosted prose responder, the `oompa credits` commands, and the backend deployment variables listed in `.env.example`.
+- `skills/oompa/` contains the agent skill for driving Oompa from another agent, with the credits payment handoff under `references/`.
 - `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `WRITING.md`, and `STYLE.md` define the public product and contribution contract.
 
 # Guidelines

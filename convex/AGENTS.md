@@ -6,6 +6,7 @@
 - Sync and command modules authorize exact device and lease generations. Session commands are lease-fenced; device commands are addressed to a device and fenced by that daemon's boot authority instead.
 - `commandLifecycle.ts` exposes a bounded read-only authority-reduction quota diagnostic. It shares current ledger validation with quota accounting, emits aggregate ceiling counts and keeps unknown byte costs explicit.
 - `quota.ts` audits predecessor ledger upgrades and exposes bounded read-only corruption reason counts and missing-shape histograms through the same classifier. Its distinct empty-memory completion requires both owner memory indexes empty and inserts only absent memory authority rows. The older unmarked five-resource predecessor additionally requires the indexed owner detail stream empty before adding zero live-chunk authority; compact history and existing counters remain intact. Diagnosis never grants repair authority or changes stored counters.
+- `autorespond.ts` serves `POST /v1/autorespond`, the hosted prose responder: it authenticates by the forwarded credits device token, holds and settles one `assistant_reply` on the Hraness credits service, calls the Vercel AI Gateway with the operator's key, and passes a shortfall through as `402 credits_required`. It writes no table; its bounds are registered in `costs.json` and its variables in `.env.example`.
 - Tests prove rate limits, transactions, encryption boundaries, recovery, and retention.
 
 # Guidelines

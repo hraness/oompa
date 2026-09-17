@@ -33,7 +33,7 @@ function asRecord(value: unknown, label: string): Record<string, unknown> {
 }
 
 const sourceTestCommand = "bun test ./src --isolate --max-concurrency=1";
-const aggregateCheckCommand = "bun run check:support-runtime && bun run check:cost-surfaces && bun run check:install-pins && bun run check:effect-architecture && bun run check:security-primitives && bun run lint && bun run typecheck && bun run test && bun run build:site -- --check && bun run build:app && bun run build && bun run check:package";
+const aggregateCheckCommand = "bun run check:support-runtime && bun run check:credits-runtime && bun run check:cost-surfaces && bun run check:install-pins && bun run check:effect-architecture && bun run check:security-primitives && bun run lint && bun run typecheck && bun run test && bun run build:site -- --check && bun run build:app && bun run build && bun run check:package";
 const aggregateTestCommand = "bun test ./scripts --isolate --max-concurrency=1 && bun run test:local-efficiency-plugin && bun run test:cloud-efficiency-plugin && bun test ./src --isolate --max-concurrency=1 && bun test ./convex --isolate --max-concurrency=1 && bun run test:pr && bun run test:site && bun run test:app";
 
 function expandPackageScript(

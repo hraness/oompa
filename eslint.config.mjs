@@ -40,8 +40,10 @@ export default tseslint.config(
       "dist/**",
       "eslint.config.mjs",
       "node_modules/**",
-      // Generated from exact vendor hashes; check:support-runtime reproduces every byte.
+      // Generated from exact vendor hashes; check:support-runtime and
+      // check:credits-runtime reproduce every byte.
       "src/support-runtime.js",
+      "src/credits-runtime.js",
       "site/dist/**",
       "tmp/**",
     ],

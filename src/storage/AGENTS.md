@@ -3,7 +3,7 @@
 - Migrations create the local SQLite authority.
 - `canonical-profile-storage.ts` defines frozen legacy profile companions and key-only derivation for the schema50 migration; its reduced unit fixture is separate from real StateStore migration proof.
 - Repositories implement narrow semantic reads and CAS transitions.
-- Secret custody stores Oompa device credentials, encryption keys, and the autorespond gateway key.
+- Secret custody stores Oompa device credentials, encryption keys, the autorespond gateway key, and the hosted-responder selection marker.
 - State paths select platform roots, profile directories, and isolated facts-memory session roots.
 - The attachment blob store keeps message attachment bytes as user-only, digest-named files outside SQLite; `attachments` and `message_attachments` hold only their accounting and manifest.
 

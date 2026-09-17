@@ -85,6 +85,7 @@ export function decideAutorespond(input: Readonly<{
  */
 export type ProseAutorespondGateFailure =
   | "consecutive_limit"
+  | "credits_required"
   | "daily_budget"
   | "denylist_cue"
   | "gateway_key_missing"

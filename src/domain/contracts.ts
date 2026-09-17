@@ -656,10 +656,16 @@ export const localCommandSchema = z.discriminatedUnion("kind", [
   // The gateway key reaches the daemon only through this command, only from a
   // descriptor the caller redirected, and never from argv. Command kinds are
   // the only part of a command that any renderer or log ever reproduces.
+  // `--hosted` selects Oompa's hosted responder, metered by prepaid Hraness
+  // credits, instead of a key the person supplies; then no credential travels.
   z.object({
     kind: z.literal("autorespond.gateway-set"),
-    key: gatewayKeySchema,
-  }).strict(),
+    key: gatewayKeySchema.optional(),
+    hosted: z.literal(true).optional(),
+  }).strict().refine(
+    (value) => (value.key === undefined) !== (value.hosted === undefined),
+    { message: "autorespond.gateway-set carries exactly one of key or hosted." },
+  ),
   z.object({ kind: z.literal("autorespond.gateway-clear") }).strict(),
   // Separate local consent. Hosted and browser command unions do not admit it.
   z.object({ kind: z.literal("autorespond-after-hours.status") }).strict(),

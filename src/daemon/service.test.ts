@@ -117,8 +117,11 @@ import { provisionMigratedStateTemplate } from "../../scripts/fixtures/migrated-
 import {
   DeterministicProseResponder,
   PROSE_APPROVAL_REPLY,
+  ProseCreditsRequiredError,
+  SelectingProseResponder,
   type ProseResponder,
 } from "./prose-responder";
+import { HOSTED_CREDITS_RETRY_MS } from "../domain/hosted-autorespond";
 import { DaemonAuthoritySafetyError } from "./daemon-lock";
 import type {
   OompaFactsMemoryLifecyclePort,
@@ -31263,7 +31266,9 @@ describe("OompaService prose autorespond", () => {
       gatewayKeys: {
         isConfigured: () => keys.isConfigured(),
         read: () => keys.read(),
+        readMode: () => keys.readMode(),
         set: (key) => keys.set(key),
+        setHosted: () => keys.setHosted(),
         clear: async () => {
           clearStarted();
           await clearGate;
@@ -31944,5 +31949,176 @@ describe("OompaService prose autorespond", () => {
       .toMatchObject({ cleared: true, gateway: "not configured" });
     expect(await value.service.execute({ kind: "autorespond.status" }, { signal }))
       .toMatchObject({ gateway: "not configured" });
+  });
+});
+
+describe("OompaService hosted prose responder", () => {
+  const testGatewayKey = ["gw", "k".repeat(22)].join("");
+  const shortfall = {
+    balance: { availableMicroUsd: 0, credits: 0, microUsd: 0, usd: "0.00" },
+    error: "credits_required" as const,
+    message: "Oompa needs $0.01 in credits for one hosted autorespond reply; this device has $0.00 available.",
+    operation: "assistant_reply" as const,
+    reason: "insufficient_credits" as const,
+    required: { credits: 1, microUsd: 10_000, usd: "0.01" },
+    topup: {
+      claimId: "clm_8f3k2q",
+      expiresAt: "2026-09-18T12:00:00.000Z",
+      packs: [{ bonusCredits: 0, credits: 1000, id: "p10", usd: 10 }],
+      suggestedPackId: "p10",
+      url: "https://credits.hraness.com/t/clm_8f3k2q",
+    },
+  };
+
+  const waitFor = async (predicate: () => boolean, timeoutMs = 2_000): Promise<void> => {
+    const startedAt = Date.now();
+    while (!predicate()) {
+      if (Date.now() - startedAt > timeoutMs) throw new Error("Timed out waiting for hosted prose autorespond.");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  };
+
+  const hostedFixture = async (options: Readonly<{
+    gatewayKeys?: GatewayKeyPort;
+    hosted?: ProseResponder;
+    gateway?: ProseResponder;
+    now?: () => number;
+  }> = {}) => {
+    const hosted = options.hosted ?? new DeterministicProseResponder({ model: "hosted-model" });
+    const gateway = options.gateway ?? new DeterministicProseResponder({ model: "gateway-model" });
+    const gatewayKeys = options.gatewayKeys ?? new InMemoryGatewayKeyStore(null, { hosted: true });
+    const responder = new SelectingProseResponder({ gateway, hosted, readMode: async () => await gatewayKeys.readMode() });
+    const value = await fixture(new FakeCloud(), () => undefined, options.now ?? Date.now, undefined, {
+      gatewayKeys,
+      proseResponder: responder,
+    });
+    return { ...value, gateway, gatewayKeys, hosted };
+  };
+
+  const completeTurn = async (
+    value: Awaited<ReturnType<typeof hostedFixture>>,
+    sessionId: `sess_${string}`,
+    turnId: string,
+    text: string,
+  ): Promise<void> => {
+    const session = value.store.requireSession(sessionId);
+    const profile = value.store.requireProfileById(session.profileId);
+    const threadId = session.providerThreadId;
+    if (threadId === undefined) throw new Error("Expected a bound session.");
+    const authority = liveAuthorityFor(value.store, profile.id);
+    await value.service.observeCodexFact(authority, {
+      type: "turnStarted",
+      threadId,
+      turn: { id: turnId, items: [], status: "inProgress", startedAt: 1, completedAt: null, durationMs: null },
+    });
+    await value.service.observeCodexFact(authority, {
+      type: "itemStarted", threadId, turnId, itemId: `${turnId}-agent`, itemKind: "agentMessage",
+    });
+    await value.service.observeCodexFact(authority, {
+      type: "assistantDelta", threadId, turnId, itemId: `${turnId}-agent`, text,
+    });
+    await value.service.observeCodexFact(authority, {
+      type: "itemCompleted", threadId, turnId, itemId: `${turnId}-agent`, itemKind: "agentMessage", status: "completed",
+    });
+    await value.service.observeCodexFact(authority, {
+      type: "turnCompleted",
+      threadId,
+      turn: { id: turnId, items: [], status: "completed", startedAt: 1, completedAt: 2, durationMs: 1 },
+    });
+  };
+
+  const proseEvidence = (value: Awaited<ReturnType<typeof hostedFixture>>, sessionId: `sess_${string}`) =>
+    value.store.listAutorespondEvidence({ sessionId, limit: 50 }).filter((row) => row.path === "prose");
+
+  test("routes prose approvals to the hosted responder with the turn's attempt identity", async () => {
+    const value = await hostedFixture();
+    const { sessionId } = await createIdleSession(value, "Hosted prose accept");
+    value.store.setSessionApprovalMode(sessionId, "auto:all");
+
+    await completeTurn(value, sessionId, "turn-hosted-1", "The refactor is staged. Should I proceed?");
+
+    await waitFor(() => proseEvidence(value, sessionId).length === 1);
+    expect(proseEvidence(value, sessionId)[0]).toMatchObject({ model: "hosted-model", outcome: "sent", path: "prose" });
+    expect((value.hosted as DeterministicProseResponder).calls).toHaveLength(1);
+    expect((value.gateway as DeterministicProseResponder).calls).toHaveLength(0);
+    const attempt = (value.hosted as DeterministicProseResponder).calls[0]?.attempt;
+    expect(attempt).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/u);
+    const status = await value.service.execute({ kind: "autorespond.status" }, { signal });
+    expect(status).toMatchObject({ credits: { state: "ready" }, gateway: "not configured", responder: "hosted" });
+  });
+
+  test("keeps the bring-your-own-key path exactly as it is when a key is configured", async () => {
+    const value = await hostedFixture({ gatewayKeys: new InMemoryGatewayKeyStore(testGatewayKey) });
+    const { sessionId } = await createIdleSession(value, "Keyed prose accept");
+    value.store.setSessionApprovalMode(sessionId, "auto:all");
+
+    await completeTurn(value, sessionId, "turn-keyed-1", "The refactor is staged. Should I proceed?");
+
+    await waitFor(() => proseEvidence(value, sessionId).length === 1);
+    expect(proseEvidence(value, sessionId)[0]).toMatchObject({ model: "gateway-model", outcome: "sent" });
+    expect((value.hosted as DeterministicProseResponder).calls).toHaveLength(0);
+    const status = await value.service.execute({ kind: "autorespond.status" }, { signal });
+    expect(status).toMatchObject({ gateway: "configured", responder: "gateway-key" });
+    expect(status).not.toHaveProperty("credits");
+    expect(JSON.stringify(status)).not.toContain(testGatewayKey);
+  });
+
+  test("pauses hosted autorespond on a credits shortfall, reports the payload in status, and resumes on reselection or after the retry window", async () => {
+    let now = Date.parse("2026-09-17T12:00:00.000Z");
+    const hosted = new DeterministicProseResponder({ failure: new ProseCreditsRequiredError(shortfall) });
+    const value = await hostedFixture({ hosted, now: () => now });
+    const { sessionId } = await createIdleSession(value, "Hosted shortfall");
+    value.store.setSessionApprovalMode(sessionId, "auto:all");
+
+    await completeTurn(value, sessionId, "turn-short-1", "The refactor is staged. Should I proceed?");
+    await waitFor(() => proseEvidence(value, sessionId).length === 1);
+    expect(proseEvidence(value, sessionId)[0]).toMatchObject({ decision: "refuse", outcome: "gate_failed:credits_required" });
+    expect(hosted.calls).toHaveLength(1);
+
+    const paused = await value.service.execute({ kind: "autorespond.status" }, { signal }) as {
+      credits: { payload: unknown; retryAt: number; since: number; state: string };
+      responder: string;
+    };
+    expect(paused.responder).toBe("hosted");
+    expect(paused.credits.state).toBe("required");
+    expect(paused.credits.payload).toEqual(shortfall);
+    expect(paused.credits.since).toBe(now);
+    expect(paused.credits.retryAt).toBe(now + HOSTED_CREDITS_RETRY_MS);
+
+    // While paused, a second approval is refused locally without a hosted call.
+    await completeTurn(value, sessionId, "turn-short-2", "Tests pass. Should I proceed?");
+    await waitFor(() => proseEvidence(value, sessionId).length === 2);
+    expect(proseEvidence(value, sessionId)[1]).toMatchObject({ outcome: "gate_failed:credits_required" });
+    expect(hosted.calls).toHaveLength(1);
+
+    // Reselecting the hosted responder lifts the pause.
+    expect(await value.service.execute({ hosted: true, kind: "autorespond.gateway-set" }, { signal }))
+      .toEqual({ gateway: "not configured", responder: "hosted", version: 1 });
+    expect(await value.service.execute({ kind: "autorespond.status" }, { signal })).toMatchObject({ credits: { state: "ready" } });
+    await completeTurn(value, sessionId, "turn-short-3", "Lint passes. Should I proceed?");
+    await waitFor(() => hosted.calls.length === 2);
+
+    // The retry window lifts it too, once it passes.
+    await waitFor(() => proseEvidence(value, sessionId).length === 3);
+    expect(await value.service.execute({ kind: "autorespond.status" }, { signal })).toMatchObject({ credits: { state: "required" } });
+    now += HOSTED_CREDITS_RETRY_MS;
+    expect(await value.service.execute({ kind: "autorespond.status" }, { signal })).toMatchObject({ credits: { state: "ready" } });
+
+    // Clearing custody drops both the selection and any pause.
+    expect(await value.service.execute({ kind: "autorespond.gateway-clear" }, { signal }))
+      .toEqual({ cleared: true, gateway: "not configured", responder: "not configured", version: 1 });
+    const cleared = await value.service.execute({ kind: "autorespond.status" }, { signal });
+    expect(cleared).toMatchObject({ responder: "not configured" });
+    expect(cleared).not.toHaveProperty("credits");
+  });
+
+  test("refuses the prose gate without consulting the hosted responder when nothing is selected", async () => {
+    const value = await hostedFixture({ gatewayKeys: new InMemoryGatewayKeyStore() });
+    const { sessionId } = await createIdleSession(value, "Unselected prose");
+    value.store.setSessionApprovalMode(sessionId, "auto:all");
+    await completeTurn(value, sessionId, "turn-none-1", "The refactor is staged. Should I proceed?");
+    await waitFor(() => proseEvidence(value, sessionId).length === 1);
+    expect(proseEvidence(value, sessionId)[0]).toMatchObject({ outcome: "gate_failed:gateway_key_missing" });
+    expect((value.hosted as DeterministicProseResponder).calls).toHaveLength(0);
   });
 });

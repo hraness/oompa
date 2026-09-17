@@ -8,6 +8,7 @@
 - `domain/` owns identifiers, presets, projections, state transitions, encryption envelopes, and command outcomes.
 - `storage/` owns SQLite migrations, repositories, secret custody, state paths, and facts-memory directory custody.
 - `cloud/` owns the optional Convex client, sync projections, device enrollment, execution leases, and remote commands.
+- `support.ts` and `credits.ts` bind the reviewed Hraness support and credits bundles (`support-runtime.js`, `credits-runtime.js`, reproduced byte for byte by `check:support-runtime` and `check:credits-runtime`) to Oompa's product profiles; `credits.ts` also reads the stored credits device token for the daemon's hosted responder and prints the shared payment handoff.
 
 # Guidelines
 
