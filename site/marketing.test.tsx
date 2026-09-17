@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { hranessAttribution } from "@hraness/site-footer";
 import { parseHTML } from "linkedom";
 import { findSection, publicContent, type PublicContent } from "./content.ts";
 import { findDocsPage, type DocsPath } from "./docs-content.ts";
@@ -46,7 +47,7 @@ describe("public server marketing composition", () => {
     const page = document.querySelector('[data-hraness-marketing="page"]');
     expect(page).not.toBeNull();
     expect([...page!.children].map((child) => child.getAttribute("data-hraness-marketing")))
-      .toEqual(["hero", "pillars", "section", "trust", "questions", "maker", "cta"]);
+      .toEqual(["hero", "pillars", "section", "trust", "questions", "cta"]);
     expect(document.querySelector("#reference, #command-reference, [data-hraness-marketing=install]")).toBeNull();
     expect(html).not.toContain(publicContent.installCommand);
     expect(html).not.toContain(publicContent.initCommand);
@@ -133,9 +134,6 @@ describe("public server marketing composition", () => {
     expect(textsAt("#questions details > summary")).toEqual(publicContent.questions.map((question) => question.question));
     expect(textsAt(".hraness-marketing-question__answer")).toEqual(publicContent.questions.map((question) =>
       question.answer.map((part) => part.kind === "link" ? part.label : part.value).join("")));
-    expect(textAt("#maker-heading")).toBe(publicContent.maker.heading);
-    expect([...document.querySelectorAll(".hraness-marketing-maker__links a")].map((node) => [node.getAttribute("href"), node.textContent]))
-      .toEqual(publicContent.maker.links.map((link) => [link.href, link.label]));
     const actionsAt = (selector: string) => [...document.querySelectorAll(selector)]
       .map((node) => [node.getAttribute("href"), node.textContent, node.getAttribute("data-emphasis")]);
     expect(actionsAt(".hraness-marketing-hero__actions > a")).toEqual([
@@ -150,21 +148,22 @@ describe("public server marketing composition", () => {
     expect(textAt(".hraness-marketing-cta__footnote")).toBe(publicContent.hero.boundary);
   });
 
-  test("styles FAQ and Maker link-list anchors without restyling the Maker bio or adding focus overrides", () => {
+  test("leaves attribution to the shared Hraness footer instead of a product maker section", () => {
+    const html = renderMarketingPage(publicContent);
+    const { document } = parseHTML(html);
+    expect(document.querySelector('[data-hraness-marketing="maker"], .hraness-marketing-maker, #maker, #maker-heading')).toBeNull();
+    expect(html).not.toContain("Built by");
+    expect(html).not.toContain(hranessAttribution.title);
+  });
+
+  test("styles FAQ anchors without adding focus overrides", () => {
     const sample: PublicContent = {
       ...publicContent,
-      maker: {
-        ...publicContent.maker,
-        bio: [{ kind: "text", value: "Built by " }, { kind: "link", label: "Maker", href: "https://example.test/maker" }, { kind: "code", value: "safe <text>" }],
-        links: [{ label: "Site", href: "https://example.test/site" }],
-      },
-      questions: [{ question: "A native question?", answer: [{ kind: "link", label: "Answer", href: "https://example.test/answer" }] }],
+      questions: [{ question: "A native question?", answer: [{ kind: "link", label: "Answer", href: "https://example.test/answer" }, { kind: "code", value: "safe <text>" }] }],
     };
     const { document } = parseHTML(renderMarketingPage(sample));
-    expect(document.querySelector(".hraness-marketing-maker__body > p > a")?.hasAttribute("class")).toBe(false);
-    expect(document.querySelector(".hraness-marketing-maker__body > p > code")?.textContent).toBe("safe <text>");
-    expect(document.querySelector(".hraness-marketing-maker__links a")?.getAttribute("class")).toBe(sitePresentationClasses("proseLink"));
     expect(document.querySelector(".hraness-marketing-question__answer a")?.getAttribute("class")).toBe(sitePresentationClasses("proseLink"));
+    expect(document.querySelector(".hraness-marketing-question__answer code")?.textContent).toBe("safe <text>");
     expect(document.querySelectorAll("#questions details > summary")).toHaveLength(1);
     expect(document.querySelector("#questions details > summary")?.textContent).toBe("A native question?");
     expect(document.querySelector("#questions details")?.hasAttribute("open")).toBe(false);

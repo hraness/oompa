@@ -1,7 +1,6 @@
 import {
   MarketingCallToAction,
   MarketingFlow,
-  MarketingMaker,
   MarketingPage,
   MarketingPillars,
   MarketingQuestionList,
@@ -22,14 +21,14 @@ import { WonkaArtifact } from "./wonka-artifact.tsx";
 const classes = (hook: string, ...slots: readonly SitePresentationSlot[]): string =>
   [hook, sitePresentationClasses(...slots)].filter(Boolean).join(" ");
 
-/** Content remains text and native elements; only FAQ links use prose styling. */
-function inlineContent(content: readonly InlineContent[], styleLinks: boolean): ReactNode {
+/** Content remains text and native elements; FAQ links use prose styling. */
+function inlineContent(content: readonly InlineContent[]): ReactNode {
   return content.map((part, index) => {
     switch (part.kind) {
       case "code":
         return <code className={classes("oompa-inline-code", "inlineCode")} key={index}>{part.value}</code>;
       case "link":
-        return <a className={styleLinks ? sitePresentationClasses("proseLink") : undefined} href={part.href} key={index}>{part.label}</a>;
+        return <a className={sitePresentationClasses("proseLink")} href={part.href} key={index}>{part.label}</a>;
       case "text":
         return part.value;
     }
@@ -102,18 +101,8 @@ export function renderMarketingPage(content: PublicContent): string {
         headingId="questions-heading"
         id="questions"
         label="Questions"
-        questions={content.questions.map((question) => ({ question: question.question, answer: <p>{inlineContent(question.answer, true)}</p> }))}
+        questions={content.questions.map((question) => ({ question: question.question, answer: <p>{inlineContent(question.answer)}</p> }))}
       />
-      <MarketingMaker
-        heading={content.maker.heading}
-        headingId="maker-heading"
-        id="maker"
-        label="Built by"
-        linkClassName={sitePresentationClasses("proseLink")}
-        links={content.maker.links}
-      >
-        {content.maker.bio.length === 0 ? null : <p>{inlineContent(content.maker.bio, false)}</p>}
-      </MarketingMaker>
       <MarketingCallToAction
         actions={[
           { emphasis: "primary", href: "/docs/start/", label: "Set up your first machine" },

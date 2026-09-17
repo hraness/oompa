@@ -108,12 +108,6 @@ export interface SiteTrustItem {
   readonly label: string;
 }
 
-export interface SiteMaker {
-  readonly bio: readonly InlineContent[];
-  readonly heading: string;
-  readonly links: readonly { readonly href: string; readonly label: string }[];
-}
-
 export interface PublicContent {
   /** README trust-signal badges, rendered on one line under the H1. */
   readonly badges: readonly Badge[];
@@ -130,8 +124,6 @@ export interface PublicContent {
   readonly hero: HeroContent;
   /** Whether hosted sign-up needs an invitation. Drives every beta claim. */
   readonly hostedSignup: HostedSignup;
-  /** The person behind Oompa, in plain words, for the website only. */
-  readonly maker: SiteMaker;
   /** Reader objections answered on the website before the reference. */
   readonly questions: readonly SiteQuestion[];
   /** Local-by-design boundaries stated as reassurance on the website. */
@@ -539,17 +531,6 @@ export const publicContent: PublicContent = {
       answer: [text(`The CLI requires Bun ${publicPins.bun}. Codex execution supports macOS and Linux; Claude Code execution supports Linux. The web interface can follow paired machines from a browser.`)],
     },
   ],
-  maker: {
-    heading: "Built by Ben Guo",
-    bio: [
-      text("Oompa is built by Ben Guo, a musician and builder, formerly a founder and engineering leader at companies including Venmo and Stripe, who now builds his software factory from Puerto Rico. He runs more than a dozen Codex subscriptions at once and built Oompa to keep every session alive, isolated, and reachable from the same terminal."),
-    ],
-    links: [
-      { href: links.hraness, label: "hraness.com" },
-      { href: "https://x.com/hraness", label: "@hraness" },
-      { href: links.github, label: "GitHub" },
-    ],
-  },
   introduction: [
     releaseAdmissionNotice,
     paragraph(
