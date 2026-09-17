@@ -98,9 +98,40 @@ instant, not an ACU balance.
 
 ### Phase 4. Live acceptance
 
-- **Status:** Not started. No live-provider qualification is claimed anywhere in
-  this repository; every Devin turn, tool, approval, cancellation and
-  usage-update path is protocol- and fixture-verified only.
+- **Status:** One bounded paid turn completed on 2026-09-17 in a disposable
+  isolated profile on the owner's account, after the readiness repair in
+  PR #241. The turn, tool-call and usage-update paths are live-proven; the
+  approval and in-flight cancellation paths are not, because the provider
+  executed the shell tool without requesting permission and the session was
+  already idle when it was stopped. Those two paths stay fixture-verified only.
+- **Acceptance record (sanitized):**
+  - Runtime: `devin 3000.10.27 (bcbe88c7)`, resolved through a PATH shim to
+    the pinned binary because the operator's CLI had auto-updated to
+    `3000.10.31`, which the pin refuses (issue #234).
+  - ACP argv: `devin acp --model gpt-6-astra`.
+  - Quota before the turn (`devin_usage_panel`): weekly 0% used, 100%
+    remaining, resets `Sep 20, 4:00 AM (UTC-4)`, daily window hidden.
+  - Quota after the turn: unchanged at weekly 0% used, 100% remaining, same
+    reset text. One short turn did not move the weekly percentage.
+  - Prompt: create one file with one shell command and reply `DONE`. The file
+    existed afterwards with the exact requested content.
+  - Fact kinds observed, in order of first appearance: `connection`,
+    `user_message`, `turn_started`, `session_state`, `token_usage`,
+    `item_started`, `tool_progress`, `item_completed`, `assistant_delta`,
+    `protocol_incompatible`, `turn_completed`. Counts: 6 `token_usage`,
+    10 `tool_progress`, 3 `item_started`, 3 `item_completed`,
+    2 `protocol_incompatible`.
+  - Cleanup: `session stop` reported the session idle, the single `devin acp`
+    child for the profile was joined when the isolated daemon stopped, and the
+    disposable state root holding the managed credential was deleted. No
+    credential, session identifier or raw panel was retained.
+- **Open evidence from the turn:** two `protocol_incompatible` facts were
+  reduced from the ACP stream during a successful turn. The turn still
+  completed, so the unrecognized notification shape is informational, but it
+  should be captured as a fixture and classified before the next live run.
+  `oompa status` counts only the Codex profile state and reported the
+  Devin-only profile as signed out throughout; that is a separate product
+  decision recorded in PR #241.
 - **Scope:** one bounded paid turn in a disposable isolated profile covering
   turn, tool, approval, cancellation and usage-update paths; a quota read before
   and after that turn.
