@@ -3,6 +3,7 @@ import type { Preset, PresetRequirement, Provider } from "../domain/presets";
 import type { ProviderAccountId } from "../domain/provider-accounts";
 import type {
   EffectiveClaudeRuntimeProfile,
+  EffectiveDevinRuntimeProfileV2,
   EffectiveRuntimeProfile,
 } from "../domain/runtime-profile";
 import type { AccountRateLimitResetOutcome } from "../domain/usage-metrics";
@@ -372,6 +373,47 @@ export interface ClaudeRuntimePort extends SessionRuntimePort<EffectiveClaudeRun
   ): ProviderInteractionAuthority;
 }
 
+export type DevinRuntimeStartReview = RuntimeStartReviewOf<EffectiveDevinRuntimeProfileV2>;
+
+/** Bounded Oompa observation; Devin exposes no admitted stable account identity. */
+export type DevinAccountReadinessProjection = {
+  readiness: "signed_in" | "signed_out" | "unverified";
+  observedAt: number;
+};
+
+/**
+ * The Devin implementation of the neutral seam. Devin owns authentication and
+ * native sessions inside its isolated home; Oompa observes only signed-in
+ * readiness and the bounded ACP facts required by the neutral session
+ * timeline. The daemon does not select this port yet: `kb/plans/devin-provider.md`
+ * Phase 3 lifts the retired-provider refusals that keep it unwired.
+ */
+export interface DevinRuntimePort extends SessionRuntimePort<EffectiveDevinRuntimeProfileV2> {
+  readonly provider: "devin";
+  readAccount(input: { authority: ProfileAuthority; signal: AbortSignal }): Promise<DevinAccountReadinessProjection>;
+  pinnedVersion(): string;
+  /**
+   * Rekeys idle live Devin sessions after the durable provider-generation
+   * commit. Active or ambiguously retained children are rejected rather than
+   * carried across authority.
+   */
+  rebindProfileAuthority(input: {
+    expectedAuthority: ProfileAuthority;
+    nextAuthority: ProfileAuthority;
+  }): void;
+  /** Current-daemon execution authority used before scheduled work becomes durable. */
+  hasLiveSession?(input: {
+    authority: ProfileAuthority;
+    providerThreadId: string;
+  }): boolean;
+  /** The exact durable authority one pending ACP permission request binds. */
+  interactionAuthority(
+    authority: ProfileAuthority,
+    providerThreadId: string,
+    requestId: string,
+  ): ProviderInteractionAuthority;
+}
+
 export interface CodexRuntimePort extends SessionRuntimePort<EffectiveRuntimeProfile> {
   readonly provider: "codex";
   /**
@@ -589,6 +631,61 @@ export class UnavailableClaudeRuntime implements ClaudeRuntimePort {
   readSessionProcessIdentity(): Promise<never> { return Promise.reject(this.#unavailable()); }
   readAccount(): Promise<never> { return Promise.reject(this.#unavailable()); }
   readProviderAccountIdentity(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  reviewSessionStart(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  discardRuntimeReview(): void {}
+  startSession(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  observeSession(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  readSession(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  endSession(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  reviewTurnStart(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  startTurn(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  steer(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  interrupt(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  inspectInteractionAuthority(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  validateInteractionResolution(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  resolveInteraction(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  validateInteractionTimeout(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  timeoutInteraction(): Promise<never> { return Promise.reject(this.#unavailable()); }
+  async close(): Promise<void> {}
+}
+
+/**
+ * The default Devin seam on a machine with no admitted `devin` binary. A
+ * session that names the Devin provider is refused with one clear message
+ * instead of silently falling back to another provider.
+ */
+export class UnavailableDevinRuntime implements DevinRuntimePort {
+  readonly provider = "devin" as const;
+  readonly #pinnedVersion: string;
+
+  /** `pinnedVersion` is the exact `DEVIN_PIN` this build admits. */
+  constructor(pinnedVersion: string) {
+    this.#pinnedVersion = pinnedVersion;
+  }
+
+  #unavailable(): never {
+    throw new ProviderRuntimeUnavailableError(
+      `This daemon has no Devin runtime. Install Devin CLI ${this.#pinnedVersion} exactly, `
+      + "put `devin` on this daemon's PATH, restart the daemon with `oompa daemon restart`, then sign in "
+      + "inside the account's isolated Devin profile.",
+    );
+  }
+  interactionAuthority(): ProviderInteractionAuthority { return this.#unavailable(); }
+  hasLiveSession(input: {
+    authority: ProfileAuthority;
+    providerThreadId: string;
+  }): boolean {
+    void input;
+    return false;
+  }
+  pinnedVersion(): string { return this.#unavailable(); }
+  rebindProfileAuthority(input: {
+    expectedAuthority: ProfileAuthority;
+    nextAuthority: ProfileAuthority;
+  }): void {
+    void input;
+  }
+  readAccount(): Promise<never> { return Promise.reject(this.#unavailable()); }
   reviewSessionStart(): Promise<never> { return Promise.reject(this.#unavailable()); }
   discardRuntimeReview(): void {}
   startSession(): Promise<never> { return Promise.reject(this.#unavailable()); }

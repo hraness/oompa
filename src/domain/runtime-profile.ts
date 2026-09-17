@@ -141,9 +141,9 @@ export const effectiveClaudeRuntimeProfileV1Schema = z.union([
 export type EffectiveClaudeRuntimeProfileV1 = z.infer<typeof effectiveClaudeRuntimeProfileV1Schema>;
 
 /**
- * Historical Devin ACP documents written by schema-v39 builds. This parser
- * preserves their exact public runtime tuple for archival reads and evidence
- * validation; it does not admit another provider effect.
+ * The exact local Devin ACP profile HRA admits. The pinned CLI owns its
+ * authentication and model defaults inside the isolated home; HRA records
+ * only the public runtime/protocol facts it proved before dispatch.
  */
 const effectiveDevinRuntimeProfileFieldsV1 = {
   profileId: profileIdSchema,
@@ -152,7 +152,7 @@ const effectiveDevinRuntimeProfileFieldsV1 = {
   preset: z.literal("astra"),
   model: z.string().trim().min(1).max(200),
   reasoningEffort: z.literal("provider-default"),
-  devinVersion: z.literal("3000.6.14"),
+  devinVersion: z.string().regex(/^\d{1,5}\.\d{1,5}\.\d{1,5}$/u),
   protocolVersion: z.literal(1),
 } as const;
 
@@ -172,6 +172,70 @@ export const effectiveDevinRuntimeProfileV1Schema = z.object({
 });
 
 export type EffectiveDevinRuntimeProfileV1 = z.infer<typeof effectiveDevinRuntimeProfileV1Schema>;
+
+/**
+ * The Devin ACP document the reactivated runtime adapter reviews on the
+ * current pinned CLI (`kb/plans/devin-provider.md`, Phase 2). It is a separate
+ * document from the historical V1 shape above because the pinned version
+ * changed. It is deliberately not a member of the reviewed union yet: Phase 3
+ * admits it with an append-only migration, so until then no storage row,
+ * cloud payload or browser selector accepts it. The version literal must equal
+ * `DEVIN_PIN` in `src/devin/pin.ts`; `src/devin/runtime.test.ts` asserts that.
+ */
+const effectiveDevinRuntimeProfileFieldsV2 = {
+  profileId: profileIdSchema,
+  processGeneration: z.number().int().nonnegative(),
+  observedAt: unixMillisecondsSchema,
+  preset: z.literal("astra"),
+  model: z.string().trim().min(1).max(200),
+  reasoningEffort: z.literal("provider-default"),
+  devinVersion: z.literal("3000.10.27"),
+  protocolVersion: z.literal(1),
+} as const;
+
+export const effectiveDevinRuntimeProfileV2Schema = z.object({
+  ...effectiveDevinRuntimeProfileFieldsV2,
+  isolatedHome: z.literal(true),
+}).strict().superRefine((value, context) => {
+  if (!isAdmittedPresetRequirementV1(value.preset, {
+    effort: value.reasoningEffort,
+    model: value.model,
+  })) {
+    context.addIssue({
+      code: "custom",
+      message: "The effective model and reasoning effort must match Devin's exact current Oompa preset.",
+    });
+  }
+});
+
+export type EffectiveDevinRuntimeProfileV2 = z.infer<typeof effectiveDevinRuntimeProfileV2Schema>;
+
+/** Public Devin V2 evidence omits the private isolated-home custody marker. */
+export const publicEffectiveDevinRuntimeProfileV2Schema = z.object({
+  ...effectiveDevinRuntimeProfileFieldsV2,
+}).strict().superRefine((value, context) => {
+  if (!isAdmittedPresetRequirementV1(value.preset, {
+    effort: value.reasoningEffort,
+    model: value.model,
+  })) {
+    context.addIssue({
+      code: "custom",
+      message: "The effective model and reasoning effort must match Devin's exact current Oompa preset.",
+    });
+  }
+});
+
+export type PublicEffectiveDevinRuntimeProfileV2 = z.infer<
+  typeof publicEffectiveDevinRuntimeProfileV2Schema
+>;
+
+export const projectPublicDevinRuntimeProfileV2 = (
+  profile: EffectiveDevinRuntimeProfileV2,
+): PublicEffectiveDevinRuntimeProfileV2 => {
+  const publicProfile: Record<string, unknown> = { ...effectiveDevinRuntimeProfileV2Schema.parse(profile) };
+  delete publicProfile.isolatedHome;
+  return publicEffectiveDevinRuntimeProfileV2Schema.parse(publicProfile);
+};
 
 /**
  * The reviewed runtime profile one session-start, turn-start, or queue-start

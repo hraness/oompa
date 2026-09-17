@@ -240,15 +240,15 @@ describe("automatic pointer-only storage", () => {
     expect(value.store.settleAutomaticPointerMove(request).move.target.authority.profileId).toBe(value.target.id);
   });
 
-  test("a retired Devin login refuses before mutation without blocking the selected Codex pointer", async () => {
+  test("a sibling Devin login does not block the selected Codex pointer", async () => {
     const value = await fixture(); const request = value.request();
     const authority = value.store.requireProviderAccountAuthority(value.source.id, "devin");
     const idempotencyKey = randomUUID();
-    expect(() => value.store.prepareMutation({ kind: "account.devin-login", authorityId: value.source.id,
+    expect(value.store.prepareMutation({ kind: "account.devin-login", authorityId: value.source.id,
       authorityGeneration: authority.processGeneration, idempotencyKey, request: {},
       providerAuthorities: [{ role: "primary", authority, provenance: "account_devin_login" }] }))
-      .toThrow("PROVIDER_RETIRED:devin");
-    expect(value.store.readMutation(idempotencyKey)).toBeNull();
+      .toMatchObject({ state: "prepared", replay: false });
+    expect(value.store.readMutation(idempotencyKey)).toMatchObject({ state: "prepared" });
     expect(value.store.settleAutomaticPointerMove(request).move.target.authority.profileId).toBe(value.target.id);
   });
 
@@ -277,9 +277,9 @@ describe("automatic pointer-only storage", () => {
     try {
       expect(value.historicalBefore).not.toBeNull();
       expect(value.historicalAfter).toEqual(value.historicalBefore);
-      expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(db.query("SELECT version FROM migrations WHERE version>40 ORDER BY version").all())
-        .toEqual(Array.from({ length: 20 }, (_, index) => ({ version: index + 41 })));
+        .toEqual(Array.from({ length: 21 }, (_, index) => ({ version: index + 41 })));
       value.store.settleAutomaticPointerMove(value.request());
       db.exec("DROP TRIGGER automatic_pointer_move_anchor_insert_guard");
       const snapshot = () => ({ schema: db.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all(),

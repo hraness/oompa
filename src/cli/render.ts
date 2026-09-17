@@ -2563,33 +2563,12 @@ const renderAccountShow = (data: unknown): string => {
   const root = object(data);
   const account = object(root?.account);
   if (account === null) return "Account data is unavailable.";
-  if (root?.provider === "devin" && root.status === "retired") {
-    const rows = [
-      "Devin: retired (local history and login cleanup only)",
-      `Label: ${line(account.label)}`,
-      `ID: ${line(account.id)}`,
-    ];
-    if (typeof root.providerGeneration === "number") {
-      rows.push(`Provider generation: ${line(root.providerGeneration)}`);
-    }
-    if (typeof root.diagnostic === "string") rows.push(safeDiagnostic(root.diagnostic));
-    const recovery = object(root.recovery);
-    if (recovery?.required === true) {
-      rows.push("Recovery: required");
-      if (typeof recovery.diagnostic === "string") rows.push(`  ${safeDiagnostic(recovery.diagnostic)}`);
-      if (typeof recovery.statusCommand === "string") rows.push(`Next: ${line(recovery.statusCommand)}`);
-      if (typeof recovery.abandonCommand === "string") {
-        rows.push(`Only after confirming the original Devin child exited: ${line(recovery.abandonCommand)}`);
-      }
-    }
-    return rows.join("\n");
-  }
   const authentication = object(root?.authentication);
   if (
-    authentication?.provider === "claude"
+    (authentication?.provider === "claude" || authentication?.provider === "devin")
     && (typeof authentication.signedIn === "boolean" || authentication.signedIn === null)
   ) {
-    const providerName = "Claude Code";
+    const providerName = authentication.provider === "claude" ? "Claude Code" : "Devin";
     const rows = [
       `${providerName}: ${authentication.signedIn === null
         ? "status unknown"
@@ -2610,6 +2589,18 @@ const renderAccountShow = (data: unknown): string => {
       }
     } else if (authentication.signedIn === false && typeof root?.nextCommand === "string") {
       rows.push(`Next: ${line(root.nextCommand)}`);
+    }
+    const usage = object(root?.usage);
+    if (usage?.allowance === "unknown") {
+      rows.push("Account allowance: unknown");
+      if (typeof usage.reason === "string") rows.push(`  ${safeDiagnostic(usage.reason)}`);
+    }
+    // Additive and local only: name where a Devin quota read would come from
+    // without claiming a value this command did not observe. `persisted: false`
+    // is the payload's own statement that nothing stored or hosted holds it.
+    const usageSource = object(root?.usageSource);
+    if (typeof usageSource?.source === "string" && usageSource.persisted === false) {
+      rows.push(`Usage source: ${line(usageSource.source)} (local only, not stored)`);
     }
     return rows.join("\n");
   }

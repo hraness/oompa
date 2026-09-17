@@ -1,0 +1,314 @@
+{
+  "version": 1,
+  "surfaces": {
+    "convex:accountDeletionIdentityReservations": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/accountDeletion.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 4, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:accountDeletionJobReservations": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/accountDeletion.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 4, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:accountDeletionJobs": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/accountDeletion.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 2, "bytesPerAccountMonth": 2048 }
+    },
+    "convex:accountDeletionReceipts": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/accountDeletion.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 8, "bytesPerAccountMonth": 8192 }
+    },
+    "convex:accountUsageSnapshots": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/usage.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 365, "bytesPerAccountMonth": 131072 }
+    },
+    "convex:attentionNotificationOutbox": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/attentionNotifications.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 64, "bytesPerAccountMonth": 65536 }
+    },
+    "convex:attentionNotificationSafetyFaults": {
+      "kind": "authoritative",
+      "retention": "ttl:P90D",
+      "owner": "convex/attentionNotificationControl.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 32, "bytesPerAccountMonth": 32768 }
+    },
+    "convex:authEmailAttemptEvents": {
+      "kind": "authoritative",
+      "retention": "ttl:P30D",
+      "owner": "convex/authEmail.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 128, "bytesPerAccountMonth": 32768 }
+    },
+    "convex:authInvites": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/authInvites.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 8, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:authOtpChallenges": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/authEmail.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 16, "bytesPerAccountMonth": 8192 }
+    },
+    "convex:authSubjects": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/auth.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 2, "bytesPerAccountMonth": 2048 }
+    },
+    "convex:authVerifiers": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/auth.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 4, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:codexAccounts": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/account.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 8, "bytesPerAccountMonth": 16384 }
+    },
+    "convex:commandLifecycleReservations": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/commandLifecycle.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 256, "bytesPerAccountMonth": 262144 }
+    },
+    "convex:commandTerminalSecurityReservations": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/commandLifecycle.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 64, "bytesPerAccountMonth": 65536 }
+    },
+    "convex:deviceAccountBindings": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/devices.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 8, "bytesPerAccountMonth": 8192 }
+    },
+    "convex:deviceBindChallenges": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/devices.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 16, "bytesPerAccountMonth": 8192 }
+    },
+    "convex:deviceCommands": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/deviceCommands.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 256, "bytesPerAccountMonth": 262144 }
+    },
+    "convex:deviceKeyEnvelopes": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/devices.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 32, "bytesPerAccountMonth": 65536 }
+    },
+    "convex:devicePresence": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/presence.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 16, "bytesPerAccountMonth": 16384 }
+    },
+    "convex:deviceRegistries": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/devices.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 16, "bytesPerAccountMonth": 32768 }
+    },
+    "convex:deviceRevocationDeviceReservations": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/deviceRevocation.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 8, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:deviceRevocationJobReservations": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/deviceRevocation.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 8, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:deviceRevocationJobs": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/deviceRevocation.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 4, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:deviceRevocationReceiptReservations": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/deviceRevocation.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 8, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:deviceRevocationSecurityReservations": {
+      "kind": "authoritative",
+      "retention": "tombstone",
+      "owner": "convex/deviceRevocation.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 8, "bytesPerAccountMonth": 4096 }
+    },
+    "convex:deviceSessions": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/devices.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 64, "bytesPerAccountMonth": 131072 }
+    },
+    "convex:devices": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/devices.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 16, "bytesPerAccountMonth": 32768 }
+    },
+    "convex:executionLeases": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/leases.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 128, "bytesPerAccountMonth": 131072 }
+    },
+    "convex:idempotencyReceipts": {
+      "kind": "authoritative",
+      "retention": "ttl:P30D",
+      "owner": "convex/idempotency.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 512, "bytesPerAccountMonth": 524288 }
+    },
+    "convex:maintenanceState": {
+      "kind": "authoritative",
+      "retention": "persistent",
+      "owner": "convex/maintenance.ts",
+      "deletion": "convex/maintenance.ts",
+      "budget": { "rowsPerAccount": 0, "bytesPerAccountMonth": 0 }
+    },
+    "convex:memoryOperations": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/memorySync.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 50000, "bytesPerAccountMonth": 52428800 }
+    },
+    "convex:memorySpaces": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/memorySync.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 128, "bytesPerAccountMonth": 262144 }
+    },
+    "convex:recoveryEnvelopes": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/sessions.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 256, "bytesPerAccountMonth": 1048576 }
+    },
+    "convex:securityEvents": {
+      "kind": "authoritative",
+      "retention": "ttl:P365D",
+      "owner": "convex/maintenance.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 1024, "bytesPerAccountMonth": 1048576 }
+    },
+    "convex:serviceControl": {
+      "kind": "authoritative",
+      "retention": "persistent",
+      "owner": "convex/server.ts",
+      "deletion": "convex/maintenance.ts",
+      "budget": { "rowsPerAccount": 0, "bytesPerAccountMonth": 0 }
+    },
+    "convex:sessionChunks": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/sessions.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 10000, "bytesPerAccountMonth": 52428800 }
+    },
+    "convex:sessionCommands": {
+      "kind": "authoritative",
+      "retention": "ephemeral",
+      "owner": "convex/commands.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 1024, "bytesPerAccountMonth": 1048576 }
+    },
+    "convex:sessionHeads": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/sessions.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 1024, "bytesPerAccountMonth": 2097152 }
+    },
+    "convex:sessionStreamEpochs": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/sessions.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 4096, "bytesPerAccountMonth": 4194304 }
+    },
+    "convex:storageResourceUsageByAccount": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/quota.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 64, "bytesPerAccountMonth": 16384 }
+    },
+    "convex:storageResourceUsageByUser": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/quota.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 64, "bytesPerAccountMonth": 16384 }
+    },
+    "convex:storageUsageByUser": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/quota.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 64, "bytesPerAccountMonth": 16384 }
+    },
+    "convex:storageUsageService": {
+      "kind": "authoritative",
+      "retention": "account",
+      "owner": "convex/quota.ts",
+      "deletion": "convex/accountDeletion.ts",
+      "budget": { "rowsPerAccount": 64, "bytesPerAccountMonth": 16384 }
+    }
+  },
+  "exempt": []
+}

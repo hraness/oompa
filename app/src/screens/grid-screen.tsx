@@ -40,7 +40,6 @@ import { gridScreenStyles } from "./grid-screen.stylex";
 
 function sameSummary(left: SessionCardSummary, right: SessionCardSummary): boolean {
   return left.archived === right.archived
-    && left.retiredProvider === right.retiredProvider
     && left.attention === right.attention
     && left.lastActivityAt === right.lastActivityAt
     && left.metadataRevision === right.metadataRevision

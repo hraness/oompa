@@ -3,8 +3,10 @@ import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { DEVIN_PIN } from "./pin.ts";
+import { effectiveDevinRuntimeProfileV2Schema } from "../domain/runtime-profile.ts";
+import { DEVIN_ACP_PROTOCOL_VERSION, DEVIN_MODEL, DEVIN_PIN } from "./pin.ts";
 import {
+  devinAcpArgv,
   devinEnvironment,
   locateDevinExecutable,
   resolvePinnedDevinRuntime,
@@ -94,5 +96,37 @@ describe("pinned Devin runtime", () => {
     expect(await locateDevinExecutable({ PATH: `relative:${root}` })).toBe(executable);
     await expect(locateDevinExecutable({ PATH: "/nonexistent-oompa-path" })).rejects.toMatchObject({ code: "RUNTIME_MISMATCH" });
     await expect(locateDevinExecutable({})).rejects.toMatchObject({ code: "RUNTIME_MISMATCH" });
+  });
+
+  test("builds the exact ACP argv for the pinned model and refuses a relative executable", () => {
+    const argv = devinAcpArgv({ executablePath: "/opt/devin" });
+    expect(argv).toEqual(["/opt/devin", "acp", "--model", DEVIN_MODEL]);
+    expect(Object.isFrozen(argv)).toBe(true);
+    expect(() => devinAcpArgv({ executablePath: "devin" })).toThrow("must be absolute");
+  });
+
+  test("the reviewed runtime profile document spells the same pin as this module", () => {
+    expect(effectiveDevinRuntimeProfileV2Schema.parse({
+      devinVersion: DEVIN_PIN,
+      isolatedHome: true,
+      model: DEVIN_MODEL,
+      observedAt: 1_700_000_000_000,
+      preset: "astra",
+      processGeneration: 1,
+      profileId: "acct_00000000000000000000000000000000",
+      protocolVersion: DEVIN_ACP_PROTOCOL_VERSION,
+      reasoningEffort: "provider-default",
+    }).devinVersion).toBe(DEVIN_PIN);
+    expect(effectiveDevinRuntimeProfileV2Schema.safeParse({
+      devinVersion: "3000.6.14",
+      isolatedHome: true,
+      model: DEVIN_MODEL,
+      observedAt: 1_700_000_000_000,
+      preset: "astra",
+      processGeneration: 1,
+      profileId: "acct_00000000000000000000000000000000",
+      protocolVersion: 1,
+      reasoningEffort: "provider-default",
+    }).success).toBe(false);
   });
 });

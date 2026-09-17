@@ -134,15 +134,15 @@ describe("task-oriented documentation content", () => {
     expect(blockText(blocks[0]!)).toContain(publicContent.installNotice);
     expect(blockLinks(blocks[0]!)).toContain(publicContent.links.admittedInstall);
     expect(blockText(blocks[0]!)).toContain("This release candidate is not yet admitted");
-    expect(blockText(blocks[0]!)).toContain("for v0.8.3");
+    expect(blockText(blocks[0]!)).toContain("for v0.8.4");
     expect(blockText(blocks[0]!)).toContain("Neither artifact admission nor installation authorizes daemon startup.");
-    expect(blockLinks(blocks[0]!)).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts");
+    expect(blockLinks(blocks[0]!)).toContain("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts");
     expect(blocks[1]).toEqual({ kind: "commands", commands: [publicContent.installCommand] });
     const text = pageText(page);
     expect(text.indexOf("Candidate artifact not yet admitted")).toBeLessThan(text.indexOf(publicContent.installCommand));
     expect(text.indexOf(publicContent.installCommand)).toBeLessThan(text.indexOf(publicContent.doctorCommand));
     expect(text.indexOf(publicContent.installNotice)).toBeLessThan(text.indexOf(publicContent.installCommand));
-    expect(text).not.toContain("You can install and check v0.8.3 now");
+    expect(text).not.toContain("You can install and check v0.8.4 now");
     expect(text.indexOf(publicContent.doctorCommand)).toBeLessThan(text.indexOf(publicContent.initCommand));
     const noticeIndex = blocks.findIndex((block) => block.kind === "notice"
       && blockText(block).includes("Initialization, daemon startup, and hosted command writers remain blocked on capacity"));
@@ -156,11 +156,11 @@ describe("task-oriented documentation content", () => {
     expect(parseCli(["session", "start", "personal", "--provider", "claude", "--preset", "fable-max"])).toMatchObject({ kind: "command", command: { kind: "session.start", provider: "claude", preset: "fable-max" } });
     const status = pageText(pageAt("/docs/status/"));
     expect(status).toContain(publicContent.daemonRolloutNotice);
-    expect(status).toContain("v0.8.4 is a candidate. v0.8.3 remains admitted.");
+    expect(status).toContain("v0.8.5 is a candidate. v0.8.4 remains admitted.");
     expect(status).toContain(publicContent.installNotice);
-    expect(status).toContain("The v0.8.3 CLI passed immutable GitHub and exact-byte npm artifact admission.");
+    expect(status).toContain("The v0.8.4 CLI passed immutable GitHub and exact-byte npm artifact admission.");
     expect(status).not.toContain("npm mirror is not admitted");
-    expect(status).not.toContain("v0.8.3 is released");
+    expect(status).not.toContain("v0.8.4 is released");
   });
 
   test("puts machine sign-in formats before browser enrollment", () => {

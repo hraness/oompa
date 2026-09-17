@@ -4,17 +4,19 @@ import {
 } from "@hraness/site-footer";
 import { highlightCode } from "@hraness/design-kit/syntax-highlighting";
 import { getDesignPaletteTheme } from "@hraness/design-kit";
+import { MarketingSiteFooter } from "@hraness/design-kit/react/server";
 import { AskAiAboutThis } from "@hraness/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { sitePresentationClasses, sitePresentationStyles, type SitePresentationSlot } from "./presentation.stylex.ts";
-import { renderMarketingHeader, renderMarketingPage } from "./marketing.tsx";
+import { OompaMark, oompaSiteLinks, renderMarketingHeader, renderMarketingPage } from "./marketing.tsx";
 import { docsPages, docsPathForSection, docsReferenceSections, type DocsPage } from "./docs-content.ts";
 import { renderProductPreview } from "./product-preview.tsx";
 import { docsClasses } from "./docs.stylex.ts";
 
 import {
   findSection,
+  OOMPA_MAILING_TURNSTILE_SITEKEY_ENV,
   publicContent,
   type ContentBlock,
   type ContentSection,
@@ -22,7 +24,9 @@ import {
   type PublicContent,
 } from "./content.ts";
 
-const escapeHtml = (value: string): string =>
+export { OOMPA_MAILING_TURNSTILE_SITEKEY_ENV };
+
+export const escapeHtml = (value: string): string =>
   value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -33,7 +37,7 @@ const escapeHtml = (value: string): string =>
 const defaultPalette = getDesignPaletteTheme("paper", "light");
 const previewPalette = getDesignPaletteTheme("catppuccin", "dark");
 const previewPaletteAttributes = `class="${escapeHtml(previewPalette.className)}" data-palette="catppuccin" data-theme="dark"`;
-const paletteAttributes = `class="${escapeHtml(defaultPalette.className)}" data-hraness-theme="paper" data-palette="paper" data-theme="light"`;
+export const paletteAttributes = `class="${escapeHtml(defaultPalette.className)}" data-hraness-theme="paper" data-palette="paper" data-theme="light"`;
 const classes = (hook: string, ...slots: readonly SitePresentationSlot[]): string =>
   [hook, sitePresentationClasses(...slots)].filter(Boolean).join(" ");
 
@@ -47,10 +51,31 @@ export const oompaMailingListConfig = (): HranessMailingListConfig => ({
   kind: "signup",
 });
 
-export const renderOompaSiteFooter = (): string => renderHranessSiteFooter({
-  mailingList: oompaMailingListConfig(),
-  support: {"id": "hra", "name": "Oompa", "valueProposition": "Support ongoing development of local tools for coordinating your agents.", "updates": true},
-});
+const turnstileSitekeyPattern = /^[A-Za-z0-9_-]{10,128}$/u;
+
+export const renderOompaSiteFooter = (
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string => {
+  const footer = renderHranessSiteFooter({
+    mailingList: oompaMailingListConfig(),
+    support: {"id": "hra", "name": "Oompa", "valueProposition": "Support ongoing development of local tools for coordinating your agents.", "updates": true},
+  });
+  const sitekey = environment[OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]?.trim();
+  return sitekey !== undefined && turnstileSitekeyPattern.test(sitekey)
+    ? `${footer}\n<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`
+    : footer;
+};
+
+/** The in-flow Oompa content footer, rendered immediately before the shared network footer on every page that carries it. */
+export const renderOompaContentFooter = (content: PublicContent, currentPath: string): string =>
+  renderToStaticMarkup(createElement(MarketingSiteFooter, {
+    ariaLabel: content.productName,
+    brand: createElement(OompaMark),
+    brandHref: "/",
+    brandLabel: `${content.productName} home`,
+    links: oompaSiteLinks(content, currentPath),
+    name: content.productName,
+  }));
 
 export const renderAskAiAboutThis = (canonicalUrl: string): string =>
   renderToStaticMarkup(createElement(AskAiAboutThis, {
@@ -132,7 +157,7 @@ const renderSection = (
   )).join("\n  ")}
 </section>`;
 
-const renderHead = (
+export const renderHead = (
   content: PublicContent,
   options: {
     readonly canonicalPath: string;
@@ -203,6 +228,8 @@ const renderHead = (
 <meta property="og:image" content="${escapeHtml(image.src)}">
 ${image.type === undefined ? "" : `<meta property="og:image:type" content="${escapeHtml(image.type)}">\n`}${image.width === undefined ? "" : `<meta property="og:image:width" content="${image.width.toString()}">\n`}${image.height === undefined ? "" : `<meta property="og:image:height" content="${image.height.toString()}">\n`}<meta property="og:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(options.title)}">
+<meta name="twitter:description" content="${escapeHtml(options.description)}">
 <meta name="twitter:image" content="${escapeHtml(image.src)}">
 <meta name="twitter:image:alt" content="${escapeHtml(image.alt)}">
 <meta name="theme-color" content="${escapeHtml(options.themeColor ?? defaultPalette.background)}">
@@ -242,6 +269,7 @@ ${renderMarketingPage(content)}
 </main>
 ${renderAskAiAboutThis(`${content.siteUrl}/`)}
 ${renderProjectResources(content)}
+${renderOompaContentFooter(content, "/")}
 ${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>
@@ -302,6 +330,7 @@ ${renderMarketingHeader(content, "/privacy/")}
 </main>
 ${renderAskAiAboutThis(`${content.siteUrl}/privacy/`)}
 ${renderProjectResources(content)}
+${renderOompaContentFooter(content, "/privacy/")}
 ${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 </body>
@@ -349,6 +378,7 @@ ${renderMarketingHeader(content, page.path)}
 </main></div>
 ${renderAskAiAboutThis(`${content.siteUrl}${page.path}`)}
 ${renderProjectResources(content)}
+${renderOompaContentFooter(content, page.path)}
 ${renderOompaSiteFooter()}
 ${renderOompaAnalyticsScript()}
 <script src="/site.js" type="module"></script>

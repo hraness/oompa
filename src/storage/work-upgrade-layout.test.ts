@@ -71,7 +71,7 @@ test("retains the exact Work table layout produced by a canonical30 upgrade", as
     expect(actual.query("SELECT version,applied_at FROM migrations WHERE version<=30 ORDER BY version").all())
       .toEqual([...canonical30WorkFixture.migrations]);
     const before = snapshot(actual);
-    expect(before.version).toEqual({ user_version: 60 });
+    expect(before.version).toEqual({ user_version: 61 });
     expect(before.foreignKeys).toEqual([]);
     store.close();
     store = undefined;

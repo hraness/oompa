@@ -1,7 +1,6 @@
 import {
   MarketingCallToAction,
   MarketingFlow,
-  MarketingMaker,
   MarketingPage,
   MarketingPillars,
   MarketingQuestionList,
@@ -9,6 +8,7 @@ import {
   MarketingSiteHeader,
   MarketingTrustBoundary,
   ProductHero,
+  type MarketingLink,
 } from "@hraness/design-kit/react/server";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -22,19 +22,32 @@ import { WonkaArtifact } from "./wonka-artifact.tsx";
 const classes = (hook: string, ...slots: readonly SitePresentationSlot[]): string =>
   [hook, sitePresentationClasses(...slots)].filter(Boolean).join(" ");
 
-/** Content remains text and native elements; only FAQ links use prose styling. */
-function inlineContent(content: readonly InlineContent[], styleLinks: boolean): ReactNode {
+/** Content remains text and native elements; FAQ links use prose styling. */
+function inlineContent(content: readonly InlineContent[]): ReactNode {
   return content.map((part, index) => {
     switch (part.kind) {
       case "code":
         return <code className={classes("oompa-inline-code", "inlineCode")} key={index}>{part.value}</code>;
       case "link":
-        return <a className={styleLinks ? sitePresentationClasses("proseLink") : undefined} href={part.href} key={index}>{part.label}</a>;
+        return <a className={sitePresentationClasses("proseLink")} href={part.href} key={index}>{part.label}</a>;
       case "text":
         return part.value;
     }
   });
 }
+
+/** The authored Oompa mark: the favicon's orange circle. Decorative inside brand links that carry their own accessible name. */
+export const OompaMark = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#f58220" stroke="#ad430d" strokeWidth={2}/></svg>
+);
+
+/** The public site navigation shared by the marketing header and the in-flow content footer. */
+export const oompaSiteLinks = (content: PublicContent, currentPath: string): readonly MarketingLink[] => [
+  { href: "/#product-preview", label: "Product", current: currentPath === "/" },
+  { href: "/docs/", label: "Docs", current: currentPath.startsWith("/docs/") },
+  { href: "/docs/status/", label: "Status" },
+  { href: content.links.github, label: "GitHub" },
+];
 
 export function renderMarketingHeader(content: PublicContent, currentPath: string): string {
   return renderToStaticMarkup(
@@ -42,14 +55,9 @@ export function renderMarketingHeader(content: PublicContent, currentPath: strin
       className={`${mobileHeaderFlowClassName()} hraness-material-chrome${currentPath === "/" ? " hraness-marketing-header-surface" : ""}`}
       trailing={<SiteAppearanceMenu />}
       action={{ emphasis: "primary", href: content.links.app, label: "Open Oompa" }}
-      brand={<><span aria-hidden="true">🟠</span> {content.productName}</>}
+      brand={<><OompaMark />{content.productName}</>}
       brandHref="/"
-      links={[
-        { href: "/#product-preview", label: "Product", current: currentPath === "/" },
-        { href: "/docs/", label: "Docs", current: currentPath.startsWith("/docs/") },
-        { href: "/docs/status/", label: "Status" },
-        { href: content.links.github, label: "GitHub" },
-      ]}
+      links={oompaSiteLinks(content, currentPath)}
     />,
   );
 }
@@ -130,18 +138,8 @@ export function renderMarketingPage(content: PublicContent): string {
         headingId="questions-heading"
         id="questions"
         label="Questions"
-        questions={content.questions.map((question) => ({ question: question.question, answer: <p>{inlineContent(question.answer, true)}</p> }))}
+        questions={content.questions.map((question) => ({ question: question.question, answer: <p>{inlineContent(question.answer)}</p> }))}
       />
-      <MarketingMaker
-        heading={content.maker.heading}
-        headingId="maker-heading"
-        id="maker"
-        label="Built by"
-        linkClassName={sitePresentationClasses("proseLink")}
-        links={content.maker.links}
-      >
-        {content.maker.bio.length === 0 ? null : <p>{inlineContent(content.maker.bio, false)}</p>}
-      </MarketingMaker>
       <MarketingCallToAction
         actions={[
           { emphasis: "primary", href: "/docs/start/", label: "Set up your first machine" },

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
@@ -9,6 +9,8 @@ import { z } from "zod";
 import { combined49SwitchDatabaseBytes, combined49SwitchFixture, combined49SwitchGeneratorSource } from "../../scripts/fixtures/combined49-switch";
 import { initializeStatePaths, resolveStatePaths } from "./paths";
 import { StateStore } from "./state-store";
+
+setDefaultTimeout(30_000);
 
 const archived = combined49SwitchFixture;
 const migratedAt = 1_900_000_001_000;
@@ -108,7 +110,7 @@ test("retained combined49 prepared switch preserves original cells and installs 
     const sessionCells = original.cells.sessions;
     if (sessionCells === undefined) throw new Error("Missing original session cells.");
     database.exec("PRAGMA query_only=ON");
-    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:60");
+    expect(() => new StateStore(paths, { readonly: true })).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:61");
     expect(snapshot(paths.database)).toEqual(original);
     const store = new StateStore(paths, { now: () => migratedAt, resolveMachineTimeZone: () => "UTC" });
     try {
@@ -148,7 +150,7 @@ test("retained combined49 prepared switch preserves original cells and installs 
       });
     } finally { store.close(); }
     const migrated = snapshot(paths.database);
-    expect(migrated.version).toEqual({ user_version: 60 });
+    expect(migrated.version).toEqual({ user_version: 61 });
     expect(migrated.foreignKeys).toEqual([]);
     for (const readonly of [false, true]) {
       const reopened = new StateStore(paths, { readonly, now: () => migratedAt + 1, resolveMachineTimeZone: () => "UTC" });

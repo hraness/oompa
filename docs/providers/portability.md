@@ -144,9 +144,9 @@ A switch is refused, with no effect, when:
   no way to attribute its result. Stop it with `oompa session stop` first;
 - the session is quarantined or terminal;
 - the requested preset is not one the target provider can run (`low` on
-  Claude, `fable-max` on Codex). With no `--preset`, the switch keeps the
-  session's tier when the target has one and otherwise takes the target's
-  highest;
+  Claude or Devin, `fable-max` on Codex or Devin, and `astra` on Codex or
+  Claude). With no `--preset`, the switch keeps the session's tier when the
+  target has one and otherwise takes the target's highest;
 - the target is Claude and the custodian daemon is not running on Linux;
 - `--account` selects another Oompa profile after the session has acquired its
   working-memory authority. Oompa does not transfer that account-bound working
@@ -170,8 +170,9 @@ new session under the target account instead.
 
 **Not preserved, and not recoverable:**
 
-- the provider's own hidden state, Codex's server-side thread and Claude's
-  full reasoning traces, neither of which Oompa ever stored;
+- the provider's own hidden state, Codex's server-side thread, Claude's full
+  reasoning traces, and Devin's provider-private ACP state, none of which Oompa
+  ever stored;
 - the provider's native thread. Codex `thread/resume` takes only a thread id,
   and the pinned Claude CLI's `--resume` takes only its own session id and
   cannot import a foreign transcript. Neither provider can be handed the

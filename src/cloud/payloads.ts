@@ -86,11 +86,6 @@ function isInteractionId(value: unknown): value is string {
 const isProvider = (value: unknown): value is Provider =>
   providerSchema.safeParse(value).success;
 
-const isSupportedProvider = (value: unknown): value is SupportedProvider =>
-  supportedProviderSchema.safeParse(value).success;
-const isSupportedPreset = (value: unknown): value is SupportedPreset =>
-  supportedPresetSchema.safeParse(value).success;
-
 function isRemoteInteractionAnswerMap(
   value: unknown,
 ): value is Readonly<Record<string, Readonly<{ answers: readonly string[] }>>> {
@@ -286,10 +281,16 @@ export function activeRemoteDerivedCodexSelection(): ActiveRemoteDerivedCodexSel
   return { presetContract: sharedActiveCodexPresetContract(), provider: "codex" };
 }
 
+const isSupportedProviderValue = (candidate: unknown): candidate is SupportedProvider =>
+  supportedProviderSchema.safeParse(candidate).success;
+
+const isSupportedPresetValue = (candidate: unknown): candidate is SupportedPreset =>
+  supportedPresetSchema.safeParse(candidate).success;
+
 function parseActiveRemotePresetSelection(
   value: Readonly<Record<string, unknown>>,
 ): ActiveRemotePresetSelection | null {
-  if (!isSupportedPreset(value.preset)) return null;
+  if (!isSupportedPresetValue(value.preset)) return null;
   const selection = activeRemotePresetSelection(value.preset);
   return "presetContract" in selection
     && value.presetContract !== selection.presetContract
@@ -436,7 +437,7 @@ export function parseDeviceCommandPayload(value: unknown): DeviceCommandPayload 
     ])
     && isOpaqueIdentifier(value.accountPublicId)
     && isOpaqueIdentifier(value.projectPublicId)
-    && isSupportedProvider(value.provider)
+    && isSupportedProviderValue(value.provider)
     && presetProviders[presetSelection.preset] === value.provider
     && typeof value.prompt === "string"
     && value.prompt.length >= 1
@@ -803,7 +804,7 @@ function parseRemoteCommandPayloadUnchecked(value: unknown): RemoteCommandPayloa
   ) return { kind: value.kind, ...presetSelection };
   if (
     value.kind === "set_provider"
-    && isSupportedProvider(value.provider)
+    && isSupportedProviderValue(value.provider)
   ) {
     if (
       presetSelection !== null

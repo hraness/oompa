@@ -104,6 +104,11 @@ export function profilePaths(paths: StatePaths, profileId: ProfileId): {
   root: string;
   codexHome: string;
   claudeConfigDir: string;
+  devinHome: string;
+  devinConfigDir: string;
+  devinDataDir: string;
+  devinCacheDir: string;
+  devinStateDir: string;
   desktopUserData: string;
 } {
   const root = join(paths.profiles, profileId);
@@ -113,6 +118,13 @@ export function profilePaths(paths: StatePaths, profileId: ProfileId): {
     // The isolated `CLAUDE_CONFIG_DIR` is the entire Claude Code
     // authentication boundary for this account. Oompa never reads inside it.
     claudeConfigDir: join(root, "claude-config"),
+    // Devin owns every credential and provider-private file below this
+    // isolated HOME/XDG boundary. HRA only supplies the paths to the CLI.
+    devinHome: join(root, "devin-home"),
+    devinConfigDir: join(root, "devin-config"),
+    devinDataDir: join(root, "devin-data"),
+    devinCacheDir: join(root, "devin-cache"),
+    devinStateDir: join(root, "devin-state"),
     desktopUserData: join(root, "desktop-user-data"),
   };
 }
@@ -122,6 +134,11 @@ export async function initializeProfilePaths(paths: StatePaths, profileId: Profi
   await ensurePrivateDirectory(owned.root);
   await ensurePrivateDirectory(owned.codexHome);
   await ensurePrivateDirectory(owned.claudeConfigDir);
+  await ensurePrivateDirectory(owned.devinHome);
+  await ensurePrivateDirectory(owned.devinConfigDir);
+  await ensurePrivateDirectory(owned.devinDataDir);
+  await ensurePrivateDirectory(owned.devinCacheDir);
+  await ensurePrivateDirectory(owned.devinStateDir);
   await ensurePrivateDirectory(owned.desktopUserData);
   return owned;
 }

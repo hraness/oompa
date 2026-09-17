@@ -25,8 +25,12 @@ describe("public server marketing composition", () => {
       const { document } = parseHTML(renderMarketingHeader(publicContent, currentPath));
       const header = document.querySelector("header");
       expect(header?.getAttribute("data-hraness-marketing")).toBe("header");
-      expect(header?.querySelector(".hraness-marketing-header__brand")?.textContent).toBe(`🟠 ${publicContent.productName}`);
-      expect(header?.querySelector(".hraness-marketing-header__brand")?.getAttribute("href")).toBe("/");
+      const brand = header?.querySelector(".hraness-marketing-header__brand");
+      expect(brand?.textContent).toBe(publicContent.productName);
+      expect(brand?.getAttribute("href")).toBe("/");
+      const mark = brand?.querySelector('svg[aria-hidden="true"] > circle');
+      expect(mark?.getAttribute("fill")).toBe("#f58220");
+      expect(mark?.getAttribute("stroke")).toBe("#ad430d");
       const links = [...document.querySelectorAll('nav[aria-label="Site"] > a')];
       expect(links.map((link) => [link.getAttribute("href"), link.textContent])).toEqual([
         ["/#product-preview", "Product"], ["/docs/", "Docs"], ["/docs/status/", "Status"],
@@ -46,7 +50,7 @@ describe("public server marketing composition", () => {
     const page = document.querySelector('[data-hraness-marketing="page"]');
     expect(page).not.toBeNull();
     expect([...page!.children].map((child) => child.getAttribute("data-hraness-marketing")))
-      .toEqual(["hero", "pillars", "section", "trust", "questions", "maker", "cta"]);
+      .toEqual(["hero", "pillars", "section", "trust", "questions", "cta"]);
     expect(document.querySelector("#reference, #command-reference, [data-hraness-marketing=install]")).toBeNull();
     expect(html).not.toContain(publicContent.installCommand);
     expect(html).not.toContain(publicContent.initCommand);
@@ -68,8 +72,11 @@ describe("public server marketing composition", () => {
     const notice = document.querySelector('.hraness-marketing-hero__copy a[href="/docs/status/"]')?.parentElement;
     expect(notice?.textContent).toContain("New machine setup is temporarily paused.");
     expect(notice?.textContent).toContain("This release candidate is not yet admitted");
-    const admitted = parseHTML(renderMarketingPage({ ...publicContent, releaseVersion: "0.8.3" })).document;
-    expect(admitted.querySelector(".hraness-marketing-hero__copy")?.textContent).toContain("The v0.8.3 CLI artifact is admitted for installation");
+    const admitted = parseHTML(renderMarketingPage({ ...publicContent, releaseVersion: "0.8.4" })).document;
+    expect(admitted.querySelector(".hraness-marketing-hero__copy")?.textContent).toContain("The v0.8.4 CLI artifact is admitted for installation");
+    const future = parseHTML(renderMarketingPage({ ...publicContent, releaseVersion: "0.8.6" })).document;
+    expect(future.querySelector(".hraness-marketing-hero__copy")?.textContent).toContain("This release candidate is not yet admitted");
+    expect(future.querySelector(".hraness-marketing-cta__summary")?.textContent).toContain("unavailable install command");
     expect(document.querySelector(".hraness-marketing-cta__summary")?.textContent).toContain("unavailable install command");
     expect(notice?.textContent).toContain("current daemon and hosted command-writer rollout remains blocked on capacity");
     expect(notice?.querySelector("a")?.textContent).toBe("Check current availability");
@@ -90,7 +97,7 @@ describe("public server marketing composition", () => {
     expect(admissionNotice).not.toBeNull();
     expect(admissionNotice?.textContent).toContain("This release candidate is not yet admitted");
     expect(admissionNotice?.textContent).toContain("Neither artifact admission nor installation authorizes daemon startup.");
-    expect(admissionNotice?.querySelector('a[href="https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts"]')?.getAttribute("href")).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v083-artifacts");
+    expect(admissionNotice?.querySelector('a[href="https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts"]')?.getAttribute("href")).toBe("https://github.com/hraness/oompa/blob/main/docs/beta-release-notes.md#admitted-v084-artifacts");
     expect(admissionNotice?.nextElementSibling).toBe(commandBlocks[0]);
     for (const command of [publicContent.installCommand, publicContent.doctorCommand, publicContent.initCommand]) {
       expect(commandBlocks.some((block) => block.textContent.split("\n").includes(command))).toBe(true);
@@ -133,9 +140,6 @@ describe("public server marketing composition", () => {
     expect(textsAt("#questions details > summary")).toEqual(publicContent.questions.map((question) => question.question));
     expect(textsAt(".hraness-marketing-question__answer")).toEqual(publicContent.questions.map((question) =>
       question.answer.map((part) => part.kind === "link" ? part.label : part.value).join("")));
-    expect(textAt("#maker-heading")).toBe(publicContent.maker.heading);
-    expect([...document.querySelectorAll(".hraness-marketing-maker__links a")].map((node) => [node.getAttribute("href"), node.textContent]))
-      .toEqual(publicContent.maker.links.map((link) => [link.href, link.label]));
     const actionsAt = (selector: string) => [...document.querySelectorAll(selector)]
       .map((node) => [node.getAttribute("href"), node.textContent, node.getAttribute("data-emphasis")]);
     expect(actionsAt(".hraness-marketing-hero__actions > a")).toEqual([
@@ -150,21 +154,22 @@ describe("public server marketing composition", () => {
     expect(textAt(".hraness-marketing-cta__footnote")).toBe(publicContent.hero.boundary);
   });
 
-  test("styles FAQ and Maker link-list anchors without restyling the Maker bio or adding focus overrides", () => {
+  test("leaves attribution to the shared Hraness footer instead of a product maker section", () => {
+    const html = renderMarketingPage(publicContent);
+    const { document } = parseHTML(html);
+    expect(document.querySelector('[data-hraness-marketing="maker"], .hraness-marketing-maker, #maker, #maker-heading')).toBeNull();
+    expect(html).not.toContain("Built by");
+    expect(html).not.toContain("by Hraness");
+  });
+
+  test("styles FAQ anchors without adding focus overrides", () => {
     const sample: PublicContent = {
       ...publicContent,
-      maker: {
-        ...publicContent.maker,
-        bio: [{ kind: "text", value: "Built by " }, { kind: "link", label: "Maker", href: "https://example.test/maker" }, { kind: "code", value: "safe <text>" }],
-        links: [{ label: "Site", href: "https://example.test/site" }],
-      },
-      questions: [{ question: "A native question?", answer: [{ kind: "link", label: "Answer", href: "https://example.test/answer" }] }],
+      questions: [{ question: "A native question?", answer: [{ kind: "link", label: "Answer", href: "https://example.test/answer" }, { kind: "code", value: "safe <text>" }] }],
     };
     const { document } = parseHTML(renderMarketingPage(sample));
-    expect(document.querySelector(".hraness-marketing-maker__body > p > a")?.hasAttribute("class")).toBe(false);
-    expect(document.querySelector(".hraness-marketing-maker__body > p > code")?.textContent).toBe("safe <text>");
-    expect(document.querySelector(".hraness-marketing-maker__links a")?.getAttribute("class")).toBe(sitePresentationClasses("proseLink"));
     expect(document.querySelector(".hraness-marketing-question__answer a")?.getAttribute("class")).toBe(sitePresentationClasses("proseLink"));
+    expect(document.querySelector(".hraness-marketing-question__answer code")?.textContent).toBe("safe <text>");
     expect(document.querySelectorAll("#questions details > summary")).toHaveLength(1);
     expect(document.querySelector("#questions details > summary")?.textContent).toBe("A native question?");
     expect(document.querySelector("#questions details")?.hasAttribute("open")).toBe(false);

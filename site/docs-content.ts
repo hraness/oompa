@@ -385,7 +385,7 @@ export const docsPages: readonly DocsPage[] = [
   {
     path: "/docs/status/",
     title: "Availability and release status",
-    description: "Distinguish the v0.8.4 candidate from the admitted v0.8.3 CLI, check provider support, and understand the runtime rollout prerequisites.",
+    description: "Distinguish the v0.8.5 candidate from the admitted v0.8.4 CLI, check provider support, and understand the runtime rollout prerequisites.",
     keywords: ["release", "availability", "platforms", "Codex", "Claude", "upgrade"],
     reviewDate: "2026-09-16",
     admission: {
@@ -422,9 +422,9 @@ export const docsPages: readonly DocsPage[] = [
             [text(`Codex: macOS and Linux, through pinned Codex ${publicPins.codex}. Managed device-code sign-in, account usage and reset observations, and opt-in browser linking are implemented.`)],
             [text(`Claude Code: Linux for managed sign-in and execution, using an installed executable that reports the exact ${publicPins.claude} compatibility pin. Oompa reports signed-in status only; quota, usage history, Fast mode, and browser linking are unavailable.`)],
             [text("macOS Claude: new managed effects remain disabled pending authenticated isolated-Keychain and detached-daemon acceptance. A discovered executable is not acceptance evidence.")],
-            [text("Devin: retired. Historical records remain read-only; Oompa does not start new Devin logins or sessions.")],
+            [text(`Devin: macOS and Linux, using a separately installed Devin CLI that reports the exact ${publicPins.devin} pin. Managed foreground sign-in and pinned ACP sessions are implemented; quota, usage history, and browser linking are unavailable. Retired historical sessions keep local history only and cannot execute.`)],
           ),
-          paragraph(text("Providers own their accounts, billing, tools, and native execution. Oompa's automated tests do not imply that every live provider and device flow has been qualified. "), link("Claude compatibility details", source("docs/providers/claude.md")), text(" record the remaining live checks.")),
+          paragraph(text("Providers own their accounts, billing, tools, and native execution. Oompa's automated tests do not imply that every live provider and device flow has been qualified. "), link("Claude compatibility details", source("docs/providers/claude.md")), text(" and "), link("Devin provider notes", source("docs/providers/devin.md")), text(" record the remaining live checks.")),
         ],
       },
       {

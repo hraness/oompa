@@ -1,11 +1,16 @@
 export type DevinFailureCode =
+  | "AUTHORITY_STALE"
+  | "DEADLINE_EXPIRED"
   | "INVALID_INPUT"
+  | "NOT_AUTHENTICATED"
   | "PROCESS_EXITED"
+  | "PROTOCOL_ERROR"
   | "PROTOCOL_LIMIT"
   | "RUNTIME_MISMATCH"
-  | "TIMEOUT";
+  | "TIMEOUT"
+  | "UNSUPPORTED_CAPABILITY";
 
-/** Never carries provider output text. Callers add only bounded, safe detail. */
+/** Never carries an unreviewed provider payload. */
 export class DevinError extends Error {
   readonly code: DevinFailureCode;
 

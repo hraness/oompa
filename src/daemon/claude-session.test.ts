@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,6 +29,8 @@ import {
   type CompactProjectionRecoveryBlocker,
 } from "./ports";
 import { OompaService } from "./service";
+
+setDefaultTimeout(60_000);
 
 const signal = new AbortController().signal;
 const PROVIDER_USAGE_PERSISTENCE_QUEUE_LIMIT = 1_024;

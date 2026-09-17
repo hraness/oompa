@@ -98,10 +98,10 @@ async function upgrade() {
   expect(Object.getOwnPropertyDescriptor(Database.prototype, "exec")?.value).toBe(originalExec);
   expect([...oldGuards.keys()].sort()).toEqual(predecessors.map(({ name }) => name).sort());
   const after = snapshot(paths);
-  expect(after.version).toEqual({ user_version: 60 });
+  expect(after.version).toEqual({ user_version: 61 });
   expect(after.foreignKeys).toEqual([]);
   const finalLedger = ledgerSchema.parse(after.rows.migrations).sort((left, right) => left.version - right.version);
-  expect(finalLedger.map(({ version }) => version)).toEqual(Array.from({ length: 60 }, (_, index) => index + 1));
+  expect(finalLedger.map(({ version }) => version)).toEqual(Array.from({ length: 61 }, (_, index) => index + 1));
   for (const entry of ledgerSchema.parse(before.rows.migrations)) {
     const version = entry.version < 40 ? entry.version : entry.version + 11;
     expect(finalLedger.find((candidate) => candidate.version === version)).toEqual({ ...entry, version });

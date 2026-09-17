@@ -87,6 +87,10 @@ function proveHeaders(value: Configuration, pathname: string, policyIndex: numbe
 }
 
 const pages = ["/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/", "/privacy/", "/preview/"] as const;
+const externalRedirects = new Map([
+  ["/pr", "https://hraness.com/pr"],
+  ["/pr/", "https://hraness.com/pr"],
+] as const);
 const wellKnown = ["/.well-known/security.txt", "/.well-known/hra.json"] as const;
 
 describe("compiled Vercel site routing", () => {
@@ -97,6 +101,24 @@ describe("compiled Vercel site routing", () => {
   test("the canonical example document and descendants receive the isolated example policy", () => {
     for (const path of ["/examples/app/", "/examples/app/index.html", "/examples/app/assets/main.js", "/examples/app/assets/style.css"]) {
       proveHeaders(configuration, path, 1);
+    }
+  });
+
+  test("the pr board permanently redirects its document routes to hraness.com while data keeps serving", () => {
+    const routes = compiledRoutes(configuration);
+    for (const [path, destination] of externalRedirects) {
+      const result = observe(routes, path);
+      expect(result.status).toBe(308);
+      expect(result.location).toBe(destination);
+    }
+    const indexHop = observe(routes, "/pr/index.html");
+    expect(indexHop.status).toBe(308);
+    expect(indexHop.location).toBe("/pr");
+    const finalHop = observe(routes, indexHop.location!);
+    expect(finalHop.status).toBe(308);
+    expect(finalHop.location).toBe("https://hraness.com/pr");
+    for (const path of ["/pr/data/snapshot.json", "/pr/data/history.json"]) {
+      expect(proveHeaders(configuration, path, 2).paths).toEqual([path]);
     }
   });
 

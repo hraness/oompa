@@ -6,10 +6,22 @@ import { normalizeSchemaSql } from "./schema-cohort";
 const name = "queue_transcript_finalization_guard";
 const invalid = (): never => { throw new Error("JOINED_QUEUE_TRANSCRIPT_GUARD_INVALID"); };
 
+/** Providers a captured queue authority may still admit. Schema 61 readmitted
+ * Devin; the released v0.8.4 installed the same joined guard without it, so
+ * that list is a recognized predecessor rather than a foreign trigger. */
+type AdmittedProvider = "codex" | "claude" | "devin";
+const admittedProviders: readonly AdmittedProvider[] = ["codex", "claude", "devin"];
+const previouslyAdmittedProviders: readonly AdmittedProvider[] = ["codex", "claude"];
+const providerList = (admitted: readonly AdmittedProvider[]): string =>
+  admitted.map((provider) => `'${provider}'`).join(",");
+
 /** Only the pending connection-capture branch changes. The frozen predecessor
  * remains the historical recognizer; terminal and content-preservation clauses
  * are byte-preserved. A queued request never gains a different provider tuple. */
-export function joinedQueueTranscriptGuardSql(predecessor: string): string {
+export function joinedQueueTranscriptGuardSql(
+  predecessor: string,
+  admitted: readonly AdmittedProvider[] = admittedProviders,
+): string {
   const before = `    AND json_extract(NEW.transcript_intent_json,'$.accountId')=(
       SELECT s.profile_id FROM sessions s WHERE s.id=NEW.session_id)
     AND json_extract(NEW.transcript_intent_json,'$.providerGeneration')=(
@@ -23,7 +35,7 @@ export function joinedQueueTranscriptGuardSql(predecessor: string): string {
       JOIN provider_accounts account ON account.id=captured.provider_account_id
       JOIN profiles profile ON profile.id=captured.profile_id
       WHERE captured.queue_id=NEW.id AND NEW.session_id=OLD.session_id
-        AND captured.provider IN ('codex','claude')
+        AND captured.provider IN (${providerList(admitted)})
         AND s.profile_id=captured.profile_id AND s.provider_v39=captured.provider
         AND current.provider_account_id=captured.provider_account_id
         AND current.profile_id=captured.profile_id AND current.provider=captured.provider
@@ -60,12 +72,16 @@ export function assertJoinedQueueTranscriptGuard(database: Database, predecessor
   if (normalizeSchemaSql(observed(database)) !== normalizeSchemaSql(joinedQueueTranscriptGuardSql(predecessor))) invalid();
 }
 
+/** Replaceable predecessors are the frozen v43 trigger and the joined form the
+ * released v0.8.4 installed before Devin was readmitted. Both carry the same
+ * captured-authority semantics, so schema 61 recreates rather than refuses. */
 export function applyJoinedQueueTranscriptGuard(database: Database, predecessor: string): void {
   if (!database.inTransaction) invalid();
   const original = observed(database);
   const joined = joinedQueueTranscriptGuardSql(predecessor);
   if (normalizeSchemaSql(original) === normalizeSchemaSql(joined)) return assertJoinedQueueTranscriptGuard(database, predecessor);
-  if (normalizeSchemaSql(original) !== normalizeSchemaSql(predecessor)) invalid();
+  const replaceable = [predecessor, joinedQueueTranscriptGuardSql(predecessor, previouslyAdmittedProviders)];
+  if (!replaceable.some((candidate) => normalizeSchemaSql(original) === normalizeSchemaSql(candidate))) invalid();
   database.exec(`DROP TRIGGER ${name}`);
   database.exec(joined);
   assertJoinedQueueTranscriptGuard(database, predecessor);

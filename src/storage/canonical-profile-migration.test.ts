@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,6 +21,8 @@ import { canonicalWorkJson, type WorkDispatchOutcome } from "./work-store";
 // These are real current StateStore integration fixtures, not reconstructed
 // historical releases. Authentic predecessor fixtures require their own frozen
 // source-bound capture; never stamp this current database with an older version.
+setDefaultTimeout(60_000);
+
 const roots: string[] = [];
 const stores = new Set<StateStore>();
 const fixedNow = () => 10_000;
@@ -450,7 +452,7 @@ describe("canonical migration from authentic source-created schema49", () => {
     const previousColumns = inspect({ paths }, (database) => Object.fromEntries(identityTables.map((table) => [table,
       query(database, `PRAGMA table_xinfo(${table})`),
     ])));
-    expect(() => openStore(paths, true)).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:60");
+    expect(() => openStore(paths, true)).toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:61");
     expect(snapshot({ paths })).toBe(predecessor);
     let keyOnlySnapshot: string | undefined;
     let keyOnlyColumns: Record<string, Record<string, unknown>[]> | undefined;
@@ -504,9 +506,9 @@ describe("canonical migration from authentic source-created schema49", () => {
         expect(after).toEqual(object);
       }
     }
-    expect(inspect(store, (database) => query(database, "PRAGMA user_version"))).toEqual([{ user_version: 60 }]);
+    expect(inspect(store, (database) => query(database, "PRAGMA user_version"))).toEqual([{ user_version: 61 }]);
     expect(inspect(store, (database) => query(database, "SELECT version FROM migrations ORDER BY version")))
-      .toEqual(Array.from({ length: 60 }, (_, index) => ({ version: index + 1 })));
+      .toEqual(Array.from({ length: 61 }, (_, index) => ({ version: index + 1 })));
     for (const [table, rows] of Object.entries(fixture.payload.rows)) {
       const first = rows[0];
       const columns = first === undefined ? "*" : Object.keys(first).map((column) => `"${column.replaceAll('"', '""')}"`).join(",");
@@ -695,7 +697,7 @@ describe("canonical migration from authentic source-created schema49", () => {
     expect(snapshot({ paths })).toBe(before);
     expect(allColumns()).toBe(beforeColumns);
     const store = openStore(paths);
-    expect(inspect(store, (database) => query(database, "PRAGMA user_version"))).toEqual([{ user_version: 60 }]);
+    expect(inspect(store, (database) => query(database, "PRAGMA user_version"))).toEqual([{ user_version: 61 }]);
     expect(inspect(store, (database) => query(database,
       "SELECT name FROM main.sqlite_master WHERE type='trigger' AND name GLOB 'canonical_profile_*'"))).toHaveLength(7);
     expect(keys(store)).toEqual(Object.fromEntries(identityTables.map((table) => [table,

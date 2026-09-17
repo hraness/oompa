@@ -2454,11 +2454,12 @@ describe("WorkStore claims, fences, and prepared effects", () => {
     expect(reopened.effectStatus(dispatchKey)).toMatchObject({ state: "accepted" });
   });
 
-  test("rejects a retired Devin coordinator without weakening its historical session binding", () => {
+  test("admits a Devin coordinator while keeping its frozen contract guard", () => {
     const value = fixture();
     setSessionProfile(value, value.actorSessionId, { provider: "devin", preset: "ultra", contract: 2 });
 
-    expect(() => createWork(value)).toThrow(new WorkStoreError("MEMBER_NOT_FOUND"));
+    const created = createWork(value);
+    expect(created.work.id).not.toBeNull();
     expect(value.database.query(
       "SELECT preset_contract,provider_v39 FROM sessions WHERE id=?",
     ).get(value.actorSessionId)).toEqual({
@@ -2639,22 +2640,97 @@ describe("WorkStore claims, fences, and prepared effects", () => {
     expect(() => createWork(value)).not.toThrow();
   });
 
-  test("rejects keyless signed-out retired Devin control-plane authority", () => {
+  test("gives keyless signed-out managed Devin control-plane authority but no Work execution", () => {
     const value = fixture();
     const coordinator = addSignedOutManagedDevinSession(value, "coordinator");
     const member = addSignedOutManagedDevinSession(value, "member");
+    expect(value.database.query(
+      `SELECT COUNT(*) AS count FROM session_account_authorities
+       WHERE session_id IN (?,?)`,
+    ).get(coordinator.sessionId, member.sessionId)).toEqual({ count: 0 });
+    expect(value.database.query(
+      `SELECT COUNT(*) AS count FROM session_provider_account_authorities
+       WHERE session_id IN (?,?)`,
+    ).get(coordinator.sessionId, member.sessionId)).toEqual({ count: 0 });
+
     const createKey = randomUUID();
-    expect(() => value.store.apply({
-      kind: "work.create", idempotencyKey: createKey, clientRef: "retired-control",
-      coordinatorSessionId: coordinator.sessionId, objective: "Must remain retired.",
-      routes: [{ accountId: coordinator.profileId, projectId: value.projectId, preset: "ultra", fast: false }],
-      tasks: [taskSpec({ accountId: coordinator.profileId, projectId: value.projectId }, "retired-control", { preset: "ultra" })],
-    })).toThrow(new WorkStoreError("MEMBER_NOT_FOUND"));
-    const created = createWork(value);
-    expect(() => join(value, created.work.id, created.work.revision, member.sessionId))
-      .toThrow(new WorkStoreError("MEMBER_NOT_FOUND"));
-    expect(value.database.query("SELECT COUNT(*) AS count FROM work_attempts").get()).toEqual({ count: 0 });
-    expect(value.database.query("SELECT COUNT(*) AS count FROM work_signals").get()).toEqual({ count: 0 });
+    const created = value.store.apply({
+      kind: "work.create",
+      idempotencyKey: createKey,
+      clientRef: `devin-control-${createKey}`,
+      coordinatorSessionId: coordinator.sessionId,
+      objective: "Coordinate without granting the Devin session execution authority.",
+      routes: [{
+        accountId: coordinator.profileId,
+        projectId: value.projectId,
+        preset: "ultra",
+        fast: false,
+      }],
+      tasks: [taskSpec({
+        accountId: coordinator.profileId,
+        projectId: value.projectId,
+      }, "devin-control", { preset: "ultra" })],
+    });
+    if (created.kind !== "work.create") throw new Error("unexpected result");
+    expect(value.database.query(
+      "SELECT preset_contract FROM works WHERE id=?",
+    ).get(created.work.id)).toEqual({ preset_contract: 2 });
+    const joined = value.store.apply({
+      kind: "work.join",
+      idempotencyKey: randomUUID(),
+      workId: created.work.id,
+      coordinatorSessionId: coordinator.sessionId,
+      coordinatorCapability: capability,
+      actorSessionId: member.sessionId,
+    });
+    if (joined.kind !== "work.join") throw new Error("unexpected result");
+    expect(() => claim(value, {
+      workId: created.work.id,
+      taskId: created.tasks[0]!.id,
+      revision: created.tasks[0]!.revision,
+      actorSessionId: coordinator.sessionId,
+    })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
+    expect(value.store.apply({
+      kind: "task.claimNext",
+      idempotencyKey: randomUUID(),
+      workId: created.work.id,
+      actorSessionId: member.sessionId,
+      actorCapability: capability,
+      route: { accountId: coordinator.profileId, projectId: value.projectId },
+      leaseMs: 5_000,
+    })).toMatchObject({ kind: "task.claimNext", task: null, attempt: null });
+    expect(value.database.query(
+      "SELECT COUNT(*) AS count FROM work_attempts WHERE work_id=?",
+    ).get(created.work.id)).toEqual({ count: 0 });
+
+    const signalKey = randomUUID();
+    const signal = value.store.apply({
+      kind: "signal.send",
+      idempotencyKey: signalKey,
+      workId: created.work.id,
+      senderSessionId: coordinator.sessionId,
+      senderCapability: capability,
+      targetSessionId: member.sessionId,
+      mode: "queue",
+      body: "Review the plan without claiming an execution attempt.",
+    });
+    if (signal.kind !== "signal.send") throw new Error("unexpected result");
+    expect(value.store.authorizePreparedEffect(signalKey)).toMatchObject({ executable: true });
+    const delivered = value.store.finalizeSignal(signalKey, {
+      kind: "failed",
+      code: "queue_closed",
+    });
+    const acknowledged = value.store.apply({
+      kind: "signal.ack",
+      idempotencyKey: randomUUID(),
+      workId: created.work.id,
+      signalId: signal.signal.id,
+      expectedSignalRevision: delivered.revision,
+      actorSessionId: member.sessionId,
+      actorCapability: capability,
+    });
+    if (acknowledged.kind !== "signal.ack") throw new Error("unexpected result");
+    expect(acknowledged.signal.acknowledgedAt).not.toBeNull();
   });
 
   test("refuses contradictory live Devin identity without retiring the claimed attempt", () => {
@@ -2756,43 +2832,6 @@ describe("WorkStore claims, fences, and prepared effects", () => {
       taskId: revokedWork.tasks[0]!.id,
       revision: revokedWork.tasks[0]!.revision,
     })).toThrow(new WorkStoreError("ROUTE_MISMATCH"));
-  });
-
-  test("rejects retired Devin membership and signals despite its signed-in Codex shadow", () => {
-    const value = fixture();
-    const created = createWork(value);
-    join(value, created.work.id, created.work.revision, value.actorSessionId);
-    join(value, created.work.id, created.work.revision, value.reviewerSessionId);
-    const signalKey = randomUUID();
-    const command = {
-      kind: "signal.send" as const,
-      idempotencyKey: signalKey,
-      workId: created.work.id,
-      senderSessionId: value.actorSessionId,
-      senderCapability: capability,
-      targetSessionId: value.reviewerSessionId,
-      mode: "queue" as const,
-      body: "Prepared before this provider was retired.",
-    };
-    value.store.apply(command);
-    setSessionProfile(value, value.reviewerSessionId, { provider: "devin", preset: "ultra", contract: 2 });
-    expect(value.store.authorizePreparedEffect(signalKey)).toMatchObject({ executable: false });
-    expect(() => value.store.apply({ ...command, idempotencyKey: randomUUID() }))
-      .toThrow(new WorkStoreError("ROUTE_MISMATCH"));
-    expect(() => join(value, created.work.id, created.work.revision, value.reviewerSessionId))
-      .toThrow(new WorkStoreError("MEMBER_NOT_FOUND"));
-    expect(value.database.query("SELECT COUNT(*) AS count FROM work_signals").get())
-      .toEqual({ count: 1 });
-    // The frozen Devin contract is 2; only a contract-1 Work contradicts it.
-    // Keep that independent storage guard covered with a reduced historical Work.
-    const historical = fixture();
-    const historicalWork = createWork(historical);
-    rewriteWorkPresetContract(historical, historicalWork.work.id, 1);
-    expect(() => setSessionProfile(historical, historical.actorSessionId, { provider: "devin", preset: "ultra", contract: 2 }))
-      .toThrow("WORK_DEVIN_PRESET_CONTRACT_MISMATCH");
-    expect(historical.database.query(
-      "SELECT provider_v39,preset_contract FROM sessions WHERE id=?",
-    ).get(historical.actorSessionId)).toEqual({ provider_v39: "codex", preset_contract: 2 });
   });
 
   test("fences provider identity and rechecks it before Codex task dispatch", () => {

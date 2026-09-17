@@ -14,7 +14,7 @@ export const adoptableProviderSchema = z.enum(["codex", "claude"]);
 export type AdoptableProvider = z.infer<typeof adoptableProviderSchema>;
 
 /** Providers admitted for new effects. Do not use historical schemas for admission. */
-export const supportedProviderSchema = z.enum(["codex", "claude"]);
+export const supportedProviderSchema = z.enum(["codex", "claude", "devin"]);
 export type SupportedProvider = z.infer<typeof supportedProviderSchema>;
 
 export const DEFAULT_PROVIDER = "codex" satisfies SupportedProvider;
@@ -24,7 +24,7 @@ export const presetV1Schema = z.enum(["low", "high", "ultra", "fable-max", "astr
 export type PresetV1 = z.infer<typeof presetV1Schema>;
 export const presetSchema = presetV1Schema;
 export type Preset = PresetV1;
-export const supportedPresetSchema = z.enum(["low", "high", "ultra", "fable-max"]);
+export const supportedPresetSchema = z.enum(["low", "high", "ultra", "fable-max", "astra"]);
 export type SupportedPreset = z.infer<typeof supportedPresetSchema>;
 
 export const isSupportedProvider = (provider: Provider): provider is SupportedProvider =>
@@ -92,7 +92,9 @@ const presetContract2RequirementsV1 = {
   // is spelled here rather than imported because `src/domain` is the leaf
   // layer; `src/claude/pin.test.ts` proves the two stay equal.
   "fable-max": { model: "claude-fable-5-1", effort: "max" },
-  // Retained only to decode the exact runtime tuple already stored by v39.
+  // Devin ACP selects this exact model family but exposes no separate
+  // reasoning-effort flag, so the reviewed profile records that fact rather
+  // than inventing a provider setting.
   astra: { model: "gpt-6-astra", effort: "provider-default" },
 } as const satisfies Record<PresetV1, PresetRequirementV1>;
 
@@ -248,7 +250,7 @@ const defaultPresetsByProvider = {
   devin: "astra",
 } as const satisfies { readonly [P in Provider]: ProviderPreset<P> };
 
-/** Historical default mapping; new sessions must first admit a supported provider. */
+/** The preset a new session uses when its provider was chosen but no preset was. */
 export const defaultPresetForProvider = <P extends Provider>(
   provider: P,
 ): (typeof defaultPresetsByProvider)[P] => defaultPresetsByProvider[provider];
@@ -269,7 +271,7 @@ const presetsByProviderTier: Readonly<
   devin: Object.freeze({ ultra: "astra" }),
 });
 
-/** Historically mapped presets, in declaration order; not an admission check. */
+/** Presets a provider supports, in the union's declaration order. */
 export const presetsForProvider = (provider: Provider): readonly Preset[] =>
   presetSchema.options.filter((preset) => presetProviders[preset] === provider);
 

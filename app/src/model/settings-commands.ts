@@ -38,16 +38,17 @@ export const approvalModeLabels: Readonly<Record<ApprovalMode, string>> = Object
   manual: "Manual",
 });
 
-export const presetChoices: readonly SupportedPreset[] = Object.freeze([
+export const presetChoices: readonly PresetChoice[] = Object.freeze([
   "low",
   "high",
   "ultra",
   "fable-max",
+  "astra",
 ] as const);
 
 export const presetLabels: Readonly<Record<PresetChoice, string>> = Object.freeze({
   "fable-max": "Fable Max",
-  astra: "Devin Astra (retired)",
+  astra: "Devin Astra",
   // The web app and a target daemon can roll independently, and registry v1
   // projects only the stable alias rather than that daemon's active binding.
   // Keep mutable Codex controls alias-generic until the exact binding is

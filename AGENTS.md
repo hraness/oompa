@@ -1,8 +1,9 @@
 # Contents
 
-- `src/` contains the Bun CLI, daemon, local authority, Codex and Claude Code adapters, and cloud client.
+- `src/` contains the Bun CLI, daemon, local authority, Codex, Claude Code, and Devin adapters, and cloud client.
 - `convex/` contains the optional encrypted sync and verified-email device authority.
 - `site/` contains the public product website and task-oriented documentation. Its content is not an input to the npm package README or description.
+- `pr/` contains the Puerto Rico emergency-signal collectors, snapshot pipeline, and CLI that refresh the committed `/pr/` dashboard data on a scheduled GitHub Actions pulse.
 - `scripts/` contains deterministic checks, builds, and release helpers.
 - `kb/` contains maintained product knowledge and executable implementation plans.
 - `.agents/skills/` contains the portable five-skill phased planning and execution pack.
@@ -30,6 +31,16 @@
 - Follow `WRITING.md` for repository prose and `STYLE.md` for public copy. Author root `README.md` and the package description for package users independently of website content. Check each surface's commands, claims and release limits against the authoritative runtime and release contracts; website builds must not write the package README.
 - Update the active plan in `kb/plans/` as work changes. Do not call a phase complete without the acceptance evidence named there.
 - Preserve public independence. Do not include private paths, credentials, private package dependencies, internal project names, or unpublished provenance.
+
+
+- `costs.json` at the repository root is the checked registry of every product data surface: store, kind (`authoritative` | `derived` | `telemetry`), retention class (`ephemeral` | `ttl:<ISO-8601>` | `account` | `tombstone` | `persistent`), owner module, and budget. A new table, bucket, stream, dynamic route, blob, or provider meter fails `check:cost-surfaces` until it registers.
+- Bound every input before storage or provider I/O: request bytes, row counts, page sizes, batch sizes, retry counts, and event payloads. Unbounded input is a contract violation.
+- No writes on read paths. Reads may cache; they never mutate.
+- Derived state is rebuildable and lives in the cheapest tier that can serve it. Only authoritative state pays for transactional storage.
+- Every mutation carries an idempotency key; a retried write never double-charges storage, quota, or provider spend.
+- Analytics and metering events come from a checked allowlist with a byte ceiling per event.
+- Content bytes live in the content store; the control plane keeps references and metadata only.
+- Run `bun run check:cost-surfaces` before handoff whenever a data surface changes.
 
 <!-- oompa-local-efficiency:start -->
 - Treat the user's request to change this repository as standing authorization for routine task-owned commits, pushes, pull requests, merges, releases, deployments, and production verification after the gates applicable to that action pass. Do not ask for duplicate confirmation. Build confidence through relevant automated checks, bounded diagnostics, and independent review, not another human approval. Passing checks does not expand task scope or authority.

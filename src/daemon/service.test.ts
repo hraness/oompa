@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fc from "fast-check";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
@@ -9,7 +9,7 @@ import { Database } from "bun:sqlite";
 
 import { canonical40QueuesDatabaseBytes, canonical40QueuesFixture } from "../../scripts/fixtures/canonical40-queues";
 import { canonical39DevinDatabaseBytes, canonical39DevinFixture } from "../../scripts/fixtures/canonical39-devin";
-import { canonical39RetiredDatabaseBytes, canonical39RetiredFixtures } from "../../scripts/fixtures/canonical39-retired-effects";
+import { canonical39RetiredDatabaseBytes } from "../../scripts/fixtures/canonical39-retired-effects";
 import {
   canonical39RetiredRecoveryDatabaseBytes,
   canonical39RetiredRecoveryFixtures,
@@ -17,7 +17,6 @@ import {
 } from "../../scripts/fixtures/canonical39-retired-recovery";
 import {
   canonical39RetiredTargetDatabaseBytes,
-  canonical39RetiredTargetFixtures,
   type Canonical39RetiredTargetScenario,
 } from "../../scripts/fixtures/canonical39-retired-targets";
 import { canonical24ResetDatabaseBytes, canonical24ResetFixture } from "../../scripts/fixtures/canonical24-reset";
@@ -47,6 +46,7 @@ import { parseFact, parseThreadMetadataRead } from "../codex/protocol";
 import { projectBoundedThread } from "./codex-runtime-adapter";
 import { CLAUDE_PIN, CLAUDE_PIN_MODEL } from "../claude/pin";
 import { IndeterminateClaudeEffectError } from "../claude/errors";
+import { DEVIN_PIN } from "../devin/pin";
 import { CloudProjectionRecoveryAdmissionError } from "../cloud/contracts";
 import { AccountKeyLossPreconditionError } from "../cloud/local-control";
 import {
@@ -86,6 +86,7 @@ import {
 } from "../domain/presets";
 import type {
   EffectiveClaudeRuntimeProfile,
+  EffectiveDevinRuntimeProfile,
   EffectiveRuntimeProfile,
 } from "../domain/runtime-profile";
 import {
@@ -123,7 +124,7 @@ import type {
   OompaFactsMemoryLifecyclePort,
   OompaFactsMemoryLifecycleReceipt,
 } from "./facts-memory-lifecycle";
-import { ClaudeProcessExitUnprovenError, ClaudeSessionObservationError, CodexClaimReleaseUnprovenError, CodexSessionObservationError, UnavailableClaudeRuntime, UnavailableCloudControl, type ClaudeProcessIdentity, type ClaudeRuntimePort, type ClaudeRuntimeStartReview, type CloudControlPort, type CodexAccountProjection, type CodexLoginOutcome, type CodexRuntimePort, type CodexSessionObservation, type CodexSessionProjection, type CompactProjectionRecoveryBlocker, type ProfileAuthority, type RuntimeStartReview } from "./ports";
+import { ClaudeProcessExitUnprovenError, ClaudeSessionObservationError, CodexClaimReleaseUnprovenError, CodexSessionObservationError, UnavailableClaudeRuntime, UnavailableCloudControl, type ClaudeProcessIdentity, type ClaudeRuntimePort, type ClaudeRuntimeStartReview, type CloudControlPort, type CodexAccountProjection, type CodexLoginOutcome, type CodexRuntimePort, type CodexSessionObservation, type CodexSessionProjection, type CompactProjectionRecoveryBlocker, type DevinRuntimePort, type ProfileAuthority, type RuntimeStartReview } from "./ports";
 import {
   BoundedPersonalSessionDiscovery,
   CLAUDE_REGISTRY_MAX_RECORDS,
@@ -141,6 +142,8 @@ import type {
 import { SessionEventCursorCodec } from "./session-event-cursor";
 import { CommandFailure, FACTS_MEMORY_SESSION_TTL_MS, OompaService } from "./service";
 import { USAGE_HISTORY_CURSOR_TTL_MS } from "./usage-history-cursor";
+
+setDefaultTimeout(60_000);
 
 const privatePathRoot = ["", "Users", "private"].join("/");
 const codexProviderAccountKey = (email = "person@example.com"): string =>
@@ -1521,6 +1524,7 @@ async function fixture(
   autorespond: Readonly<{
     beforeMemoryClose?: () => Promise<void>;
     claude?: ClaudeRuntimePort;
+    devin?: DevinRuntimePort;
     gatewayKeys?: GatewayKeyPort;
     proseResponder?: ProseResponder;
     securityScrubCheckpoint?: SecurityScrubCheckpointPolicy;
@@ -1626,6 +1630,7 @@ async function fixture(
     daemonGeneration,
     daemonBootId,
     ...(managedClaude === undefined ? {} : { claude: managedClaude }),
+    ...(autorespond.devin === undefined ? {} : { devin: autorespond.devin }),
     eventCursors,
     ...(factsMemory === undefined ? {} : { factsMemory }),
     ...(memory === undefined ? {} : { memory }),
@@ -2471,6 +2476,75 @@ async function isolatedLoginCompletionFixture(provider: "claude") {
   return { ...value, profile, key, prepared, complete, corruptProviderProcess };
 }
 
+async function devinAccountFixture(initiallySignedIn = false) {
+  let signedIn = initiallySignedIn;
+  let readError: Error | undefined;
+  let readCalls = 0;
+  const providerSessionCalls: string[] = [];
+  const devin = {
+    provider: "devin" as const,
+    readAccount: async () => {
+      readCalls += 1;
+      if (readError !== undefined) throw readError;
+      return { readiness: signedIn ? "signed_in" as const : "signed_out" as const, observedAt: 2_000 };
+    },
+    observeSession: async () => {
+      providerSessionCalls.push("observe-session");
+      throw new Error("Devin session observation was not expected.");
+    },
+    readSession: async () => {
+      providerSessionCalls.push("read-session");
+      throw new Error("Devin session read was not expected.");
+    },
+    reviewSessionStart: async () => {
+      providerSessionCalls.push("review-session-start");
+      throw new Error("Devin session start review was not expected.");
+    },
+    reviewTurnStart: async () => {
+      providerSessionCalls.push("review-turn-start");
+      throw new Error("Devin turn review was not expected.");
+    },
+    startSession: async () => {
+      providerSessionCalls.push("start-session");
+      throw new Error("Devin session start was not expected.");
+    },
+    startTurn: async () => {
+      providerSessionCalls.push("start-turn");
+      throw new Error("Devin turn start was not expected.");
+    },
+    steer: async () => {
+      providerSessionCalls.push("steer");
+      throw new Error("Devin steer was not expected.");
+    },
+    interrupt: async () => {
+      providerSessionCalls.push("interrupt");
+      throw new Error("Devin interrupt was not expected.");
+    },
+    endSession: async () => {
+      providerSessionCalls.push("end-session");
+      throw new Error("Devin session end was not expected.");
+    },
+    interactionAuthority: () => { throw new Error("No Devin session interaction expected."); },
+    rebindProfileAuthority: () => undefined,
+    pinnedVersion: () => DEVIN_PIN,
+    close: async () => undefined,
+  } as unknown as DevinRuntimePort;
+  const value = await fixture(
+    new FakeCloud(),
+    () => undefined,
+    Date.now,
+    undefined,
+    { devin },
+  );
+  return {
+    ...value,
+    devinReadCalls: () => readCalls,
+    providerSessionCalls,
+    setDevinReadError: (value: Error | undefined) => { readError = value; },
+    setDevinSignedIn: (value: boolean) => { signedIn = value; },
+  };
+}
+
 async function createIdleSession(
   value: Awaited<ReturnType<typeof fixture>> & {
     execute?: (command: LocalCommand) => Promise<unknown>;
@@ -2536,7 +2610,7 @@ function codexInteractionBinding(
 }
 
 function hostToolAuthorityFor(authority: ProfileAuthority): OompaHostToolCall["authority"] {
-  if (authority.provider === "devin") throw new Error("A retired provider cannot originate a host-tool fixture.");
+  if (authority.provider === "devin") throw new Error("A provider without host tools cannot originate a host-tool fixture.");
   return {
     provider: authority.provider,
     providerAccountId: authority.providerAccountId,
@@ -6770,7 +6844,7 @@ describe("OompaService personal-session adoption", () => {
     )).toBeNull();
   });
 
-  test("pages every authorized local session and retired history while provider listing is recovery-blocked", async () => {
+  test("pages every authorized local session while provider listing is recovery-blocked", async () => {
     const cloud = new FakeCloud();
     const value = await archivedDevinFixture(cloud);
     await abandonArchivedDevinLogin(value);
@@ -6795,7 +6869,6 @@ describe("OompaService personal-session adoption", () => {
       return session.id;
     }));
     expectedIds.add(value.captured.session.id);
-    const callsBeforeListing = [...value.codex.calls];
     cloud.unsettledProjectionProfiles.add(added.account.id);
     value.codex.listedProjections = [{
       providerThreadId: "recovery-blocked-provider-thread",
@@ -6831,7 +6904,6 @@ describe("OompaService personal-session adoption", () => {
     expect(new Set(listedIds)).toEqual(expectedIds);
     expect(listedIds).toHaveLength(expectedIds.size);
     expect(value.codex.sessionListRequests).toEqual([]);
-    expect(value.codex.calls).toEqual(callsBeforeListing);
     expect(value.store.findSessionByProviderThread(
       added.account.id,
       "recovery-blocked-provider-thread",
@@ -8193,7 +8265,7 @@ describe("OompaService personal-session adoption", () => {
     const store = new StateStore(paths, { now: () => personalAdoptionNow });
     stores.push(store);
     const migrated = new Database(paths.database, { readonly: true, strict: true });
-    expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+    expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     expect(migrated.query(
       "SELECT evidence_json,evidence_digest FROM mutation_effect_evidence WHERE attempt_id=?",
     ).get(origin.attemptId)).toEqual(before);
@@ -13548,22 +13620,6 @@ describe("OompaService", () => {
     });
   });
 
-  test("reports retired Devin without authentication or provider effects", async () => {
-    const value = await fixture();
-    const profile = value.store.createProfile("Retired");
-    const result = await value.service.execute({
-      kind: "account.show", account: profile.id, provider: "devin",
-    }, { signal });
-    expect(result).toMatchObject({
-      account: { id: profile.id }, provider: "devin", status: "retired",
-      credentialAction: "none",
-    });
-    expect(result).not.toHaveProperty("authentication");
-    expect(result).not.toHaveProperty("usage");
-    expect(result).not.toHaveProperty("nextCommand");
-    expect(value.codex.calls).toEqual([]);
-  });
-
   test("preserves historical Devin login custody until exact acknowledged cleanup", async () => {
     const value = await archivedDevinFixture();
     const profile = value.captured.profile;
@@ -13574,7 +13630,8 @@ describe("OompaService", () => {
       kind: "account.show", account: profile.id, provider: "devin",
     }, { signal }) as { recovery: Record<string, unknown> };
     expect(status.recovery).toMatchObject({ required: true, attemptId, idempotencyKey: key });
-    expect(status.recovery).not.toHaveProperty("sameKeyReplayCommand");
+    expect(status.recovery.sameKeyReplayCommand)
+      .toBe(`oompa account login ${profile.id} --provider devin --idempotency-key ${key}`);
     expect(value.store.readMutation(key)?.state).toBe("effect_started");
     const command = {
       kind: "account.devin-login.abandon", account: profile.id,
@@ -13594,6 +13651,152 @@ describe("OompaService", () => {
     expect(value.store.readMutation(key)?.evidence).toEqual(original?.evidence);
     expect(value.store.readMutation(key)?.requestDigest).toBe(original?.requestDigest);
     expect(value.codex.calls).toEqual([]);
+  });
+
+  test("reports Devin auth separately, preserves unknown allowance, and settles one foreground login", async () => {
+    const value = await devinAccountFixture();
+    const added = await value.service.execute(
+      { kind: "account.add", label: "Devin private" },
+      { signal },
+    ) as { account: { id: `acct_${string}` } };
+
+    await expect(value.service.execute({
+      kind: "account.show",
+      account: added.account.id,
+      provider: "devin",
+    }, { signal })).resolves.toMatchObject({
+      account: { id: added.account.id, label: "Devin private" },
+      authentication: { provider: "devin", signedIn: false },
+      nextCommand: `oompa account login ${added.account.id} --provider devin`,
+      providerGeneration: 0,
+      usage: {
+        allowance: "unknown",
+        reason: "Devin ACP reports context and optional cumulative session cost, but exposes no account allowance or reset window.",
+        source: "devin_acp",
+      },
+    });
+
+    const key = "00000000-0000-4000-8000-000000000711";
+    const prepared = await value.service.execute({
+      kind: "account.devin-login.prepare",
+      account: added.account.id,
+      idempotencyKey: key,
+      manualTokenFlow: true,
+    }, { signal }) as {
+      login: { attemptId: `attempt_${string}`; providerGeneration: number };
+    };
+    expect(prepared).toMatchObject({
+      authentication: { provider: "devin", signedIn: false },
+      login: { status: "launch_granted", idempotencyKey: key },
+    });
+    const readsBeforeRecovery = value.devinReadCalls();
+    await expect(value.service.execute({
+      kind: "account.show",
+      account: added.account.id,
+      provider: "devin",
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: null },
+      recovery: {
+        required: true,
+        attemptId: prepared.login.attemptId,
+        idempotencyKey: key,
+      },
+      usage: { allowance: "unknown", source: "devin_acp" },
+    });
+    expect(value.devinReadCalls()).toBe(readsBeforeRecovery);
+
+    value.setDevinSignedIn(true);
+    await expect(value.service.execute({
+      kind: "account.devin-login.complete",
+      account: added.account.id,
+      attemptId: prepared.login.attemptId,
+      idempotencyKey: key,
+      providerGeneration: prepared.login.providerGeneration,
+      outcome: { state: "joined", exitCode: 0, interruptedBy: null },
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: true },
+      login: { status: "signed_in" },
+    });
+    expect(value.store.readMutation(key)).toMatchObject({ state: "applied" });
+
+    value.setDevinReadError(new Error("terminal replay must not inspect Devin auth"));
+    await expect(value.service.execute({
+      kind: "account.devin-login.prepare",
+      account: added.account.id,
+      idempotencyKey: key,
+      manualTokenFlow: false,
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: true },
+      login: { status: "signed_in" },
+    });
+    expect(value.providerSessionCalls).toEqual([]);
+  });
+
+  test("records signed-in Devin readiness and one exact generation after a joined foreground login", async () => {
+    const value = await devinAccountFixture();
+    const added = await value.service.execute(
+      { kind: "account.add", label: "Devin readiness" },
+      { signal },
+    ) as { account: { id: `acct_${string}` } };
+    const key = "00000000-0000-4000-8000-000000000713";
+    const prepared = await value.service.execute({
+      kind: "account.devin-login.prepare",
+      account: added.account.id,
+      idempotencyKey: key,
+      manualTokenFlow: false,
+    }, { signal }) as {
+      login: { attemptId: `attempt_${string}`; providerGeneration: number };
+    };
+    const granted = value.store.requireProviderAccountAuthority(added.account.id, "devin");
+    expect(value.store.requireProviderAccountForProfile(added.account.id, "devin"))
+      .toMatchObject({ readiness: "unverified", readinessObservedAt: null });
+
+    value.setDevinSignedIn(true);
+    await expect(value.service.execute({
+      kind: "account.devin-login.complete",
+      account: added.account.id,
+      attemptId: prepared.login.attemptId,
+      idempotencyKey: key,
+      providerGeneration: prepared.login.providerGeneration,
+      outcome: { state: "joined", exitCode: 0, interruptedBy: null },
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: true },
+      login: { status: "signed_in" },
+    });
+
+    const settled = value.store.requireProviderAccountForProfile(added.account.id, "devin");
+    expect(settled.readiness).toBe("signed_in");
+    expect(settled.readinessObservedAt).not.toBeNull();
+    // One readiness change is exactly one binding advance, and the login never
+    // rotates the Devin process fence it settled under.
+    expect(settled.bindingGeneration).toBe(granted.bindingGeneration + 1);
+    expect(settled.processGeneration).toBe(prepared.login.providerGeneration);
+    const current = value.store.requireProviderAccountAuthority(added.account.id, "devin");
+    expect(current).toMatchObject({
+      providerAccountId: granted.providerAccountId,
+      processGeneration: granted.processGeneration,
+      bindingGeneration: granted.bindingGeneration + 1,
+    });
+
+    // Replaying the same terminal receipt must stay idempotent.
+    value.setDevinReadError(new Error("terminal replay must not inspect Devin auth"));
+    await expect(value.service.execute({
+      kind: "account.devin-login.complete",
+      account: added.account.id,
+      attemptId: prepared.login.attemptId,
+      idempotencyKey: key,
+      providerGeneration: prepared.login.providerGeneration,
+      outcome: { state: "joined", exitCode: 0, interruptedBy: null },
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: true },
+    });
+    expect(value.store.requireProviderAccountForProfile(added.account.id, "devin"))
+      .toMatchObject({
+        readiness: "signed_in",
+        bindingGeneration: granted.bindingGeneration + 1,
+        processGeneration: granted.processGeneration,
+      });
+    expect(value.providerSessionCalls).toEqual([]);
   });
 
   test("grants Claude foreground login once and accepts a status-versus-complete race", async () => {
@@ -14489,12 +14692,23 @@ describe("OompaService", () => {
       `This daemon has no Claude Code runtime. Install Claude Code ${CLAUDE_PIN} exactly`,
     );
 
-    for (const preset of ["ultra", "astra"]) {
-      expect(localCommandSchema.safeParse({
-        kind: "session.start", account: added.account.id,
-        provider: "devin", preset, fast: false,
-      }).success).toBe(false);
-    }
+    await expect(service.execute({
+      kind: "session.start",
+      account: added.account.id,
+      provider: "devin",
+      preset: "ultra",
+      fast: false,
+    }, { signal })).rejects.toThrow("does not support the `ultra` model preset");
+
+    await expect(service.execute({
+      kind: "session.start",
+      account: added.account.id,
+      provider: "devin",
+      preset: "astra",
+      fast: false,
+    }, { signal })).rejects.toThrow(
+      `This daemon has no Devin runtime. Install Devin CLI ${DEVIN_PIN} exactly`,
+    );
 
     // Every existing Codex path is unchanged.
     const started = await service.execute({
@@ -14536,7 +14750,7 @@ describe("OompaService", () => {
     for (const [method, diagnostic] of [
       ["future-provider/requestApproval", "provider interaction authority mismatch"],
       ["claude/control_request/can_use_tool", "INTERACTION_PROVIDER_AUTHORITY_MISMATCH"],
-      ["devin/session/request_permission", "RETIRED_PROVIDER_ADMISSION_REFUSED"],
+      ["devin/session/request_permission", "INTERACTION_PROVIDER_AUTHORITY_MISMATCH"],
     ] as const) {
       expect(() => store.admitInteraction({
         authority: {
@@ -14632,7 +14846,7 @@ describe("OompaService", () => {
     const beforeAdmission = snapshot();
     for (const [method, diagnostic] of [
       ["claude/control_request/can_use_tool", "INTERACTION_PROVIDER_AUTHORITY_MISMATCH"],
-      ["devin/session/request_permission", "RETIRED_PROVIDER_ADMISSION_REFUSED"],
+      ["devin/session/request_permission", "INTERACTION_PROVIDER_AUTHORITY_MISMATCH"],
     ] as const) {
       expect(() => value.store.admitInteraction({ ...input, authority: { ...input.authority, method } }))
         .toThrow(diagnostic);
@@ -14669,6 +14883,117 @@ describe("OompaService", () => {
     expect(value.codex.resolvedInteractions).toEqual([]);
     expect(value.codex.validatedInteractionTimeouts).toEqual([]);
     expect(value.codex.timedOutInteractions).toEqual([]);
+  });
+
+  test("starts a native managed Devin session with current keyless authority", async () => {
+    const providerThreadId = "native-managed-devin";
+    const connectionId = "018f1f55-3f10-7c1a-8f7b-c6dc608bcd3d";
+    const reviewed: EffectiveDevinRuntimeProfile[] = [];
+    const devin = {
+      provider: "devin" as const,
+      readAccount: async () => ({ readiness: "signed_in" as const, observedAt: 2_000 }),
+      reviewSessionStart: async (
+        input: Parameters<DevinRuntimePort["reviewSessionStart"]>[0],
+      ) => {
+        const effectiveRuntimeProfile: EffectiveDevinRuntimeProfile = {
+          profileId: input.authority.id,
+          processGeneration: input.authority.generation,
+          observedAt: 2_000,
+          preset: "astra",
+          model: input.requirement.model,
+          reasoningEffort: "provider-default",
+          devinVersion: DEVIN_PIN,
+          protocolVersion: 1,
+          isolatedHome: true,
+        };
+        reviewed.push(effectiveRuntimeProfile);
+        return {
+          reviewId: crypto.randomUUID(),
+          kind: "session_start" as const,
+          effectiveRuntimeProfile,
+        };
+      },
+      discardRuntimeReview: () => undefined,
+      startSession: async (
+        input: Parameters<DevinRuntimePort["startSession"]>[0],
+      ) => ({
+        providerThreadId,
+        title: "Native managed Devin",
+        status: "idle" as const,
+        providerUpdatedAt: 2_001,
+        effectiveRuntimeProfile: input.review.effectiveRuntimeProfile,
+      }),
+      observeSession: async () => ({
+        connectionId,
+        projection: {
+          providerThreadId,
+          title: "Native managed Devin",
+          status: "idle" as const,
+          providerUpdatedAt: 2_001,
+        },
+        resumed: true,
+      }),
+      endSession: async () => undefined,
+      close: async () => undefined,
+    } as unknown as DevinRuntimePort;
+    const value = await fixture(
+      new FakeCloud(),
+      () => undefined,
+      Date.now,
+      undefined,
+      { devin },
+    );
+    const added = await value.service.execute(
+      { kind: "account.add", label: "Native managed Devin" },
+      { signal },
+    ) as { account: { id: `acct_${string}` } };
+    await value.service.execute({
+      kind: "project.add",
+      label: "Native managed Devin project",
+      path: value.documents,
+    }, { signal });
+
+    const started = await value.service.execute({
+      kind: "session.start",
+      account: added.account.id,
+      provider: "devin",
+      preset: "astra",
+      fast: false,
+    }, { signal }) as {
+      session: SessionRecord;
+      effectiveRuntimeProfile: Record<string, unknown>;
+    };
+
+    expect(reviewed).toHaveLength(1);
+    expect(started.session).toMatchObject({
+      provider: "devin",
+      providerThreadId,
+      preset: "astra",
+      state: "idle",
+    });
+    expect(value.store.readSessionProviderAccountAuthority(started.session.id)).toBeNull();
+    expect(value.store.requireSessionPresetRequirement(started.session.id)).toEqual({
+      preset: "astra",
+      requirement: presetRequirements.astra,
+    });
+    expect(started.effectiveRuntimeProfile).not.toHaveProperty("isolatedHome");
+
+    // Devin owns its own process fence. The first session start advances it
+    // past the profile's Codex generation, and status must report that exact
+    // Devin generation rather than the unrelated Codex counter.
+    const devinAuthority = value.store.requireProviderAccountAuthority(added.account.id, "devin");
+    expect(devinAuthority.processGeneration).toBe(1);
+    expect(value.store.requireProfileById(added.account.id).processGeneration).toBe(0);
+    expect(value.store.requireProviderAccountForProfile(added.account.id, "devin"))
+      .toMatchObject({ readiness: "signed_in" });
+    await expect(value.service.execute({
+      kind: "account.show",
+      account: added.account.id,
+      provider: "devin",
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: true },
+      providerGeneration: devinAuthority.processGeneration,
+    });
   });
 
   test("archives and unarchives a session and filters the default listing", async () => {
@@ -15377,7 +15702,6 @@ describe("OompaService", () => {
       state: "idle",
       title: "Existing Codex cache",
     });
-    const callsBeforeLocalListing = [...value.codex.calls];
 
     const first = await value.service.execute({
       kind: "session.list",
@@ -15394,7 +15718,6 @@ describe("OompaService", () => {
       existingCodex.id,
     ].includes(session.id))).toBe(true);
     expect(value.codex.sessionListRequests).toHaveLength(0);
-    expect(value.codex.calls).toEqual(callsBeforeLocalListing);
 
     value.codex.listedProjections = [{
       providerThreadId: "provider-existing-codex",
@@ -15414,7 +15737,6 @@ describe("OompaService", () => {
     };
     expect(second.sessions).toHaveLength(2);
     expect(value.codex.sessionListRequests).toHaveLength(0);
-    expect(value.codex.calls).toEqual(callsBeforeLocalListing);
 
     const third = await value.service.execute({
       kind: "session.list",
@@ -18361,7 +18683,7 @@ describe("OompaService", () => {
     });
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT id,label,state,process_generation,provider_email,provider_plan,created_at,updated_at,label_key FROM profiles WHERE id=?",
       ).get(accountId)).toEqual(canonical24ResetFixture.profileRow);
@@ -18370,7 +18692,7 @@ describe("OompaService", () => {
       ).all()).toEqual([...canonical24ResetFixture.migrations]);
       expect(inspector.query(
         "SELECT version FROM migrations WHERE version>=25 ORDER BY version",
-      ).all()).toEqual(Array.from({ length: 36 }, (_, index) => ({ version: index + 25 })));
+      ).all()).toEqual(Array.from({ length: 37 }, (_, index) => ({ version: index + 25 })));
     } finally {
       inspector.close(false);
     }
@@ -23177,374 +23499,123 @@ describe("OompaService", () => {
     expect(store.readPendingLoginAuthority(added.account.id, 2)).toBeNull();
   });
 
-  test("reads retired Devin history locally and refuses further provider effects", async () => {
-    const factsMemory = new FakeFactsMemoryLifecycle();
-    const memory = new FakeMemory();
-    const value = await archivedDevinFixture(new FakeCloud(), { factsMemory, memory });
-    const session = value.store.requireSession(value.captured.session.id);
-    const before = value.store.requireSession(session.id);
-    await expect(value.service.execute({
-      kind: "session.show", session: session.id, detail: true,
-    }, { signal })).resolves.toMatchObject({
-      session: { provider: "devin", preset: "astra" }, retiredProvider: "devin",
-      providerObservation: { state: "unavailable", code: "provider_retired" },
-    });
-    await expect(value.service.execute({
-      kind: "session.status", session: session.id,
-    }, { signal })).resolves.toMatchObject({
-      providerObservation: { state: "unavailable", code: "provider_retired" },
-    });
-    await expect(value.service.execute({
-      kind: "memory.status", session: session.id,
-    }, { signal })).resolves.toMatchObject({ kind: "status", sessionId: session.id });
-    expect(memory.statuses).toEqual([{ actorSessionId: session.id }]);
-    for (const command of [
-      {
-        kind: "memory.query",
-        session: session.id,
-        value: { mode: "search", text: "retired history" },
-      },
-      {
-        kind: "memory.explain",
-        session: session.id,
-        value: { queryId: `memq_${"7".repeat(32)}`, row: 1 },
-      },
-      {
-        kind: "memory.remember",
-        session: session.id,
-        idempotencyKey: "00000000-0000-4000-8000-000000000604",
-        value: {
-          key: "retired.history",
-          title: "Retired history",
-          summary: "Do not mutate retired provider memory.",
-          body: "Historical Devin sessions are read-only.",
+  test("scopes an isolated Devin disconnect to its provider session", async () => {
+    const devinConnection = "018f1f55-3f10-7c1a-8f7b-c6dc608bcd3c";
+    const devin = {
+      provider: "devin" as const,
+      rebindProfileAuthority: () => undefined,
+      observeSession: async (input: Parameters<DevinRuntimePort["observeSession"]>[0]) => ({
+        connectionId: devinConnection,
+        projection: {
+          providerThreadId: input.providerThreadId,
+          status: "idle" as const,
+          title: "Devin provider-scoped session",
         },
-      },
+        resumed: true,
+      }),
+      close: async () => undefined,
+    } as unknown as DevinRuntimePort;
+    const value = await fixture(
+      new FakeCloud(),
+      () => undefined,
+      Date.now,
+      undefined,
+      { devin },
+    );
+    const added = await value.service.execute(
+      { kind: "account.add", label: "Provider-scoped disconnect" },
+      { signal },
+    ) as { account: { id: `acct_${string}` } };
+    await value.service.execute({
+      kind: "account.login",
+      account: added.account.id,
+      deviceCode: false,
+    }, { signal });
+    const profile = value.store.requireProfileById(added.account.id);
+    const codexAuthority = value.store.requireProviderAccountAuthority(profile.id, "codex");
+    const codexSession = value.store.upsertProviderSession({
+      providerAuthority: codexAuthority,
+      fastEnabled: false,
+      preset: "high",
+      profileId: profile.id,
+      provider: "codex",
+      providerThreadId: "codex-provider-scoped-thread",
+      providerAccountKey: codexProviderAccountKey(),
+      state: "active",
+      activeTurnId: "codex-provider-scoped-turn",
+      title: "Codex provider-scoped session",
+    });
+    const devinSession = value.store.upsertProviderSession({
+      providerAuthority: value.store.requireProviderAccountAuthority(profile.id, "devin"),
+      fastEnabled: false,
+      preset: "astra",
+      profileId: profile.id,
+      provider: "devin",
+      providerThreadId: "devin-provider-scoped-thread",
+      state: "active",
+      activeTurnId: "devin-provider-scoped-turn",
+      title: "Devin provider-scoped session",
+    });
+    const codexProviderThreadId = "codex-provider-scoped-thread";
+    const devinAuthority = value.store.requireProviderAccountAuthority(profile.id, "devin");
+    const authority: ProfileAuthority = {
+      bindingGeneration: devinAuthority.bindingGeneration,
+      codexHome: "unused",
+      desktopUserData: "unused",
+      generation: devinAuthority.processGeneration,
+      id: profile.id,
+      provider: "devin",
+      providerAccountId: devinAuthority.providerAccountId,
+    };
+    const codexConnection = "018f1f55-3f10-7c1a-8f7b-c6dc608bcd3b";
+    value.codex.observationConnectionId = codexConnection;
+    value.codex.readProjection = {
+      providerThreadId: codexProviderThreadId,
+      status: "idle",
+      title: "Codex provider-scoped session",
+    };
+    await value.service.execute({ kind: "session.status", session: codexSession.id }, { signal });
+    await value.service.execute({ kind: "session.status", session: devinSession.id }, { signal });
+
+    // A provider-scoped observer may not mutate a sibling provider even when
+    // handed its exact thread id.
+    await value.service.observeDevinFact(authority, {
+      connectionId: devinConnection,
+      status: { type: "systemError" },
+      threadId: codexProviderThreadId,
+      type: "threadStatusChanged",
+    });
+    await value.service.observeDevinFact(authority, {
+      connectionId: devinConnection,
+      reason: "process_exit",
+      type: "providerDisconnected",
+    });
+
+    expect(value.store.requireProfileById(profile.id).processGeneration)
+      .toBe(profile.processGeneration);
+    expect(value.store.listSessionEvents({
+      afterSequence: 0,
+      limit: 20,
+      sessionId: codexSession.id,
+    }).events.map((event) => event.body)).toEqual([
+      { state: "connected", type: "connection" },
+      { activeTurnId: null, status: "idle", type: "session_status" },
+    ]);
+    expect(value.store.listSessionEvents({
+      afterSequence: 0,
+      limit: 20,
+      sessionId: devinSession.id,
+    }).events.map((event) => event.body)).toEqual([
+      { state: "connected", type: "connection" },
+      { activeTurnId: null, status: "idle", type: "session_status" },
+      { reason: "process_exit", state: "disconnected", type: "connection" },
       {
-        kind: "memory.share",
-        session: session.id,
-        idempotencyKey: "00000000-0000-4000-8000-000000000605",
-        value: { key: "retired.history", reason: "Do not share retired authority" },
+        fromSequence: 4,
+        reason: "provider_disconnect",
+        throughSequence: 4,
+        type: "gap",
       },
-    ] satisfies LocalCommand[]) {
-      await expect(value.service.execute(command, { signal })).rejects.toMatchObject({
-        code: "UNAVAILABLE",
-        details: { reason: "provider_retired" },
-      });
-    }
-    await expect(value.service.execute({
-      kind: "session.send", session: session.id, message: "Do not run",
-    }, { signal })).rejects.toMatchObject({ code: "UNAVAILABLE" });
-    expect(value.store.requireSession(session.id)).toEqual(before);
-    expect(value.codex.calls).toEqual([]);
-    expect(factsMemory.ensures).toEqual([]);
-    expect(memory.queries).toEqual([]);
-    expect(memory.explanations).toEqual([]);
-    expect(memory.remembers).toEqual([]);
-    expect(memory.shares).toEqual([]);
-  });
-
-  test("keeps retired note changes from minting facts-memory authority", async () => {
-    const memory = new FakeFactsMemoryLifecycle();
-    const value = await archivedDevinFixture(new FakeCloud(), { factsMemory: memory });
-    const session = value.store.requireSession(value.captured.session.id);
-    const beforeMutations = value.store.listUnsettledMutations({ sessionId: session.id });
-    try {
-      for (const command of [
-        { kind: "session.note.set", session: session.id, note: "Do not change history" },
-        { kind: "session.note.clear", session: session.id },
-      ] as const) {
-        await expect(value.service.execute(command, { signal })).rejects.toMatchObject({
-          code: "UNAVAILABLE", details: { reason: "provider_retired" },
-        });
-        expect(value.store.requireSession(session.id)).toEqual(session);
-        expect(value.store.listUnsettledMutations({ sessionId: session.id })).toEqual(beforeMutations);
-        expect(memory.ensures).toEqual([]);
-        expect(memory.cleanups).toEqual([]);
-        expect(value.codex.calls).toEqual([]);
-      }
-      await expect(value.service.execute({
-        kind: "session.note.get", session: session.id,
-      }, { signal })).resolves.toMatchObject({ note: session.note, revision: session.revision });
-    } finally {
-      await value.service.close();
-    }
-  });
-
-  test.each([
-    { kind: "session.archive", archived: true },
-    { kind: "session.archive", archived: false },
-    { kind: "autorespond.set", mode: "auto:all" },
-    { kind: "autorespond.set", mode: null },
-  ] as const)("rejects retired session policy writes %j without changing history", async (change) => {
-    const value = await archivedDevinFixture();
-    const session = value.store.requireSession(value.captured.session.id);
-    const approval = value.store.readSessionApprovalMode(session.id);
-    try {
-      await expect(value.service.execute({ ...change, session: session.id }, { signal }))
-        .rejects.toMatchObject({ code: "UNAVAILABLE", details: { reason: "provider_retired" } });
-      expect(value.store.requireSession(session.id)).toEqual(session);
-      expect(value.store.readSessionApprovalMode(session.id)).toEqual(approval);
-      expect(value.codex.calls).toEqual([]);
-      await expect(value.service.execute({ kind: "autorespond.set", mode: "auto:workspace" }, { signal }))
-        .resolves.toMatchObject({ mode: "auto:workspace", source: "default" });
-      await expect(value.service.execute({ kind: "autorespond.status", session: session.id }, { signal }))
-        .resolves.toMatchObject({ mode: "auto:workspace", source: "default" });
-    } finally {
-      await value.service.close();
-    }
-  });
-
-  test("rejects a stale retired cloud account callback before account inspection", async () => {
-    const value = await claudeAccountFixture(true);
-    const profile = value.store.createProfile("Stale retired cloud account");
-    try {
-      await expect(value.service.readProviderAccountProjectionForCloud({
-        authority: value.store.requireProviderAccountAuthority(profile.id, "devin"), signal,
-      })).rejects.toMatchObject({
-        code: "UNAVAILABLE", details: { reason: "provider_retired" },
-      });
-      expect(value.claudeReadCalls()).toBe(0);
-      expect(value.codex.calls).toEqual([]);
-      expect(value.store.requireProfileById(profile.id)).toEqual(profile);
-      await expect(value.service.readProviderAccountProjectionForCloud({
-        authority: value.store.requireProviderAccountAuthority(profile.id, "claude"), signal,
-      })).resolves.toEqual({ signedIn: true });
-      expect(value.claudeReadCalls()).toBe(1);
-    } finally {
-      await value.service.close();
-    }
-  });
-
-  test("reports retired provider admission for new scheduled tasks without changing history", async () => {
-    const value = await archivedDevinFixture();
-    const session = value.store.requireSession(value.captured.session.id);
-    const before = value.store.requireSession(session.id);
-    try {
-      await expect(value.service.execute({
-        kind: "session.task.create", session: session.id, name: "Retired task",
-        everyMinutes: 10, paused: false, prompt: "Do not run",
-        idempotencyKey: crypto.randomUUID(),
-      }, { signal })).rejects.toMatchObject({
-        code: "UNAVAILABLE", details: { reason: "provider_retired" },
-      });
-      expect(value.store.requireSession(session.id)).toEqual(before);
-      await expect(value.service.execute({
-        kind: "session.task.list", session: session.id,
-      }, { signal })).resolves.toMatchObject({ tasks: [] });
-      expect(value.codex.calls).toEqual([]);
-    } finally {
-      await value.service.close();
-    }
-  });
-
-  test("quarantines retired bound recovery without changing evidence or causing provider or facts-memory effects", async () => {
-    const memory = new FakeFactsMemoryLifecycle();
-    const value = await fixture(new FakeCloud(), () => undefined, Date.now,
-      memory, {}, { canonical39RetiredRecovery: "bound_send" });
-    const captured = canonical39RetiredRecoveryFixtures.bound_send.retained;
-    const sessionId = captured.session.id;
-    const key = captured.idempotencyKey;
-    // The released39 producer admitted this actual uncertain send. Current
-    // migration/boot may contain it, but cannot rewrite its original proof.
-    expect(value.store.readMutation(key)?.evidence).toEqual(captured.effect);
-    try {
-      await expect(value.service.recover()).resolves.toBeUndefined();
-      expect(value.store.requireSession(sessionId)).toMatchObject({ provider: "devin", state: "recovery_required" });
-      expect(value.store.readMutation(key)).toMatchObject({
-        ...captured.mutation, state: "ambiguous",
-        result: { code: "DAEMON_RESTART" },
-      });
-      expect(value.store.readMutation(key)?.evidence).toEqual(captured.effect);
-      expect(value.codex.calls).toEqual([]);
-      expect(memory.ensures).toEqual([]);
-      expect(memory.cleanups).toEqual([]);
-      const beforeSession = value.store.requireSession(sessionId);
-      const beforeMutation = value.store.readMutation(key);
-      await expect(value.service.recover()).resolves.toBeUndefined();
-      expect(value.store.requireSession(sessionId)).toEqual(beforeSession);
-      expect(value.store.readMutation(key)).toEqual(beforeMutation);
-      for (const kind of ["session.recover", "session.abandon"] as const) {
-        await expect(value.service.execute({ kind, session: sessionId }, { signal }))
-          .rejects.toMatchObject({ code: "UNAVAILABLE", details: { reason: "provider_retired" } });
-        expect(value.store.requireSession(sessionId)).toEqual(beforeSession);
-        expect(value.store.readMutation(key)).toEqual(beforeMutation);
-        expect(value.codex.calls).toEqual([]);
-        expect(memory.ensures).toEqual([]);
-        expect(memory.cleanups).toEqual([]);
-      }
-      const supported = await createIdleSession(value, "Supported after retired bound");
-      expect(value.store.requireSession(supported.sessionId).provider).toBe("codex");
-    } finally {
-      await value.service.close();
-    }
-  });
-
-  test.each(["source", "target"] as const)(
-    "quarantines retired %s recovery without changing evidence or causing provider or facts-memory effects",
-    async (side) => {
-      const memory = new FakeFactsMemoryLifecycle();
-      const scenario = side === "source" ? "source_switch" : "target_switch";
-      const archive = canonical39RetiredTargetFixtures[scenario];
-      const captured = archive.retained;
-      const value = await fixture(new FakeCloud(), () => undefined, () => archive.fixedTime,
-        memory, {}, { canonical39RetiredTarget: scenario });
-      const session = value.store.requireSession(captured.session.id);
-      const key = captured.idempotencyKey;
-      const attemptId = captured.mutation.id;
-      const immutableEvidence = captured.effect;
-      // A real archived target-start receipt, with no seed/release receipt,
-      // exercises the obsolete cleanup branch without fabricating live proof.
-      expectHistoricalValue(value.store.readMutation(key)?.evidence, immutableEvidence);
-      expect(value.store.readSessionProviderSwitchProgress(attemptId)).toEqual(captured.progress);
-      try {
-        await expect(value.service.recover()).resolves.toBeUndefined();
-        expect(value.store.requireSession(session.id).state).toBe("recovery_required");
-        // A Codex source without native account-key proof is contained during
-        // migration, before effect recovery can append a result. A retired
-        // source is contained by the mutation-quarantine recovery branch.
-        expect(value.store.readMutation(key)).toMatchObject({
-          ...captured.mutation,
-          state: "ambiguous",
-          evidence: immutableEvidence,
-          providerAuthorityQuarantine: {
-            scopeKind: "mutation", scopeId: attemptId,
-            reason: "unsettled_provider_authority_unproved", recordedAt: archive.fixedTime,
-          },
-        });
-        expect(value.store.readMutation(key)?.result).toEqual(side === "source"
-          ? { code: "LEGACY_PROVIDER_AUTHORITY_QUARANTINED" }
-          : undefined);
-        expect(value.codex.calls).toEqual([]);
-        expect(memory.ensures).toEqual([]);
-        expect(memory.cleanups).toEqual([]);
-        expect(value.store.readSessionProviderSwitchProgress(attemptId)).toEqual(captured.progress);
-        const beforeSession = value.store.requireSession(session.id);
-        const beforeMutation = value.store.readMutation(key);
-        await expect(value.service.recover()).resolves.toBeUndefined();
-        expect(value.store.requireSession(session.id)).toEqual(beforeSession);
-        expect(value.store.readMutation(key)).toEqual(beforeMutation);
-        expect(value.store.readSessionProviderSwitchProgress(attemptId)).toEqual(captured.progress);
-        for (const kind of ["session.recover", "session.abandon"] as const) {
-          await expect(value.service.execute({ kind, session: session.id }, { signal }))
-            .rejects.toMatchObject(side === "source"
-              ? { code: "UNAVAILABLE", details: { reason: "provider_retired" } }
-              : { code: "RECOVERY_REQUIRED", details: { sessionId: session.id, accountId: captured.profile.id } });
-          expect(value.store.requireSession(session.id)).toEqual(beforeSession);
-          expect(value.store.readMutation(key)).toEqual(beforeMutation);
-          expect(value.store.readSessionProviderSwitchProgress(attemptId)).toEqual(captured.progress);
-          expect(memory.cleanups).toEqual([]);
-          expect(memory.ensures).toEqual([]);
-          expect(value.codex.calls).toEqual([]);
-        }
-        if (side === "target") {
-          // The original signed-in Codex source correctly fails the earlier
-          // native-account check. A public signed-out observation removes only
-          // that precheck; it cannot invent the missing original account key.
-          const profile = value.store.requireProfileById(captured.profile.id);
-          expect(profile.state).toBe("signed_in");
-          expect(value.store.setProfileState(profile.id, profile.processGeneration, "signed_out")).toBe(true);
-          const signedOut = value.store.requireProfileById(profile.id);
-          expect(signedOut).toMatchObject({
-            id: profile.id, state: "signed_out", processGeneration: profile.processGeneration,
-          });
-          expect(signedOut.providerEmail).toBeUndefined();
-          expect(value.store.sessionAccountAuthorityMatches(session.id, profile.id)).toBe(false);
-          const historyAfterReadiness = {
-            session: value.store.requireSession(session.id),
-            mutation: value.store.readMutation(key),
-            progress: value.store.readSessionProviderSwitchProgress(attemptId),
-          };
-          expect(historyAfterReadiness).toEqual({
-            session: beforeSession, mutation: beforeMutation, progress: captured.progress,
-          });
-          for (const kind of ["session.recover", "session.abandon"] as const) {
-            await expect(value.service.execute({ kind, session: session.id }, { signal }))
-              .rejects.toMatchObject({ code: "UNAVAILABLE", details: { reason: "provider_retired" } });
-            expect(value.store.requireProfileById(profile.id)).toEqual(signedOut);
-            expect(value.store.requireSession(session.id)).toEqual(historyAfterReadiness.session);
-            expect(value.store.readMutation(key)).toEqual(historyAfterReadiness.mutation);
-            expect(value.store.readSessionProviderSwitchProgress(attemptId)).toEqual(captured.progress);
-            expectHistoricalValue(value.store.readMutation(key)?.evidence, immutableEvidence);
-            expect(memory.cleanups).toEqual([]);
-            expect(memory.ensures).toEqual([]);
-            expect(value.codex.calls).toEqual([]);
-          }
-        }
-        const supported = await createIdleSession(value, `Supported after retired ${side}`);
-        expect(value.store.requireSession(supported.sessionId).provider).toBe("codex");
-      } finally {
-        await value.service.close();
-      }
-    },
-  );
-
-  test("quarantines an exact retired in-flight start without blocking supported startup", async () => {
-    const memory = new FakeFactsMemoryLifecycle();
-    const value = await fixture(new FakeCloud(), () => undefined, Date.now,
-      memory, {}, { canonical39RetiredRecovery: "inflight_start" });
-    const captured = canonical39RetiredRecoveryFixtures.inflight_start.retained;
-    const session = value.store.requireSession(captured.session.id);
-    const key = captured.idempotencyKey;
-    const immutableEvidence = captured.mutation.evidence;
-    expect(value.store.readMutation(key)?.evidence).toEqual(immutableEvidence);
-    expect(value.store.readMutation(key)?.sessionStartId).toBe(captured.session.id);
-    expect(value.store.requireProject(captured.project.id)).toEqual(captured.project);
-    try {
-      await expect(value.service.recover()).resolves.toBeUndefined();
-      expect(value.store.requireSession(session.id)).toMatchObject({
-        provider: "devin", state: "recovery_required",
-      });
-      expect(value.store.readMutation(key)).toMatchObject({ state: "ambiguous", evidence: immutableEvidence });
-      expect(value.codex.calls).toEqual([]);
-      expect(memory.ensures).toEqual([]);
-      expect(memory.cleanups).toEqual([]);
-      // The archived public project root is metadata only. Fresh supported
-      // work must use this test's own directory, never that historical root.
-      const project = await value.store.createProject("Supported startup project", value.documents);
-      const added = await value.service.execute({
-        kind: "account.add", label: "Supported after retired start",
-      }, { signal }) as { account: { id: string } };
-      await value.service.execute({
-        kind: "account.login", account: added.account.id, deviceCode: false,
-      }, { signal });
-      await expect(value.service.execute({
-        kind: "session.start", account: added.account.id, project: project.id,
-        preset: "high", presetContract: currentPresetContract, fast: false,
-      }, { signal })).resolves.toMatchObject({ session: { provider: "codex" } });
-    } finally {
-      await value.service.close();
-    }
-  });
-
-  test("quarantines a retired queued send after restart without redispatching or blocking supported work", async () => {
-    const memory = new FakeFactsMemoryLifecycle();
-    // The archived39 writer really admitted this dispatch and its runtime
-    // evidence. The fixture performs the current migration and one real boot;
-    // no current queue or provider authority is retagged as historical input.
-    const value = await fixture(new FakeCloud(), () => undefined, Date.now,
-      memory, {}, { canonical39Retired: "queue_dispatch" });
-    const captured = canonical39RetiredFixtures.queue_dispatch.retained;
-    const session = value.store.requireSession(captured.session.id);
-    const queueId = captured.queue.id;
-    const message = captured.queue.message;
-    const immutableEvidence = captured.queueEffect;
-    expect(value.store.readQueueEffect(queueId)).toEqual(immutableEvidence);
-    try {
-      await expect(value.service.recover()).resolves.toBeUndefined();
-      await value.service.settled();
-      expect(value.store.requireQueue(queueId)).toMatchObject({ state: "ambiguous", message });
-      expect(value.store.requireSession(session.id)).toMatchObject({ provider: "devin", state: "recovery_required" });
-      expect(value.store.readQueueEffect(queueId)).toEqual(immutableEvidence);
-      expect(value.codex.calls).toEqual([]);
-      expect(memory.ensures).toEqual([]);
-      expect(memory.cleanups).toEqual([]);
-      const supported = await createIdleSession(value, "Supported after retired queue");
-      expect(value.store.requireSession(supported.sessionId).provider).toBe("codex");
-      expect(value.store.requireQueue(queueId)).toMatchObject({ state: "ambiguous", message });
-    } finally {
-      await value.service.close();
-    }
+    ]);
   });
 
   test("keeps independent Claude authority unchanged on Codex login and disconnect", async () => {

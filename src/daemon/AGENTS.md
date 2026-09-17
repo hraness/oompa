@@ -4,6 +4,7 @@
 - One session has one exact provider binding at a time. A durable switch journal alone may replace that binding; existing effects and interactions retain their original authority. The service selects the captured provider's `SessionRuntimePort` for start, turns, steering, interrupt, projection reads and interactions. Provider facts use one neutral timeline vocabulary.
 - The Unix socket transports one bounded authenticated request at a time.
 - The explicit live-acceptance daemon composition exposes a structural observer for actual personal-provider children. Its acceptance implementation and bounded status policy live under `scripts/`; the reusable exact-child adapter lives under `src/claude/`.
+- `devin-runtime-adapter.ts` implements the neutral seam for the pinned `devin acp` server on top of `src/devin/`. It is a constructed port with its own tests; the service does not select it until the Devin plan's third phase lifts the retired-provider refusals.
 - Autorespond decides who answers an approval: the protocol path answers provider requests, the prose path answers an assistant turn that asks only for consent through the responder port.
 - Gateway key custody keeps the responder credential in one user-only file, never in a journal, log, or projection.
 - Attachment ingest resolves a filesystem path into local content-addressed custody; attachment resolution turns a message's digest references back into bytes for the provider adapters.

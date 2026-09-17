@@ -760,15 +760,18 @@ describe("CLI rendering", () => {
     expect(json.stdout.join("")).not.toMatch(/providerEmail|providerPlan|updatedAt|state/u);
   });
 
-  test("renders retired Devin history without suggesting login or fabricating usage", () => {
+  test("renders Devin auth and explicit unknown account allowance", () => {
     const accountId = `acct_${"9".repeat(32)}`;
     const data = {
-      account: { id: accountId, label: "Retired history" },
-      provider: "devin",
-      status: "retired",
+      account: { id: accountId, label: "Devin private" },
+      authentication: { provider: "devin", signedIn: false },
+      nextCommand: `oompa account login ${accountId} --provider devin`,
       providerGeneration: 2,
-      credentialAction: "none",
-      diagnostic: "Devin support has been removed. Existing credentials are unchanged.",
+      usage: {
+        allowance: "unknown",
+        reason: "Devin ACP reports context and optional cumulative session cost, but exposes no account allowance or reset window.",
+        source: "devin_acp",
+      },
     } as const;
     const human = capture();
     renderSuccess(
@@ -778,14 +781,16 @@ describe("CLI rendering", () => {
       human.output,
     );
     expect(human.stdout.join("")).toBe([
-      "Devin: retired (local history and login cleanup only)",
-      "Label: Retired history",
+      "Devin: signed out",
+      "Label: Devin private",
       `ID: ${accountId}`,
       "Provider generation: 2",
-      data.diagnostic,
+      `Next: oompa account login ${accountId} --provider devin`,
+      "Account allowance: unknown",
+      "  Devin ACP reports context and optional cumulative session cost, but exposes no account allowance or reset window.",
       "",
     ].join("\n"));
-    expect(human.stdout.join("")).not.toMatch(/signed in|signed out|Account allowance|oompa account login /u);
+    expect(human.stdout.join("")).not.toContain("Account: unknown");
     const json = capture();
     renderSuccess({ kind: "account.show", account: accountId, provider: "devin" }, data, true, json.output);
     expect(JSON.parse(json.stdout.join(""))).toEqual({
@@ -807,7 +812,59 @@ describe("CLI rendering", () => {
     );
     expect(recovery.stdout.join("")).toContain("Recovery: required");
     expect(recovery.stdout.join("")).toContain(`Only after confirming the original Devin child exited: ${abandonCommand}`);
-    expect(recovery.stdout.join("")).not.toMatch(/signed in|signed out|Account allowance|oompa account login /u);
+  });
+
+  test("names the local Devin usage source without claiming an unobserved value", () => {
+    const accountId = `acct_${"8".repeat(32)}`;
+    const usageSource = {
+      source: "devin_usage_panel",
+      provider: "devin",
+      scope: "local_only",
+      persisted: false,
+      profileId: accountId,
+      processGeneration: 2,
+    } as const;
+    const data = {
+      account: { id: accountId, label: "Local Devin" },
+      authentication: { provider: "devin", signedIn: true },
+      providerGeneration: 2,
+      usageSource,
+    } as const;
+    const human = capture();
+    renderSuccess(
+      { kind: "account.show", account: accountId, provider: "devin" },
+      data,
+      false,
+      human.output,
+    );
+    expect(human.stdout.join("")).toBe([
+      "Devin: signed in",
+      "Label: Local Devin",
+      `ID: ${accountId}`,
+      "Provider generation: 2",
+      "Usage source: devin_usage_panel (local only, not stored)",
+      "",
+    ].join("\n"));
+    // Naming a source is not observing one: no percentage, reset instant or
+    // allowance is rendered from a read this command did not make.
+    expect(human.stdout.join("")).not.toMatch(/Account allowance|remaining|resets/u);
+
+    // `--json` stays additive: the payload is echoed unchanged.
+    const json = capture();
+    renderSuccess({ kind: "account.show", account: accountId, provider: "devin" }, data, true, json.output);
+    expect(JSON.parse(json.stdout.join(""))).toEqual({
+      command: "account.show", data, ok: true, version: 1,
+    });
+
+    // A payload that claims persistence is not this source and renders no row.
+    const persisted = capture();
+    renderSuccess(
+      { kind: "account.show", account: accountId, provider: "devin" },
+      { ...data, usageSource: { ...usageSource, persisted: true } },
+      false,
+      persisted.output,
+    );
+    expect(persisted.stdout.join("")).not.toContain("Usage source:");
   });
 
   test("renders Claude recovery and acknowledged local abandon truthfully", () => {

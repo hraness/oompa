@@ -74,7 +74,7 @@ describe("attachment custody immutable integrity", () => {
     const f = await fixture();
     const request = f.input([]);
     const prepared = f.store.prepareSessionInputMutation(request);
-    expect(f.db.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+    expect(f.db.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     expect(f.db.query("SELECT COUNT(*) AS n FROM attachment_custody_slots").get()).toEqual({ n: 0 });
     expect(f.cleanup()).toEqual({ kind: "absent" });
     expect(f.reopen(true).readMutation(f.input([]).idempotencyKey)).toBeNull();
@@ -177,7 +177,7 @@ describe("attachment custody immutable integrity", () => {
       expect(() => f.reopen(readonly)).toThrow("PEER_SESSION_CANCELLATION_UNPROVEN");
       expect(snapshot()).toEqual(before);
     }
-    expect(f.db.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+    expect(f.db.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
   });
 
   test("a missing parent cannot free its live slot or its original global key", async () => {

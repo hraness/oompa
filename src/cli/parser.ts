@@ -14,11 +14,11 @@ import {
   providerSwitchRequiresPresetContract,
   sharedActiveCodexPresetContract,
   type AdoptableProvider,
-  supportedPresetSchema,
-  supportedProviderSchema,
   type PresetContract,
-  type SupportedPreset,
-  type SupportedProvider,
+  presetSchema,
+  providerSchema,
+  type Preset,
+  type Provider,
 } from "../domain/presets";
 import { ACCOUNT_USAGE_HISTORY_PAGE_LIMIT } from "../domain/usage-metrics";
 import { usageProviderSchema } from "../domain/provider-usage";
@@ -156,6 +156,14 @@ export type ClaudeAccountAuthCliInvocation = Readonly<{
   replayCommand: string;
 }>;
 
+/** Devin owns the foreground interaction; the daemon owns its durable attempt. */
+export type DevinAccountAuthCliInvocation = Readonly<{
+  command: Extract<LocalCommand, { kind: "account.devin-login.prepare" }>;
+  json: boolean;
+  kind: "account.devin-login";
+  replayCommand: string;
+}>;
+
 export type InteractionResolveCommand = Extract<LocalCommand, { kind: "interaction.resolve" }>;
 
 export type CliInvocation =
@@ -172,6 +180,7 @@ export type CliInvocation =
   | ProtectedInteractionInspectCliInvocation
   | AccountLoginCliInvocation
   | ClaudeAccountAuthCliInvocation
+  | DevinAccountAuthCliInvocation
   | SessionAttachmentCliInvocation
   | SessionEventFollowCliInvocation
   | SessionEventWatchCliInvocation
@@ -207,11 +216,11 @@ export type RemoteCliCommand =
       session: string;
     }>
   | Readonly<{ kind: "remote.stop"; session: string }>
-  | Readonly<{ kind: "remote.preset"; preset: SupportedPreset; session: string }>
+  | Readonly<{ kind: "remote.preset"; preset: Preset; session: string }>
   | Readonly<{
       kind: "remote.provider";
-      preset?: SupportedPreset;
-      provider: SupportedProvider;
+      preset?: Preset;
+      provider: Provider;
       session: string;
     }>
   | Readonly<{ enabled: boolean; kind: "remote.fast"; session: string }>;
@@ -279,7 +288,7 @@ Mutation safety:
   --preset-contract <1|2>   Replay a source-sensitive Codex session start or provider switch.
 
 Platform:
-  Codex provider commands run on macOS and Linux. Claude login, status,
+  Codex and Devin provider commands run on macOS and Linux. Claude login, status,
   sessions, and provider switches require Linux; macOS refuses before launching Claude.
 
 Recommended profiles:
@@ -287,6 +296,7 @@ Recommended profiles:
   high        Astra Max       (codex)
   ultra       Astra Ultra     (codex)
   fable-max   Claude Fable    (claude)
+  astra       GPT-6 Astra     (devin)
 
 Run \`oompa <group> --help\` or \`oompa help <group> [<command>]\` for command examples.`;
 
@@ -361,15 +371,13 @@ Examples:
 
 Usage:
   oompa account add <label>
-  oompa account login <profile> [--provider <codex|claude>] [--device-code] [--manual-browser] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]
+  oompa account login <profile> [--provider <codex|claude|devin>] [--device-code] [--manual-browser] [--handoff-file <absolute-path>] [--idempotency-key <uuid>]
   oompa account login-cancel <profile> [--provider codex]
   oompa account login-cancel <profile> --provider claude --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited
   oompa account login-cancel <profile> --provider devin --attempt-id <attempt-id> --provider-generation <n> --idempotency-key <uuid> --acknowledge-child-exited
-    Retired-provider cleanup only; does not launch, stop, or authenticate Devin.
   oompa account logout <profile>
   oompa account list [--provider <codex|claude>] [--json]
-  oompa account show <profile> [--provider <codex|claude>]
-  oompa account show <profile> --provider devin  (retired local history and cleanup only)
+  oompa account show <profile> [--provider <codex|claude|devin>]
   oompa account usage [profile] [--refresh]
   oompa account usage-history <profile> [--from <UTC-RFC3339>] [--through <UTC-RFC3339>] [--limit <1..100>] [--cursor <cursor>]
 
@@ -385,13 +393,14 @@ Claude browser selection:
   keep normal sessions unchanged, and choose the intended account. Claude only.
 
 Platform:
-  Codex account commands run on macOS and Linux. Claude login and status
+  Codex and Devin account commands run on macOS and Linux. Claude login and status
   require Linux; macOS refuses before launching Claude.
 
 Examples:
   oompa account add personal
   oompa account login personal --device-code --handoff-file /private/path/login.json
   oompa account login personal --provider claude --manual-browser
+  oompa account login personal --provider devin --manual-token-flow
   oompa account list --provider codex
   oompa account list --provider claude --json
   oompa account show personal --provider claude
@@ -514,7 +523,7 @@ Usage:
   oompa session watch <session> [--cursor <cursor>] [--jsonl]
   oompa session events <session> [--cursor <cursor>] [--limit <1..200>] [--wait-ms <0..30000>] [--json|--jsonl|--follow]
   oompa session interactions <session> [--pending] [--limit <1..100>] [--cursor <cursor>]
-  oompa session start <account> [--project <project>] [--provider <codex|claude>] [--preset <low|high|ultra|fable-max>] [--fast] [--idempotency-key <uuid> [--preset-contract <1|2>]]
+  oompa session start <account> [--project <project>] [--provider <codex|claude|devin>] [--preset <low|high|ultra|fable-max|astra>] [--fast] [--idempotency-key <uuid> [--preset-contract <1|2>]]
   oompa session send|queue|steer <session> [--attach <path>]... <message>
   oompa session stop|recover|abandon <session>
   oompa session archive|unarchive <session>
@@ -525,7 +534,7 @@ Usage:
   oompa session rename <session> <name>
   oompa session note get|edit|clear <session>
   oompa session note set <session> <note>
-  oompa session preset <session> <low|high|ultra|fable-max>
+  oompa session preset <session> <low|high|ultra|fable-max|astra>
   oompa session switch <session> --provider <codex|claude> [--preset <low|high|ultra|fable-max>] [--account <account>] [--idempotency-key <uuid> [--preset-contract <1|2>]]
   oompa session export <session> [--format <trajectory|json>] [--out <path>]
   oompa session fast <session> <on|off>
@@ -598,7 +607,7 @@ Usage:
   oompa remote send|queue|steer <cloud-session> <message>
   oompa remote stop <cloud-session>
   oompa remote resolve <cloud-session> --interaction <uuid> --revision <n> --decision <decline>
-  oompa remote preset <cloud-session> <low|high|ultra|fable-max>
+  oompa remote preset <cloud-session> <low|high|ultra|fable-max|astra>
   oompa remote provider <cloud-session> <codex|claude> [--preset <low|high|ultra|fable-max>]
   oompa remote fast <cloud-session> <on|off>
   oompa remote allow|deny <device-commands|account-linking>
@@ -850,11 +859,11 @@ const repeatedOption = (cursor: Cursor, name: string, limit: number): readonly s
   }
 };
 
-const selectedProvider = (value: string | undefined): SupportedProvider => {
+const selectedProvider = (value: string | undefined): Provider => {
   if (value === undefined) throw new CliUsageError("Missing value for --provider.");
-  const parsed = supportedProviderSchema.safeParse(value);
+  const parsed = providerSchema.safeParse(value);
   if (!parsed.success) {
-    throw new CliUsageError(`Provider must be one of: ${supportedProviderSchema.options.map((entry) => `\`${entry}\``).join(", ")}.`);
+    throw new CliUsageError(`Provider must be one of: ${providerSchema.options.map((entry) => `\`${entry}\``).join(", ")}.`);
   }
   return parsed.data;
 };
@@ -870,10 +879,10 @@ const selectedAdoptableProvider = (value: string | undefined): AdoptableProvider
   return parsed.data;
 };
 
-const selectedPreset = (value: string): SupportedPreset => {
-  const parsed = supportedPresetSchema.safeParse(value);
+const selectedPreset = (value: string): Preset => {
+  const parsed = presetSchema.safeParse(value);
   if (!parsed.success) {
-    throw new CliUsageError(`Preset must be one of: ${supportedPresetSchema.options.map((entry) => `\`${entry}\``).join(", ")}.`);
+    throw new CliUsageError(`Preset must be one of: ${presetSchema.options.map((entry) => `\`${entry}\``).join(", ")}.`);
   }
   return parsed.data;
 };
@@ -1083,6 +1092,18 @@ export const claudeAccountLoginAbandonCommand = (
   "--acknowledge-child-exited",
 ].join(" ");
 
+export const devinAccountLoginCommand = (
+  account: string,
+  manualTokenFlow: boolean,
+  idempotencyKey?: string,
+): string => [
+  "oompa account login",
+  shellArgument(account),
+  "--provider devin",
+  ...(manualTokenFlow ? ["--manual-token-flow"] : []),
+  ...(idempotencyKey === undefined ? [] : ["--idempotency-key", idempotencyKey]),
+].join(" ");
+
 export const devinAccountLoginAbandonCommand = (
   account: string,
   attemptId: string,
@@ -1188,7 +1209,7 @@ const parseAccount = (
   cursor: Cursor,
   idempotencyKey: string | undefined,
   json: boolean,
-): LocalCommand | AccountLoginCliInvocation | ClaudeAccountAuthCliInvocation => {
+): LocalCommand | AccountLoginCliInvocation | ClaudeAccountAuthCliInvocation | DevinAccountAuthCliInvocation => {
   const action = take(cursor, "account action");
   switch (action) {
     case "list": {
@@ -1200,9 +1221,7 @@ const parseAccount = (
     }
     case "add": { const label = remainder(cursor, "account label"); return command({ kind: "account.add", label }); }
     case "show": {
-      const requestedProvider = option(cursor, "--provider") ?? "codex";
-      // Retired-provider inspection exposes local history and pending cleanup only.
-      const provider = requestedProvider === "devin" ? "devin" : selectedProvider(requestedProvider);
+      const provider = selectedProvider(option(cursor, "--provider") ?? "codex");
       const account = take(cursor, "account");
       finish(cursor);
       if (provider !== "codex") {
@@ -1216,6 +1235,7 @@ const parseAccount = (
     case "login": {
       const manualBrowser = flag(cursor, "--manual-browser");
       const deviceCode = flag(cursor, "--device-code");
+      const manualTokenFlow = flag(cursor, "--manual-token-flow");
       const handoffFile = option(cursor, "--handoff-file");
       const provider = selectedProvider(option(cursor, "--provider") ?? "codex");
       const account = take(cursor, "account");
@@ -1224,6 +1244,9 @@ const parseAccount = (
         const browserMode = manualBrowser ? "owner_manual" : "provider_default";
         if (deviceCode) {
           throw new CliUsageError("Claude Code does not expose a device-code login. Run the foreground Claude login without --device-code.");
+        }
+        if (manualTokenFlow) {
+          throw new CliUsageError("--manual-token-flow is available only for Devin login.");
         }
         if (handoffFile !== undefined) {
           throw new CliUsageError("Claude login is a foreground terminal flow and does not accept --handoff-file.");
@@ -1243,6 +1266,36 @@ const parseAccount = (
           kind: "account.claude-login",
           replayCommand: claudeAccountLoginCommand(parsed.account, parsed.idempotencyKey, browserMode),
         };
+      }
+      if (provider === "devin") {
+        if (deviceCode) {
+          throw new CliUsageError("Devin CLI does not expose a device-code login. Use --manual-token-flow for its headless token handoff.");
+        }
+        if (handoffFile !== undefined) {
+          throw new CliUsageError("Devin login is a foreground terminal flow and does not accept --handoff-file.");
+        }
+        const parsed = command({
+          kind: "account.devin-login.prepare",
+          account,
+          idempotencyKey: idempotencyKey ?? randomUUID(),
+          manualTokenFlow,
+        });
+        if (parsed.kind !== "account.devin-login.prepare") {
+          throw new CliUsageError("Devin account login command is invalid.");
+        }
+        return {
+          command: parsed,
+          json,
+          kind: "account.devin-login",
+          replayCommand: devinAccountLoginCommand(
+            parsed.account,
+            parsed.manualTokenFlow,
+            parsed.idempotencyKey,
+          ),
+        };
+      }
+      if (manualTokenFlow) {
+        throw new CliUsageError("--manual-token-flow is available only for Devin login.");
       }
       if (manualBrowser) throw new CliUsageError("--manual-browser is supported only for foreground Claude login.");
       if (handoffFile !== undefined && (!isAbsolute(handoffFile) || resolve(handoffFile) !== handoffFile)) {
@@ -1271,9 +1324,7 @@ const parseAccount = (
       };
     }
     case "login-cancel": {
-      const requestedProvider = option(cursor, "--provider") ?? "codex";
-      // The sole retired-provider mutation acknowledges an existing child has exited.
-      const provider = requestedProvider === "devin" ? "devin" : selectedProvider(requestedProvider);
+      const provider = selectedProvider(option(cursor, "--provider") ?? "codex");
       if (provider !== "codex") {
         const acknowledgeChildExited = flag(cursor, "--acknowledge-child-exited");
         const attemptId = option(cursor, "--attempt-id");
@@ -1855,7 +1906,7 @@ const parseSession = (
     case "recover": { const session = take(cursor, "session"); finish(cursor); return { kind: "session.recover", session }; }
     case "abandon": { const session = take(cursor, "session"); finish(cursor); return { kind: "session.abandon", session }; }
     case "note": return parseSessionNote(cursor);
-    case "preset": { const session = take(cursor, "session"); const preset = selectedPreset(take(cursor, "preset")); finish(cursor); return command({ kind: "session.preset", session, preset }); }
+    case "preset": { const session = take(cursor, "session"); const preset = take(cursor, "preset"); finish(cursor); return command({ kind: "session.preset", session, preset }); }
     case "export": {
       const format = option(cursor, "--format") ?? "trajectory";
       const out = option(cursor, "--out");
@@ -2614,6 +2665,7 @@ export function parseCli(argv: readonly string[], cwd = process.cwd()): CliInvoc
     if (
       account.kind === "account.login-handoff"
       || account.kind === "account.claude-login"
+      || account.kind === "account.devin-login"
     ) return account;
     parsed = account;
   }

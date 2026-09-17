@@ -18,7 +18,6 @@ import { usageOverview } from "../product/usage";
 const now = 1_780_000_000_000;
 const noop = () => undefined;
 const refuse = async (): Promise<never> => { throw new Error("Browser fixture has no command authority."); };
-const retired = () => new URLSearchParams(location.search).get("view") === "retired";
 
 export const browserHead: SessionHead = {
   compactHeadSequence: 2, compactStreamEpoch: 1, createdAt: now,
@@ -45,9 +44,8 @@ const view: SessionModelView = {
   ],
   historyLoading: false, liveModel: model, metadata: { archived: false, name: model.title, note: null }, model,
 };
-export const useSessionModel: typeof Models.useSessionModel = () => retired()
-  ? { ...view, metadata: { ...view.metadata, retiredProvider: "devin" } }
-  : new URLSearchParams(location.search).get("view") === "session-long" ? longView : view;
+export const useSessionModel: typeof Models.useSessionModel = () =>
+  new URLSearchParams(location.search).get("view") === "session-long" ? longView : view;
 
 const longView: SessionModelView = {
   ...view,

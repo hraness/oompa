@@ -9,6 +9,7 @@ import { z } from "zod";
 import { DIRECT_WIRE_MARKERS } from "@hraness/direct/tooling/bundle-boundary";
 
 import {
+  OOMPA_MAILING_TURNSTILE_SITEKEY_ENV,
   publicContent,
   renderLlmsText,
   renderPrivacyMarkdown,
@@ -88,6 +89,27 @@ export function resolveOompaAnalyticsProjectToken(
     );
   }
   return projectToken;
+}
+
+const turnstileSitekeyPattern = /^[A-Za-z0-9_-]{10,128}$/u;
+
+export function resolveOompaMailingTurnstileSitekey(
+  environment: Readonly<Record<string, string | undefined>>,
+): string {
+  if (environment.VERCEL_ENV !== "production") return "";
+
+  const sitekey = environment[OOMPA_MAILING_TURNSTILE_SITEKEY_ENV]?.trim();
+  if (sitekey === undefined || sitekey.length === 0) {
+    throw new Error(
+      `${OOMPA_MAILING_TURNSTILE_SITEKEY_ENV} must be configured for Vercel Production.`,
+    );
+  }
+  if (!turnstileSitekeyPattern.test(sitekey)) {
+    throw new Error(
+      `${OOMPA_MAILING_TURNSTILE_SITEKEY_ENV} must be a valid public Turnstile site key.`,
+    );
+  }
+  return sitekey;
 }
 
 const trackedTextOutputs = (repositoryRoot: string): readonly TextOutput[] => [
@@ -378,6 +400,7 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
   }
   const environment = options.environment ?? emptyBuildEnvironment;
   const analyticsProjectToken = resolveOompaAnalyticsProjectToken(environment);
+  const turnstileSitekey = resolveOompaMailingTurnstileSitekey(environment);
   const fonts = await snapshotSiteFonts(dirname(designKitFontsStylesPath));
   const sourceRoot = await realpath(options.sourceRoot ?? options.repositoryRoot);
   const marketingPreset = await snapshotMarketingPreset(join(sourceRoot, "site/vendor/marketing-preset"));
@@ -393,10 +416,21 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
   const allFonts = [...fonts.inputs, ...presetFonts];
   const presetImages = [...marketingPreset.files].filter(([path]) => path.endsWith(".svg"))
     .map(([path, bytes]) => ({ path, bytes }));
-  const compiled = await buildSiteStylex({
-    sourceRoot,
-    fonts: allFonts, images: presetImages,
-  });
+  // The sealed renderer is imported in-process; the footer's public Turnstile
+  // site key is ambient build input, exactly like NODE_ENV.
+  const previousTurnstile = process.env[OOMPA_MAILING_TURNSTILE_SITEKEY_ENV];
+  if (turnstileSitekey === "") Reflect.deleteProperty(process.env, OOMPA_MAILING_TURNSTILE_SITEKEY_ENV);
+  else process.env[OOMPA_MAILING_TURNSTILE_SITEKEY_ENV] = turnstileSitekey;
+  let compiled: Awaited<ReturnType<typeof buildSiteStylex>>;
+  try {
+    compiled = await buildSiteStylex({
+      sourceRoot,
+      fonts: allFonts, images: presetImages,
+    });
+  } finally {
+    if (previousTurnstile === undefined) Reflect.deleteProperty(process.env, OOMPA_MAILING_TURNSTILE_SITEKEY_ENV);
+    else process.env[OOMPA_MAILING_TURNSTILE_SITEKEY_ENV] = previousTurnstile;
+  }
   assert.deepEqual(await checkLanternMaterialSnapshot(materialRoot), material, "Lantern source changed during static compilation");
   // Retain failed/completed private receipts under the same ignored build root
   // as the static compiler. Only the builder's verified public projection moves.
@@ -477,6 +511,16 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+
+  // The /pr/ page renders this committed snapshot; publish the raw dataset
+  // beside it so the feed stays inspectable without the markup.
+  for (const name of ["snapshot.json", "history.json"]) {
+    const source = join(sourceRoot, "pr/data", name);
+    const parsed: unknown = JSON.parse(await readFile(source, "utf8"));
+    const destination = join(options.repositoryRoot, "dist/site/pr/data", name);
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, `${JSON.stringify(parsed)}\n`, { flag: "wx", mode: 0o644 });
   }
   return mismatches;
 };

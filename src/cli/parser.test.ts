@@ -9,6 +9,7 @@ import {
   claudeAccountLoginCommand,
   completeProtectedAuthLogin,
   devinAccountLoginAbandonCommand,
+  devinAccountLoginCommand,
   deviceMutationReplayCommand,
   completeProtectedInteraction,
   helpGroupNames,
@@ -190,27 +191,56 @@ describe("CLI parser", () => {
     ]) expect(() => parseCli(argv)).toThrow(CliUsageError);
   });
 
-  test("retires Devin login while preserving exact local history and cleanup commands", () => {
+  test("keeps Devin login and status in its provider-owned foreground flow", () => {
+    const generated = parseCli(["account", "login", "personal", "--provider", "devin"]);
+    expect(generated).toMatchObject({
+      command: {
+        account: "personal",
+        kind: "account.devin-login.prepare",
+        manualTokenFlow: false,
+      },
+      json: false,
+      kind: "account.devin-login",
+    });
+    if (generated.kind !== "account.devin-login") throw new Error("expected Devin login");
+    expect(generated.command.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(generated.replayCommand).toBe(devinAccountLoginCommand(
+      "personal",
+      false,
+      generated.command.idempotencyKey,
+    ));
+
+    const key = "00000000-0000-4000-8000-000000000102";
+    expect(parseCli([
+      "account", "login", "personal", "--provider", "devin",
+      "--manual-token-flow", "--idempotency-key", key, "--json",
+    ])).toEqual({
+      command: {
+        account: "personal",
+        idempotencyKey: key,
+        kind: "account.devin-login.prepare",
+        manualTokenFlow: true,
+      },
+      json: true,
+      kind: "account.devin-login",
+      replayCommand: `oompa account login personal --provider devin --manual-token-flow --idempotency-key ${key}`,
+    });
     expect(parseCli(["account", "show", "personal", "--provider", "devin", "--json"]))
       .toEqual({
         command: { account: "personal", kind: "account.show", provider: "devin" },
         json: true,
         kind: "command",
       });
+
     for (const argv of [
-      ["account", "login", "personal", "--provider", "devin"],
-      ["account", "login", "personal", "--provider", "devin", "--manual-token-flow"],
       ["account", "login", "personal", "--provider", "devin", "--device-code"],
       ["account", "login", "personal", "--provider", "devin", "--handoff-file", "/private/login.json"],
       ["account", "login", "personal", "--provider", "codex", "--manual-token-flow"],
-      ["account", "login", "personal", "--provider", "claude", "--manual-token-flow"],
-      ["account", "login-cancel", "personal", "--provider", "devin"],
     ]) expect(() => parseCli(argv)).toThrow(CliUsageError);
 
-    const key = "00000000-0000-4000-8000-000000000102";
     const attemptId = `attempt_${"b".repeat(32)}`;
-    const argv = devinAccountLoginAbandonCommand("personal", attemptId, key, 8).split(" ").slice(1);
-    expect(parseCli(argv)).toEqual({
+    const abandon = devinAccountLoginAbandonCommand("personal", attemptId, key, 8);
+    expect(parseCli(abandon.split(" ").slice(1))).toEqual({
       command: {
         acknowledgeChildExited: true,
         account: "personal",
@@ -222,28 +252,6 @@ describe("CLI parser", () => {
       json: false,
       kind: "command",
     });
-    for (const required of ["--attempt-id", "--provider-generation", "--idempotency-key"]) {
-      const incomplete = [...argv];
-      incomplete.splice(incomplete.indexOf(required), 2);
-      expect(() => parseCli(incomplete)).toThrow(CliUsageError);
-    }
-    expect(() => parseCli(argv.filter((value) => value !== "--acknowledge-child-exited")))
-      .toThrow(CliUsageError);
-  });
-
-  test("rejects the retired provider and preset at every active CLI selection boundary", () => {
-    for (const argv of [
-      ["session", "start", "personal", "--provider", "devin"],
-      ["session", "switch", "s", "--provider", "devin"],
-      ["remote", "provider", "s", "devin"],
-    ]) expect(() => parseCli(argv)).toThrow("Provider must be one of: `codex`, `claude`.");
-    for (const argv of [
-      ["session", "start", "personal", "--preset", "astra"],
-      ["session", "switch", "s", "--provider", "codex", "--preset", "astra"],
-      ["session", "preset", "s", "astra"],
-      ["remote", "preset", "s", "astra"],
-      ["remote", "provider", "s", "codex", "--preset", "astra"],
-    ]) expect(() => parseCli(argv)).toThrow("Preset must be one of: `low`, `high`, `ultra`, `fable-max`.");
   });
 
   test("parses exact pending-login cancellation without accepting provider authority on argv", () => {
@@ -527,8 +535,10 @@ describe("CLI parser", () => {
     });
     expect(parseCli(["session", "start", "work", "--provider", "claude", "--preset", "fable-max"]))
       .toMatchObject({ command: { preset: "fable-max", provider: "claude" } });
+    expect(parseCli(["session", "start", "work", "--provider", "devin"]))
+      .toMatchObject({ command: { kind: "session.start", preset: "astra", provider: "devin" } });
     expect(() => parseCli(["session", "start", "work", "--provider", "gemini"]))
-      .toThrow("Provider must be one of: `codex`, `claude`.");
+      .toThrow("Provider must be one of: `codex`, `claude`, `devin`.");
     // The preset union is widened; the provider mismatch is refused by the
     // daemon, not by argument parsing.
     expect(parseCli(["session", "preset", "s", "fable-max"]))
@@ -539,8 +549,10 @@ describe("CLI parser", () => {
     ])).toThrow("--idempotency-key is not supported by session.preset");
     expect(parseCli(["remote", "preset", "s", "fable-max"]))
       .toMatchObject({ command: { kind: "remote.preset", preset: "fable-max" } });
+    expect(parseCli(["remote", "preset", "s", "astra"]))
+      .toMatchObject({ command: { kind: "remote.preset", preset: "astra" } });
     expect(() => parseCli(["remote", "preset", "s", "fable"]))
-      .toThrow("Preset must be one of: `low`, `high`, `ultra`, `fable-max`.");
+      .toThrow("Preset must be one of: `low`, `high`, `ultra`, `fable-max`, `astra`.");
   });
 
   test("authors and preserves the immutable source contract for rebound session starts", () => {
@@ -674,7 +686,9 @@ describe("CLI parser", () => {
     expect(() => parseCli(["session", "switch", "s"]))
       .toThrow("Missing value for --provider.");
     expect(() => parseCli(["session", "switch", "s", "--provider", "gemini"]))
-      .toThrow("Provider must be one of: `codex`, `claude`.");
+      .toThrow("Provider must be one of: `codex`, `claude`, `devin`.");
+    expect(parseCli(["session", "switch", "s", "--provider", "devin", "--preset", "astra"]))
+      .toMatchObject({ command: { kind: "session.switch", preset: "astra", provider: "devin" } });
 
     expect(parseCli(["session", "export", "s"]))
       .toMatchObject({ format: "trajectory", kind: "session.export", session: "s" });
@@ -687,8 +701,10 @@ describe("CLI parser", () => {
       .toMatchObject({ command: { kind: "remote.provider", provider: "claude", session: "s" } });
     expect(parseCli(["remote", "provider", "s", "claude", "--preset", "fable-max"]))
       .toMatchObject({ command: { kind: "remote.provider", preset: "fable-max" } });
+    expect(parseCli(["remote", "provider", "s", "devin"]))
+      .toMatchObject({ command: { kind: "remote.provider", provider: "devin", session: "s" } });
     expect(() => parseCli(["remote", "provider", "s", "gemini"]))
-      .toThrow("Provider must be one of: `codex`, `claude`.");
+      .toThrow("Provider must be one of: `codex`, `claude`, `devin`.");
   });
 
   test("parses conversation-bound session task reads with exact task IDs", () => {
@@ -2080,7 +2096,7 @@ describe("CLI help", () => {
     expect(usage).not.toMatch(/[\u2018\u2019\u201c\u201d]/u);
     expect(usage).toContain("  oompa help [<group> [<command>]]\n");
     expect(usage).toContain("Run `oompa <group> --help` or `oompa help <group> [<command>]` for command examples.");
-    expect(usage).toContain("Codex provider commands run on macOS and Linux");
+    expect(usage).toContain("Codex and Devin provider commands run on macOS and Linux");
     expect(usage).toContain("Claude login, status,\n  sessions, and provider switches require Linux");
     expect(usage).toContain("high        Astra Max       (codex)");
     expect(usage).toContain("ultra       Astra Ultra     (codex)");

@@ -95,6 +95,7 @@ describe("device command builders", () => {
     expect(defaultSessionStartPreset).toBe("ultra");
     expect(defaultSessionStartPresetForProvider("codex")).toBe("ultra");
     expect(defaultSessionStartPresetForProvider("claude")).toBe("fable-max");
+    expect(defaultSessionStartPresetForProvider("devin")).toBe("astra");
   });
 
   test("builds a session start that the daemon parser accepts", () => {
@@ -119,6 +120,7 @@ describe("device command builders", () => {
     const providerPresets = [
       ["codex", "high"],
       ["claude", "fable-max"],
+      ["devin", "astra"],
     ] as const;
     for (const [provider, preset] of providerPresets) {
       const command = accepted(sessionStartCommand({
@@ -140,18 +142,14 @@ describe("device command builders", () => {
       ["codex", "astra"],
       ["claude", "ultra"],
       ["devin", "fable-max"],
-      ["devin", "astra"],
     ] as const) {
-      const stale = {
+      expect(() => sessionStartCommand({
         accountPublicId: `acct_${provider}00001`,
         preset,
         projectPublicId: "proj_alpha000001",
         prompt: "continue",
         provider,
-      };
-      expect(() => sessionStartCommand(
-        stale as unknown as Parameters<typeof sessionStartCommand>[0],
-      )).toThrow("The device command payload is not valid.");
+      })).toThrow("The device command payload is not valid.");
     }
   });
 

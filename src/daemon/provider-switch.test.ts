@@ -1336,7 +1336,7 @@ const sessionsListHostToolCall = (input: Readonly<{
   providerThreadId: string;
   turnId: string;
 }>): OompaHostToolCall => {
-  if (input.authority.provider === "devin") throw new Error("Retired provider cannot call a host tool.");
+  if (input.authority.provider === "devin") throw new Error("A provider without host tools cannot call a host tool.");
   return {
   authority: {
     provider: input.authority.provider,
