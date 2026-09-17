@@ -814,6 +814,59 @@ describe("CLI rendering", () => {
     expect(recovery.stdout.join("")).toContain(`Only after confirming the original Devin child exited: ${abandonCommand}`);
   });
 
+  test("names the local Devin usage source without claiming an unobserved value", () => {
+    const accountId = `acct_${"8".repeat(32)}`;
+    const usageSource = {
+      source: "devin_usage_panel",
+      provider: "devin",
+      scope: "local_only",
+      persisted: false,
+      profileId: accountId,
+      processGeneration: 2,
+    } as const;
+    const data = {
+      account: { id: accountId, label: "Local Devin" },
+      authentication: { provider: "devin", signedIn: true },
+      providerGeneration: 2,
+      usageSource,
+    } as const;
+    const human = capture();
+    renderSuccess(
+      { kind: "account.show", account: accountId, provider: "devin" },
+      data,
+      false,
+      human.output,
+    );
+    expect(human.stdout.join("")).toBe([
+      "Devin: signed in",
+      "Label: Local Devin",
+      `ID: ${accountId}`,
+      "Provider generation: 2",
+      "Usage source: devin_usage_panel (local only, not stored)",
+      "",
+    ].join("\n"));
+    // Naming a source is not observing one: no percentage, reset instant or
+    // allowance is rendered from a read this command did not make.
+    expect(human.stdout.join("")).not.toMatch(/Account allowance|remaining|resets/u);
+
+    // `--json` stays additive: the payload is echoed unchanged.
+    const json = capture();
+    renderSuccess({ kind: "account.show", account: accountId, provider: "devin" }, data, true, json.output);
+    expect(JSON.parse(json.stdout.join(""))).toEqual({
+      command: "account.show", data, ok: true, version: 1,
+    });
+
+    // A payload that claims persistence is not this source and renders no row.
+    const persisted = capture();
+    renderSuccess(
+      { kind: "account.show", account: accountId, provider: "devin" },
+      { ...data, usageSource: { ...usageSource, persisted: true } },
+      false,
+      persisted.output,
+    );
+    expect(persisted.stdout.join("")).not.toContain("Usage source:");
+  });
+
   test("renders Claude recovery and acknowledged local abandon truthfully", () => {
     const accountId = `acct_${"2".repeat(32)}`;
     const attemptId = `attempt_${"3".repeat(32)}`;

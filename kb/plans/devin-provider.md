@@ -58,12 +58,15 @@ instant, not an ACU balance.
 
 ### Phase 3. Lifting refusals with append-only migrations
 
-- **Status:** Devin readmission implemented on `codex/devin-provider-20260915`
-  on top of the Phase 2 adapter: parser, storage, service, cloud-payload and
-  browser admission return under ordinary authority guards, and schema 61
-  drops the retired-provider refusal triggers while retaining historical rows
-  byte-for-byte. The `devin_usage_panel` snapshot source is not wired and
-  remains open.
+- **Status:** Complete. Readmission merged in PR #225: the parser, storage,
+  service, cloud payloads and browser selectors admit Devin under ordinary
+  authority guards, schema 61 drops the retired-provider refusal triggers while
+  retaining historical rows byte-for-byte, and removal-era
+  `retiredProvider: "devin"` metadata markers stay parseable and inert. The
+  daemon constructs `PinnedDevinRuntimeManager` in `src/cli.ts` under `dact_`
+  provider-account authority with isolated managed Devin directories, and
+  `EffectiveDevinRuntimeProfileV2` is the admitted document for the pin.
+  The `devin_usage_panel` source that PR #225 left open is closed here.
 - **Scope:** parser, storage admission guards, service, cloud payloads and
   browser selectors admit Devin again; usage snapshots gain a `devin_usage_panel`
   source recorded with the exact CLI version line and the `unknown` reason when
@@ -71,15 +74,54 @@ instant, not an ACU balance.
 - **Acceptance:** fresh and upgraded databases accept Devin while retaining
   older rows byte-for-byte; retired rows never regain execution authority;
   routing, Work and scheduled-task eligibility treat Devin explicitly.
+- **Usage-source evidence:** `src/domain/devin-usage-source.ts` holds the closed
+  `devin_usage_panel` codec and the source binding. The binding names the source
+  and its exact profile authority and process generation, and carries no quota
+  value; an observation keeps the exact `devin --version` line, the weekly and
+  optional daily used/remaining percent, each window's resolved instant with the
+  year-less text the panel rendered, and the reader's exact `unknown` reason
+  when the grammar refuses. A reading the codec cannot admit becomes `unknown`
+  with `quota_line_ambiguous` rather than a partial value. The source is
+  deliberately not a member of `providerUsageSourceSchema`, which is the
+  persisted and hosted vocabulary reaching
+  `provider_usage_observation_receipts`, the cloud usage payloads and the
+  browser: this source is `local_only` with `persisted: false`, so nothing
+  registers a hosted data surface or a cost entry, and `oompa account show`
+  renders only the source name. A type-level case proves
+  `DevinUsageObservation` from `src/devin/usage-panel.ts` satisfies the
+  structural reading the domain layer accepts, so the reader and the codec
+  cannot drift. Evidence: 6 domain tests (28 assertions) and 78 tests across
+  the domain source and `src/cli/render.test.ts` (891 assertions).
+- **Still open after this phase:** persisting a Devin observation. That needs a
+  registered data surface and its cost entry, which belongs to the hosted work,
+  not to the local source.
 
 ### Phase 4. Live acceptance
 
-- **Status:** Not started.
+- **Status:** Not started. No live-provider qualification is claimed anywhere in
+  this repository; every Devin turn, tool, approval, cancellation and
+  usage-update path is protocol- and fixture-verified only.
 - **Scope:** one bounded paid turn in a disposable isolated profile covering
   turn, tool, approval, cancellation and usage-update paths; a quota read before
   and after that turn.
+- **Procedure:** create a throwaway account profile so the run uses only the
+  managed isolated Devin home and the four XDG roots under it, never the
+  operator's `~/.local/share/devin`. Sign in inside that profile with
+  `oompa account login <profile> --provider devin`, which is a foreground
+  terminal flow. Take the first quota read through the `devin_usage_panel`
+  reader and record the observation. Start one session with
+  `oompa session start <profile> --provider devin --preset astra` and send one
+  bounded prompt that exercises a tool call, an approval decision and a
+  cancellation, and that produces at least one ACP `usage_update`. Take the
+  second quota read and record it. End the session, confirm every ACP child is
+  joined, then delete the disposable profile.
 - **Acceptance:** sanitized acceptance record bound to the exact pin and argv;
-  no credential, session identifier or raw panel retained.
+  no credential, session identifier or raw panel retained. The record keeps the
+  `devin --version` line, the exact `devin acp --model gpt-6-astra` argv, the
+  before and after `devin_usage_panel` observations, and the neutral fact kinds
+  observed — not their content.
+- **Cost:** this is the only phase that spends money. It must not run without an
+  explicit human decision to spend a Devin turn on a specific account.
 
 ## Removal record (2026-09-06)
 

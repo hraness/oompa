@@ -6,6 +6,7 @@
 - Encryption models account-data keys, device envelopes, and encrypted projections.
 - Attachments define the accepted media types, byte and count bounds, byte sniffing, the digest reference a message carries, and how a text-ish file folds into a prompt.
 - Leaf utilities (`guards.ts`, `uuid-v7.ts`, `text-safety.ts`, `cloud-outcomes.ts`, `desktop-switch.ts`, which now only decodes the retained desktop-switch journal) hold the shapes and guards that storage, the daemon, and every adapter share without importing each other.
+- `devin-usage-source.ts` names the one local Devin usage source, `devin_usage_panel`, and its closed codec for the `/usage` panel reader's observation. It restates the reader's shape structurally so this leaf layer imports no provider boundary, and it is deliberately outside `providerUsageSourceSchema`: a Devin reading is `local_only`, never persisted and never projected.
 
 # Guidelines
 
