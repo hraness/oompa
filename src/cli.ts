@@ -3282,6 +3282,20 @@ export function isExactProviderRuntimeAuthorityCurrent(
 }
 
 /**
+ * Binds the one exact live provider-authority predicate every daemon runtime
+ * manager must use. Each isolated provider owns its own provider-account
+ * process generation, so a manager may never compare its authority against the
+ * profile's Codex counter: that would permanently stale the provider after its
+ * first session start advanced its own fence.
+ */
+export function providerRuntimeAuthorityPredicate(
+  store: Pick<StateStore, "requireProfile" | "requireProviderAccountAuthority">,
+  expectedProvider: Provider,
+): (authority: ProfileAuthority) => boolean {
+  return (authority) => isExactProviderRuntimeAuthorityCurrent(store, expectedProvider, authority);
+}
+
+/**
  * Live acceptance redirects its synthetic "personal" provider home under the
  * fixture root. Claude must therefore select that directory explicitly even
  * though service authority still classifies the controller as personal.
@@ -3578,8 +3592,7 @@ async function runDaemonLifecycle(
           }
         : {}),
       credentialStorePreflight: installation.credentialStorePreflight,
-      isCurrent: (authority) =>
-        isExactProviderRuntimeAuthorityCurrent(activeStore, "codex", authority),
+      isCurrent: providerRuntimeAuthorityPredicate(activeStore, "codex"),
       observer: {
         account: async (authority, account) => {
           await serviceReference.current?.observeCodexAccount(authority, account);
@@ -3613,8 +3626,7 @@ async function runDaemonLifecycle(
       configDirFor: async (authority) => await ensurePrivateDirectory(
         profilePaths(paths, authority.id).claudeConfigDir,
       ),
-      isCurrent: (authority) =>
-        isExactProviderRuntimeAuthorityCurrent(activeStore, "claude", authority),
+      isCurrent: providerRuntimeAuthorityPredicate(activeStore, "claude"),
       observer: {
         oompaHostTool: async (authority, call) => {
           const current = serviceReference.current;
@@ -3666,8 +3678,7 @@ async function runDaemonLifecycle(
         // operations perform their own effective-config preflight later.
         cwd: installation.paths.root,
       },
-      isCurrent: (authority) =>
-        isExactProviderRuntimeAuthorityCurrent(activeStore, "codex", authority),
+      isCurrent: providerRuntimeAuthorityPredicate(activeStore, "codex"),
       observer: {
         // Personal-home identity never mutates the selected isolated login;
         // the service compares it and durably revokes controllers on drift.
@@ -3728,8 +3739,7 @@ async function runDaemonLifecycle(
       }),
       configHome: personalClaudeConfigHomeForInstallation(installation),
       configDirFor: () => personalHomes.claudeConfigDir,
-      isCurrent: (authority) =>
-        isExactProviderRuntimeAuthorityCurrent(activeStore, "claude", authority),
+      isCurrent: providerRuntimeAuthorityPredicate(activeStore, "claude"),
       observer: {
         oompaHostTool: async (authority, call) => {
           const current = serviceReference.current;
@@ -3833,14 +3843,7 @@ async function runDaemonLifecycle(
           stateHome: owned.devinStateDir,
         };
       },
-      isCurrent: (authority) => {
-        try {
-          const profile = activeStore.requireProfile(authority.id);
-          return profile.processGeneration === authority.generation && profile.state !== "removed";
-        } catch {
-          return false;
-        }
-      },
+      isCurrent: providerRuntimeAuthorityPredicate(activeStore, "devin"),
       observer: {
         fact: async (authority, fact) => {
           await serviceReference.current?.observeDevinFact(authority, fact);
