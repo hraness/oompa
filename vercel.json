@@ -16,6 +16,11 @@
       "permanent": true
     },
     {
+      "source": "/pr/data/:path*",
+      "destination": "https://hraness.com/pr/data/:path*",
+      "permanent": true
+    },
+    {
       "source": "/:path((?!\\.well-known(?:/|$))(?:[^/]+/)*[^/\\.]+)",
       "destination": "/:path/",
       "permanent": true

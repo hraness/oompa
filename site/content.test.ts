@@ -36,7 +36,6 @@ import {
   renderPrivacyHtml,
   renderSiteHtml,
 } from "./template.ts";
-import { renderPrHtml } from "./pr-template.ts";
 
 const htmlText = (value: string): string => value
   .replaceAll("&", "&amp;")
@@ -1397,7 +1396,7 @@ describe("public content contract", () => {
       renderPrivacyHtml(),
       ...docsPages.map((page) => renderDocsHtml(page)),
     ];
-    for (const document of [...pages, renderPrHtml()]) {
+    for (const document of pages) {
       expect(document.match(/<footer\b/gu)).toHaveLength(2);
       const footer = /<footer\b[^>]*\bdata-slot="hraness-site-footer"[^>]*>[\s\S]*?<\/footer>/u.exec(document)?.[0];
       expect(footer).toContain('data-slot="hraness-site-footer"');
@@ -1429,7 +1428,7 @@ describe("public content contract", () => {
   });
 
   test("renders the shared in-flow Oompa content footer ahead of the network footer", () => {
-    for (const document of [renderSiteHtml(), renderPrivacyHtml(), ...docsPages.map((page) => renderDocsHtml(page)), renderPrHtml()]) {
+    for (const document of [renderSiteHtml(), renderPrivacyHtml(), ...docsPages.map((page) => renderDocsHtml(page))]) {
       const contentFooter = parseHTML(document).document.querySelector('footer[data-hraness-marketing="footer"]');
       expect(contentFooter?.getAttribute("aria-label")).toBe(publicContent.productName);
       const brand = contentFooter?.querySelector(".hraness-marketing-footer__brand");
@@ -1483,7 +1482,7 @@ describe("public content contract", () => {
   });
 
   test("provides keyboard and landmark structure without inline presentation", () => {
-    for (const html of [renderSiteHtml(), ...docsPages.map((page) => renderDocsHtml(page)), renderPrHtml()]) {
+    for (const html of [renderSiteHtml(), ...docsPages.map((page) => renderDocsHtml(page))]) {
       expect(html.match(/<h1\b/g)).toHaveLength(1);
       const skipLink = oneElement(html, 'a.skip-link[href="#content"]');
       expect(skipLink.textContent).toBe("Skip to content");

@@ -90,6 +90,8 @@ const pages = ["/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "
 const externalRedirects = new Map([
   ["/pr", "https://hraness.com/pr"],
   ["/pr/", "https://hraness.com/pr"],
+  ["/pr/data/snapshot.json", "https://hraness.com/pr/data/snapshot.json"],
+  ["/pr/data/history.json", "https://hraness.com/pr/data/history.json"],
 ] as const);
 const wellKnown = ["/.well-known/security.txt", "/.well-known/hra.json"] as const;
 
@@ -104,7 +106,7 @@ describe("compiled Vercel site routing", () => {
     }
   });
 
-  test("the pr board permanently redirects its document routes to hraness.com while data keeps serving", () => {
+  test("the pr board and its data permanently redirect to hraness.com", () => {
     const routes = compiledRoutes(configuration);
     for (const [path, destination] of externalRedirects) {
       const result = observe(routes, path);
@@ -117,9 +119,6 @@ describe("compiled Vercel site routing", () => {
     const finalHop = observe(routes, indexHop.location!);
     expect(finalHop.status).toBe(308);
     expect(finalHop.location).toBe("https://hraness.com/pr");
-    for (const path of ["/pr/data/snapshot.json", "/pr/data/history.json"]) {
-      expect(proveHeaders(configuration, path, 2).paths).toEqual([path]);
-    }
   });
 
   test("every canonical page keeps its exact policy without a redirect", () => {

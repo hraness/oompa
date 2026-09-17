@@ -5,14 +5,13 @@ import { compilerSha256, STYLEX_TEMPLATE_CSS_PLACEHOLDER, stylexUnionPolicySha25
 import { captureSiteDocuments, prepareSiteDocument, projectSiteArtifacts as projectCapturedSite, snapshotSiteFoundation as captureSiteFoundation } from "./build-site-stylex.ts";
 
 const docsRoutes = ["/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/"] as const;
-const htmlRoutes = ["index.html", "privacy/index.html", "preview/index.html", ...docsRoutes.map((route) => `${route.slice(1)}index.html`), "pr/index.html"];
+const htmlRoutes = ["index.html", "privacy/index.html", "preview/index.html", ...docsRoutes.map((route) => `${route.slice(1)}index.html`)];
 const docsMap = () => Object.fromEntries(docsRoutes.map((route) => [route, `<html>${route}</html>`]));
 const renderersFor = (docs: unknown = docsMap()) => ({
   renderSiteHtml: () => "<html>home</html>",
   renderPrivacyHtml: () => "<html>privacy</html>",
   renderPreviewHtml: () => "<html>preview</html>",
   renderDocsPages: () => docs,
-  renderPrHtml: () => "<html>pr</html>",
 });
 
 const hash = (value: Uint8Array | string): string => createHash("sha256").update(value).digest("hex");
@@ -80,7 +79,7 @@ describe("static site compiler projection", () => {
     for (const change of [
       { renderSiteHtml: undefined }, { renderSiteHtml: () => 1 },
       { renderPrivacyHtml: undefined }, { renderPreviewHtml: undefined },
-      { renderDocsPages: undefined }, { renderPrHtml: undefined },
+      { renderDocsPages: undefined },
     ]) expect(() => captureSiteDocuments({ ...exports, ...change })).toThrow();
   });
 
@@ -199,10 +198,10 @@ describe("static site compiler projection", () => {
     expect(empty.artifacts.find(({ path }) => path === foundationEntry)).toEqual({ path: foundationEntry, bytes: 0, sha256: hash("") });
   });
 
-  test("publishes only ten HTML routes, the final union, foundation, exact fonts and preset SVGs", () => {
+  test("publishes only nine HTML routes, the final union, foundation, exact fonts and preset SVGs", () => {
     const { complete, foundation } = makeComplete();
     const projected = projectSiteArtifacts(complete, planSha256, foundation);
-    expect(projected).toHaveLength(28);
+    expect(projected).toHaveLength(27);
     expect(projected.filter(({ path }) => path.endsWith(".woff2"))).toHaveLength(14);
     expect(projected.filter(({ path }) => path.endsWith(".html")).map(({ path }) => path).sort()).toEqual([...htmlRoutes].sort());
     expect(projected.some(({ path }) => /\.(?:js|json|map|ts|tsx|otf)$/u.test(path))).toBe(false);
