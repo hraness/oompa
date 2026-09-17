@@ -132,7 +132,7 @@ const createFixtureRoot = async (registerRoot: (root: string) => void = (root) =
   expect(await realpath(root)).not.toBe(sourceRoot);
   await mkdir(join(root, "site"), { recursive: true });
   await Promise.all(
-    ["favicon.svg", "styles.css"].map(async (asset) => {
+    ["favicon.svg", "og.png", "styles.css"].map(async (asset) => {
       await writeFile(join(root, "site", asset), `fixture:${asset}\n`, "utf8");
     }),
   );
@@ -378,6 +378,7 @@ describe("static-site build", () => {
       "dist/site/site.js",
       "dist/site/appearance.js",
       "dist/site/favicon.svg",
+      "dist/site/og.png",
       "dist/site/social-card.svg",
       "dist/site/social-card.png",
       "dist/site/stylex.css",
