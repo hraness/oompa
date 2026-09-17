@@ -4,7 +4,7 @@
 - `vendor/marketing-preset/` is the immutable shared editorial CSS, licensed Instrument Serif, and field-texture snapshot. `scripts/marketing-preset.ts` admits its exact source paths and hashes before the existing compiler captures its assets.
 - `content.ts` owns the website's public content contract. Root `README.md` and the package description are independently authored package inputs, not website outputs.
 - `docs-content.ts` owns the task-oriented guide registry, canonical Markdown exports, detailed reference ownership, and individual editorial admission records.
-- `template.ts` renders the homepage, privacy page, and six documentation routes. The `/pr/` route renders its committed snapshot through `pr-template.ts` instead.
+- `template.ts` renders the homepage, privacy page, and six documentation routes. The `/pr/` route renders its committed snapshot through `pr-template.ts` instead; at the edge, `vercel.json` permanently redirects the `/pr` document URLs to `hraness.com/pr` while `/pr/data/` keeps serving the pulse feed.
 - `marketing.tsx` composes public design-kit server components; `render.ts` is the captured build-time entry for all ten HTML routes. `pr-template.ts` renders the committed `pr/data/` snapshot into the `/pr/` crisis board with `pr.stylex.ts` recipes.
 - `product-preview.tsx` renders inert real-UI frames and their accessible parent controls. `product-scenes.ts` is their closed public scene catalog; Direct itself stays in the separately built fixture app.
 - `site-entry.ts` progressively enhances scene selection, enlargement, local guide search, `/pr/` signal filtering, and moved reference fragments without authentication or persistence.

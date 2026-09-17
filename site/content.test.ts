@@ -1482,7 +1482,7 @@ describe("public content contract", () => {
       renderSitemapXml(),
     ];
 
-    expect(siteDocumentPaths).toEqual(["/", ...docsPaths, "/privacy/", "/pr/"]);
+    expect(siteDocumentPaths).toEqual(["/", ...docsPaths, "/privacy/"]);
     for (const route of retiredRoutes) {
       for (const document of publicDocuments) {
         expect(document).not.toContain(route);
