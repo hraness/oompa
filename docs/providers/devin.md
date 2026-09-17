@@ -226,6 +226,9 @@ session effects remain recorded; removal does not invent successful completion.
 The installed CLI has passed a zero-token compatibility check in a disposable
 isolated profile: exact version `3000.10.27`, signed-out status, Astra launch,
 and ACP v1 initialization with session loading advertised. The protocol reducer
-and runtime manager also have deterministic fixture coverage. A bounded paid
-turn is still required before Oompa claims live-provider proof for turn, tool,
-permission, cancellation, and usage-update behavior.
+and runtime manager also have deterministic fixture coverage. One bounded paid
+turn on 2026-09-17 in a disposable isolated profile gave live proof for the
+turn, tool-call and usage-update paths; its sanitized record is in
+`kb/plans/devin-provider.md`. The permission and in-flight cancellation paths
+remain fixture-verified only, because that turn requested no permission and
+the session was idle when stopped.
