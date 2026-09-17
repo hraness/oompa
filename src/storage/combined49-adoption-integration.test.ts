@@ -105,7 +105,7 @@ const inspect = (path: string) => {
 };
 
 const assertMigratedHistory = (original: ReturnType<typeof snapshot>, migrated: ReturnType<typeof snapshot>): void => {
-  expect(migrated.version).toEqual({ user_version: 61 });
+  expect(migrated.version).toEqual({ user_version: 62 });
   const ledger = z.object({ version: z.number(), applied_at: z.number() }).strict().array().parse(original.ledger);
   expect(migrated.ledger).toEqual([
     ...ledger.filter((row) => row.version <= 40),
@@ -113,6 +113,7 @@ const assertMigratedHistory = (original: ReturnType<typeof snapshot>, migrated: 
     ...ledger.filter((row) => row.version >= 41).map((row) => ({ ...row, version: row.version + 10 })),
     { version: 60, applied_at: migratedAt },
     { version: 61, applied_at: migratedAt },
+      { version: 62, applied_at: migratedAt },
   ]);
   for (const [table, names] of Object.entries(original.columns)) {
     for (const name of names) expect(migrated.columns[table]).toContain(name);
@@ -226,7 +227,7 @@ for (const capture of captures) {
       await withNullableLaunchFixture(capture, false, async (paths, expected) => {
         const originalBytes = hash(await readFile(paths.database));
         expect(() => new StateStore(paths, { readonly: true }))
-          .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:61");
+          .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:62");
         expect(inspect(paths.database)).toEqual(expected);
         expect(hash(await readFile(paths.database))).toBe(originalBytes);
         const upgrading = new StateStore(paths, { now: () => migratedAt, resolveMachineTimeZone: () => "UTC" });
@@ -259,7 +260,7 @@ test("nullable launch DDL keeps RO migration refusal distinct from the RW unprov
     for (const readonly of [true, false]) {
       const beforeBytes = hash(await readFile(paths.database));
       expect(() => new StateStore(paths, { readonly, now: () => recordedAt, resolveMachineTimeZone: () => "UTC" }))
-        .toThrow(readonly ? "STATE_SCHEMA_MIGRATION_REQUIRED:49:61" : "CLAUDE_PROCESS_CUSTODY_CORRUPT");
+        .toThrow(readonly ? "STATE_SCHEMA_MIGRATION_REQUIRED:49:62" : "CLAUDE_PROCESS_CUSTODY_CORRUPT");
       expect(inspect(paths.database)).toEqual(expected);
       expect(hash(await readFile(paths.database))).toBe(beforeBytes);
     }

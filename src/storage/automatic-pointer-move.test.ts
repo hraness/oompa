@@ -277,7 +277,7 @@ describe("automatic pointer-only storage", () => {
     try {
       expect(value.historicalBefore).not.toBeNull();
       expect(value.historicalAfter).toEqual(value.historicalBefore);
-      expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
+      expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 62 });
       expect(db.query("SELECT version FROM migrations WHERE version>40 ORDER BY version").all())
         .toEqual(Array.from({ length: 21 }, (_, index) => ({ version: index + 41 })));
       value.store.settleAutomaticPointerMove(value.request());

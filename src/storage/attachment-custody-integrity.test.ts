@@ -74,7 +74,7 @@ describe("attachment custody immutable integrity", () => {
     const f = await fixture();
     const request = f.input([]);
     const prepared = f.store.prepareSessionInputMutation(request);
-    expect(f.db.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
+    expect(f.db.query("PRAGMA user_version").get()).toEqual({ user_version: 62 });
     expect(f.db.query("SELECT COUNT(*) AS n FROM attachment_custody_slots").get()).toEqual({ n: 0 });
     expect(f.cleanup()).toEqual({ kind: "absent" });
     expect(f.reopen(true).readMutation(f.input([]).idempotencyKey)).toBeNull();
@@ -154,7 +154,7 @@ describe("attachment custody immutable integrity", () => {
     expect(f.db.query("SELECT terminal_digest IS NOT NULL AS settled FROM attachment_legacy_cleanup_blockers WHERE attempt_id=?").get(old.attemptId)).toEqual({ settled: 1 });
   });
 
-  test("a surviving partial custody trigger in current60 is refused without repair or row changes", async () => {
+  test("a surviving partial custody trigger in current62 is refused without repair or row changes", async () => {
     const f = await fixture();
     f.store.prepareSessionInputMutation(f.input([]));
     for (const type of ["trigger", "index", "table"] as const) for (const object of [...ATTACHMENT_CUSTODY_SCHEMA_OBJECTS].reverse()) {
@@ -177,7 +177,7 @@ describe("attachment custody immutable integrity", () => {
       expect(() => f.reopen(readonly)).toThrow("PEER_SESSION_CANCELLATION_UNPROVEN");
       expect(snapshot()).toEqual(before);
     }
-    expect(f.db.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
+    expect(f.db.query("PRAGMA user_version").get()).toEqual({ user_version: 62 });
   });
 
   test("a missing parent cannot free its live slot or its original global key", async () => {

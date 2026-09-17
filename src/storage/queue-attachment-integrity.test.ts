@@ -176,7 +176,7 @@ describe("queue attachment durable integrity", () => {
       expect(f.database.query("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name").all()).toEqual(before);
       expect(retainedRows()).toEqual(rowsBefore);
     }
-    expect(f.database.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
+    expect(f.database.query("PRAGMA user_version").get()).toEqual({ user_version: 62 });
   });
   test("a retained format marker prevents public manifest repair after both seals disappear", async () => {
     const f = await fixture(); const queue = f.enqueue();

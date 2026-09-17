@@ -98,10 +98,10 @@ async function upgrade() {
   expect(Object.getOwnPropertyDescriptor(Database.prototype, "exec")?.value).toBe(originalExec);
   expect([...oldGuards.keys()].sort()).toEqual(predecessors.map(({ name }) => name).sort());
   const after = snapshot(paths);
-  expect(after.version).toEqual({ user_version: 61 });
+  expect(after.version).toEqual({ user_version: 62 });
   expect(after.foreignKeys).toEqual([]);
   const finalLedger = ledgerSchema.parse(after.rows.migrations).sort((left, right) => left.version - right.version);
-  expect(finalLedger.map(({ version }) => version)).toEqual(Array.from({ length: 61 }, (_, index) => index + 1));
+  expect(finalLedger.map(({ version }) => version)).toEqual(Array.from({ length: 62 }, (_, index) => index + 1));
   for (const entry of ledgerSchema.parse(before.rows.migrations)) {
     const version = entry.version < 40 ? entry.version : entry.version + 11;
     expect(finalLedger.find((candidate) => candidate.version === version)).toEqual({ ...entry, version });
@@ -123,7 +123,7 @@ async function upgrade() {
 }
 
 describe("retained private48 canonical waypoints and strict joined successors", () => {
-  test("upgrades authentic private48 through historical guards and reopens exact joined60 without writes", async () => {
+  test("upgrades authentic private48 through historical guards and reopens exact joined62 without writes", async () => {
     const { paths, after } = await upgrade();
     for (const readonly of [true, false]) {
       open(paths, readonly);
@@ -141,7 +141,7 @@ describe("retained private48 canonical waypoints and strict joined successors", 
     { name: "peer_session_cancellation_insert", damage: "missing", code: "PEER_SESSION_CANCELLATION_UNPROVEN" },
   ] as const;
   for (const { name, damage, code } of damageCases) {
-    test(`current60 refuses ${damage} ${name} on both opens without repair or row changes`, async () => {
+    test(`current62 refuses ${damage} ${name} on both opens without repair or row changes`, async () => {
       const { paths, oldGuards } = await upgrade();
       const database = new Database(paths.database, { create: false, strict: true });
       try {

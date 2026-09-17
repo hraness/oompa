@@ -65,9 +65,9 @@ describe("private joined migration candidate", () => {
     const paths = await pathsFor();
     open(paths);
     const before = snapshot(paths.database);
-    expect(before.version).toEqual({ user_version: 61 });
+    expect(before.version).toEqual({ user_version: 62 });
     expect(ledger(before.rows.migrations).map(({ version }) => version))
-      .toEqual(Array.from({ length: 61 }, (_, index) => index + 1));
+      .toEqual(Array.from({ length: 62 }, (_, index) => index + 1));
     expect(before.foreignKeys).toEqual([]);
     open(paths);
     expect(snapshot(paths.database)).toEqual(before);
@@ -92,7 +92,16 @@ describe("private joined migration candidate", () => {
       database.transaction(() => {
         database.exec("DROP TRIGGER queue_transcript_finalization_guard");
         database.exec(current.replace(admitted, "captured.provider IN ('codex','claude')"));
-        database.query("DELETE FROM migrations WHERE version=?").run(61);
+        // The v62 compact-policy objects are absent from an authentic v60
+        // database; rewind them with the ledger entries so the simulated
+        // predecessor matches the released boundary.
+        database.exec(
+          `DROP TRIGGER IF EXISTS session_compact_policy_default;
+           DROP TRIGGER IF EXISTS session_compact_policy_transition_guard;
+           DROP TRIGGER IF EXISTS session_compact_policy_delete_guard;
+           DROP TABLE IF EXISTS session_compact_policies;`,
+        );
+        database.exec("DELETE FROM migrations WHERE version>=61");
         database.exec("PRAGMA user_version=60");
       }).immediate();
     } finally { database.close(false); }
@@ -101,10 +110,10 @@ describe("private joined migration candidate", () => {
     expect(JSON.stringify(before.schema)).not.toContain(admitted);
     open(paths);
     const after = snapshot(paths.database);
-    expect(after.version).toEqual({ user_version: 61 });
+    expect(after.version).toEqual({ user_version: 62 });
     expect(after.foreignKeys).toEqual([]);
     expect(ledger(after.rows.migrations).map(({ version }) => version))
-      .toEqual(Array.from({ length: 61 }, (_, index) => index + 1));
+      .toEqual(Array.from({ length: 62 }, (_, index) => index + 1));
     // The guard, and every other schema object, settles on the fresh form.
     expect(after.schema).toEqual(fresh.schema);
     expect(JSON.stringify(after.schema)).toContain(admitted);
@@ -152,10 +161,10 @@ describe("private joined migration candidate", () => {
     const before = snapshot(paths.database);
     open(paths);
     const after = snapshot(paths.database);
-    expect(after.version).toEqual({ user_version: 61 });
+    expect(after.version).toEqual({ user_version: 62 });
     expect(after.foreignKeys).toEqual([]);
     const migrated = ledger(after.rows.migrations);
-    expect(migrated.map(({ version }) => version)).toEqual(Array.from({ length: 61 }, (_, index) => index + 1));
+    expect(migrated.map(({ version }) => version)).toEqual(Array.from({ length: 62 }, (_, index) => index + 1));
     for (const entry of ledger(before.rows.migrations)) {
       expect(migrated.find(({ version }) => version === source.mapVersion(entry.version)))
         .toEqual({ version: source.mapVersion(entry.version), applied_at: entry.applied_at });
