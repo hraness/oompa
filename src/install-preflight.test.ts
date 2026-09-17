@@ -859,6 +859,7 @@ describe("transactional Oompa installer", () => {
   test("strips only dependency maps from the private installer fixture", () => {
     expect(sourcePackageManifest.dependencies).toEqual({
       "@agentclientprotocol/sdk": "1.4.0",
+      "@hraness/local-custody": "0.5.1",
       "@hraness/oh": "0.4.1",
       "@openai/codex": "0.153.2",
       convex: "1.45.0",
