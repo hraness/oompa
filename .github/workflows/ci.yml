@@ -89,8 +89,6 @@ jobs:
 
       - name: Rebuild and verify authority-supervisor artifacts (Linux)
         if: runner.os == 'Linux'
-        env:
-          OOMPA_AUTHORITY_SUPERVISOR_CAPTURE: ${{ matrix.gate == 'remainder' && '1' || '0' }}
         run: >-
           bun ./scripts/verify-authority-supervisor-build.ts
           --rustc "$(rustup which --toolchain 1.97.1 rustc)"

@@ -36,10 +36,12 @@ export type AuthoritySupervisorArtifactManifest = Readonly<{
     name: string;
     version: string;
   }>;
+  linkerScript: PinnedFile;
   schemaVersion: number;
   source: PinnedFile;
 }>;
 
+const linkerScriptRelativePath = "scripts/authority-supervisor.ld";
 const sourceRelativePath = "scripts/authority-supervisor.rs";
 const artifactRelativePaths = {
   arm64: "scripts/authority-supervisor-bin/authority-supervisor-linux-arm64-musl",
@@ -54,6 +56,7 @@ const freezeAuthoritySupervisorArtifactManifest = (
     x64: Object.freeze({ ...manifest.artifacts.x64 }),
   }),
   compiler: Object.freeze({ ...manifest.compiler }),
+  linkerScript: Object.freeze({ ...manifest.linkerScript }),
   schemaVersion: manifest.schemaVersion,
   source: Object.freeze({ ...manifest.source }),
 });
@@ -61,21 +64,21 @@ const freezeAuthoritySupervisorArtifactManifest = (
 export const authoritySupervisorArtifactManifest = freezeAuthoritySupervisorArtifactManifest({
   artifacts: {
     arm64: {
-      byteLength: 434_472,
+      byteLength: 434_224,
       elfMachine: 183,
       maximumByteLength: 8 * 1024 * 1024,
       mode: 0o755,
       relativePath: artifactRelativePaths.arm64,
-      sha256: "ab13e9ca1b6a8961a9e72dfe73f4bd812720d27fc1a16c293ec47b2560151626",
+      sha256: "806de0de4f49d1b05b286246616369b1e61029ecaaa8c0a72125ab557cdfa6a8",
       target: "aarch64-linux-musl",
     },
     x64: {
-      byteLength: 478_888,
+      byteLength: 478_648,
       elfMachine: 62,
       maximumByteLength: 8 * 1024 * 1024,
       mode: 0o755,
       relativePath: artifactRelativePaths.x64,
-      sha256: "c0aac07998a26f43a7a1b2af98dab8600eab6a44340e358f2e6a3faffdc4bc40",
+      sha256: "181b8567dcddb06cc163409f7b462a320cd52b3d2312ffdca91f01080c5f4952",
       target: "x86_64-linux-musl",
     },
   },
@@ -83,7 +86,14 @@ export const authoritySupervisorArtifactManifest = freezeAuthoritySupervisorArti
     name: "rustc",
     version: "1.97.1",
   },
-  schemaVersion: 1,
+  linkerScript: {
+    byteLength: 62,
+    maximumByteLength: 1024,
+    mode: 0o644,
+    relativePath: linkerScriptRelativePath,
+    sha256: "0c40e25441669458e316149178e2d9166f01b5e32c086df0ca8642fe975385a3",
+  },
+  schemaVersion: 2,
   source: {
     byteLength: 113_058,
     maximumByteLength: 2 * 1024 * 1024,
@@ -194,9 +204,11 @@ const expectedUid = (): number | undefined =>
 
 const assertManifest = (manifest: AuthoritySupervisorArtifactManifest): void => {
   if (
-    manifest.schemaVersion !== 1
+    manifest.schemaVersion !== 2
     || manifest.compiler.name !== "rustc"
     || manifest.compiler.version !== "1.97.1"
+    || manifest.linkerScript.relativePath !== linkerScriptRelativePath
+    || manifest.linkerScript.mode !== 0o644
     || manifest.source.relativePath !== sourceRelativePath
     || manifest.source.mode !== 0o644
     || manifest.artifacts.x64.relativePath !== artifactRelativePaths.x64
@@ -211,6 +223,7 @@ const assertManifest = (manifest: AuthoritySupervisorArtifactManifest): void => 
 
   const pinnedFiles: readonly PinnedFile[] = [
     manifest.source,
+    manifest.linkerScript,
     manifest.artifacts.x64,
     manifest.artifacts.arm64,
   ];
@@ -539,6 +552,30 @@ const materializeSealedExecutionArtifact = (
   }
 };
 
+const openPinnedSourceClosure = async (
+  root: string,
+  manifest: AuthoritySupervisorArtifactManifest,
+  owner: number | undefined,
+): Promise<Readonly<{ close: () => Promise<void> }>> => {
+  const source = await openPinnedFile(root, manifest.source, "source", owner);
+  try {
+    const linkerScript = await openPinnedFile(root, manifest.linkerScript, "source", owner);
+    let closePromise: Promise<void> | undefined;
+    return {
+      close: () => {
+        closePromise ??= Promise.all([
+          linkerScript.close().catch(() => undefined),
+          source.close().catch(() => undefined),
+        ]).then(() => undefined);
+        return closePromise;
+      },
+    };
+  } catch (error: unknown) {
+    await source.close().catch(() => undefined);
+    throw error;
+  }
+};
+
 const verifyAuthoritySupervisorArtifactWith = async (
   options: ResolverOptions,
 ): Promise<VerifiedAuthoritySupervisorArtifactForTesting> => {
@@ -548,7 +585,7 @@ const verifyAuthoritySupervisorArtifactWith = async (
   assertManifest(options.manifest);
   const architecture = expectedArchitecture(options.architecture);
   const root = await canonicalRepositoryRoot(options.repositoryRoot);
-  const source = await openPinnedFile(root, options.manifest.source, "source", options.owner);
+  const sourceClosure = await openPinnedSourceClosure(root, options.manifest, options.owner);
   try {
     const artifact = artifactFor(options.manifest, architecture);
     const binary = await openPinnedFile(root, artifact, "binary", options.owner);
@@ -562,7 +599,7 @@ const verifyAuthoritySupervisorArtifactWith = async (
       await binary.close().catch(() => undefined);
     }
   } finally {
-    await source.close().catch(() => undefined);
+    await sourceClosure.close().catch(() => undefined);
   }
 };
 
@@ -575,7 +612,7 @@ const openAuthoritySupervisorArtifactWith = async (
   assertManifest(options.manifest);
   const architecture = expectedArchitecture(options.architecture);
   const root = await canonicalRepositoryRoot(options.repositoryRoot);
-  const source = await openPinnedFile(root, options.manifest.source, "source", options.owner);
+  const sourceClosure = await openPinnedSourceClosure(root, options.manifest, options.owner);
   try {
     const artifact = artifactFor(options.manifest, architecture);
     const binary = await openPinnedFile(root, artifact, "binary", options.owner);
@@ -606,7 +643,7 @@ const openAuthoritySupervisorArtifactWith = async (
       await binary.close().catch(() => undefined);
     }
   } finally {
-    await source.close().catch(() => undefined);
+    await sourceClosure.close().catch(() => undefined);
   }
 };
 
@@ -684,13 +721,12 @@ export async function assertAuthoritySupervisorArtifactPublicFile(
   }
   assertManifest(authoritySupervisorArtifactManifest);
   const root = await canonicalRepositoryRoot(repositoryRoot);
-  const source = await openPinnedFile(
+  const sourceClosure = await openPinnedSourceClosure(
     root,
-    authoritySupervisorArtifactManifest.source,
-    "source",
+    authoritySupervisorArtifactManifest,
     expectedUid(),
   );
-  await source.close().catch(() => undefined);
+  await sourceClosure.close().catch(() => undefined);
   const artifact = Object.values(authoritySupervisorArtifactManifest.artifacts)
     .find((candidate) => candidate.relativePath === relativePath);
   if (artifact === undefined) return artifactError("authority_supervisor_manifest_invalid");

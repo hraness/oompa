@@ -14,6 +14,7 @@ describe("authority supervisor build verifier", () => {
       "/opt/rust/rustc",
       "x86_64-linux-musl",
       "scripts/authority-supervisor.rs",
+      "scripts/authority-supervisor.ld",
       "/temporary/x64",
     )).toEqual([
       "/opt/rust/rustc",
@@ -30,6 +31,10 @@ describe("authority supervisor build verifier", () => {
       "panic=abort",
       "-C",
       "linker=rust-lld",
+      "-C",
+      "link-arg=-T",
+      "-C",
+      "link-arg=scripts/authority-supervisor.ld",
       "--target",
       "x86_64-unknown-linux-musl",
       "scripts/authority-supervisor.rs",
@@ -40,6 +45,7 @@ describe("authority supervisor build verifier", () => {
       "/opt/rust/rustc",
       "aarch64-linux-musl",
       "scripts/authority-supervisor.rs",
+      "scripts/authority-supervisor.ld",
       "/temporary/arm64",
     )).toContain("aarch64-unknown-linux-musl");
   });
