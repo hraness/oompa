@@ -1,4 +1,5 @@
-import { chmod, lstat, unlink } from "node:fs/promises";
+import { chmod, unlink } from "node:fs/promises";
+import { assertOwnedPath } from "@hraness/local-custody/private-paths";
 import { createServer, type Server, type Socket } from "node:net";
 import { join, resolve } from "node:path";
 
@@ -25,28 +26,15 @@ export const claudeHostToolCallbackSocketPath = (paths: StatePaths): string =>
   join(paths.runtime, CALLBACK_SOCKET_NAME);
 
 const assertPrivateSocket = async (path: string): Promise<void> => {
-  const stat = await lstat(path);
-  if (!stat.isSocket() || stat.isSymbolicLink() || stat.nlink < 1) {
-    throw new Error("Claude host-tool callback endpoint is not a socket.");
-  }
-  const owner = process.getuid?.();
-  if (owner !== undefined && stat.uid !== owner) {
-    throw new Error("Claude host-tool callback endpoint belongs to another user.");
-  }
-  if ((stat.mode & 0o777) !== 0o600) {
-    throw new Error("Claude host-tool callback endpoint is not user-only.");
-  }
+  await assertOwnedPath(path, { kind: "socket", exactMode: 0o600 });
 };
 
 const removeStaleSocket = async (path: string): Promise<void> => {
-  const stat = await lstat(path).catch(() => null);
-  if (stat === null) return;
-  if (!stat.isSocket() || stat.isSymbolicLink()) {
-    throw new Error("Refusing to replace a non-socket Claude host-tool endpoint.");
-  }
-  const owner = process.getuid?.();
-  if (owner !== undefined && stat.uid !== owner) {
-    throw new Error("Refusing to replace another user's Claude host-tool endpoint.");
+  try {
+    await assertOwnedPath(path, { kind: "socket" });
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw new Error("Refusing to replace an unsafe Claude host-tool endpoint.", { cause: error });
   }
   await unlink(path);
 };

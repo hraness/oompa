@@ -1,9 +1,7 @@
-import { constants } from "node:fs";
-import { open } from "node:fs/promises";
-import type { FileHandle } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 
 import { z } from "zod";
+import { readOwnedFileStable } from "@hraness/local-custody/private-paths";
 
 import { readClaudeAuthenticationObservation } from "./auth.ts";
 import { ClaudeError } from "./errors.ts";
@@ -136,67 +134,26 @@ export const spawnClaudeAuthStatusProbe: ClaudeAuthStatusProbe = async (input) =
 };
 
 async function readAccountMetadataDocument(path: string): Promise<unknown> {
-  let handle: FileHandle;
+  // The personal-home path is user-controlled and can change between scans.
+  // The stable read opens nonblocking so a FIFO swapped in before stat cannot
+  // stall daemon admission, then re-proves identity and metadata after the
+  // bounded read.
+  let bytes: Buffer;
   try {
-    // The personal-home path is user-controlled and can change between scans.
-    // Open nonblocking so a FIFO swapped in before stat cannot stall daemon
-    // admission, then keep every byte read beneath the reviewed bound even if
-    // a regular file grows after the first descriptor check.
-    handle = await open(
-      path,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-    );
+    bytes = (await readOwnedFileStable(path, ACCOUNT_DOCUMENT_MAX_BYTES)).bytes;
   } catch (error: unknown) {
     if (errorCode(error) === "ENOENT") return null;
-    throw new ClaudeError("AUTHORITY_STALE", "Claude account metadata was unavailable.", {
+    throw new ClaudeError("AUTHORITY_STALE", "Claude account metadata failed its custody checks.", {
       cause: error,
     });
   }
+  if (bytes.length < 2) {
+    throw new ClaudeError("AUTHORITY_STALE", "Claude account metadata failed its custody checks.");
+  }
   try {
-    const metadata = await handle.stat();
-    const uid = process.getuid?.();
-    if (
-      !metadata.isFile()
-      || metadata.nlink !== 1
-      || metadata.size < 2
-      || metadata.size > ACCOUNT_DOCUMENT_MAX_BYTES
-      || (metadata.mode & 0o077) !== 0
-      || (uid !== undefined && metadata.uid !== uid)
-    ) {
-      throw new ClaudeError("AUTHORITY_STALE", "Claude account metadata failed its custody checks.");
-    }
-    const bytes = new Uint8Array(ACCOUNT_DOCUMENT_MAX_BYTES + 1);
-    let filled = 0;
-    while (filled < bytes.length) {
-      const read = await handle.read(bytes, filled, bytes.length - filled, filled);
-      if (read.bytesRead === 0) break;
-      filled += read.bytesRead;
-    }
-    const settled = await handle.stat();
-    if (filled > ACCOUNT_DOCUMENT_MAX_BYTES) {
-      throw new ClaudeError("AUTHORITY_STALE", "Claude account metadata exceeded its size bound.");
-    }
-    if (
-      settled.dev !== metadata.dev
-      || settled.ino !== metadata.ino
-      || settled.size !== metadata.size
-      || settled.mtimeMs !== metadata.mtimeMs
-      || settled.ctimeMs !== metadata.ctimeMs
-    ) {
-      throw new ClaudeError(
-        "AUTHORITY_STALE",
-        "Claude account metadata changed during its bounded read.",
-      );
-    }
-    try {
-      return JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, filled)),
-      ) as unknown;
-    } catch (cause: unknown) {
-      throw new ClaudeError("PROTOCOL_ERROR", "Claude account metadata was invalid.", { cause });
-    }
-  } finally {
-    await handle.close().catch(() => undefined);
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
+  } catch (cause: unknown) {
+    throw new ClaudeError("PROTOCOL_ERROR", "Claude account metadata was invalid.", { cause });
   }
 }
 
