@@ -25,7 +25,6 @@
     "app/**/*.tsx",
     "convex/**/*.ts",
     "plugins/**/*.ts",
-    "pr/**/*.ts",
     "scripts/**/*.ts",
     "scripts/app-browser-runner.mjs",
     "site/**/*.ts",
