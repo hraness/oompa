@@ -20,6 +20,7 @@ import {
   isExactProviderRuntimeAuthorityCurrent,
   main,
   personalClaudeConfigHomeForInstallation,
+  providerRuntimeAuthorityPredicate,
   protectedTerminalControlLibrariesForPlatform,
   protectedTerminalInputQueueForPlatform,
   readHiddenProtectedLineFromTerminal,
@@ -85,7 +86,7 @@ import {
 } from "./daemon/local-transport";
 import { createAcceptanceInstallation } from "../scripts/live-acceptance-installation";
 import { createProductionInstallation } from "./installation";
-import { initializeStatePaths, resolveStatePaths } from "./storage/paths";
+import { initializeStatePaths, profilePaths, resolveStatePaths } from "./storage/paths";
 import { FileSecretBackend, GenerationalSecretCustody } from "./storage/secret-custody";
 import { StateStore } from "./storage/state-store";
 import { privateTask48DatabaseBytes } from "../scripts/fixtures/private-task48";
@@ -644,6 +645,49 @@ describe("CLI entry point", () => {
       ...live("codex"),
       generation: 7,
     })).toBe(false);
+  });
+
+  test("binds every runtime manager to its own provider fence, never the profile's Codex generation", async () => {
+    const runRoot = await realpath(await mkdtemp(join(tmpdir(), "oompa-runtime-authority-")));
+    const paths = resolveStatePaths({ homeDirectory: runRoot, platform: "darwin" });
+    await initializeStatePaths(paths);
+    const store = new StateStore(paths, { now: (() => {
+      let value = 1_000;
+      return () => value++;
+    })() });
+    try {
+      const profile = store.createProfile("Devin runtime authority");
+      // The profile's Codex process generation stays 0 because Devin sign-in
+      // never touches the Codex account state machine.
+      expect(store.requireProfileById(profile.id).processGeneration).toBe(0);
+      const advanced = store.advanceProviderAccountProcessGeneration({
+        profileId: profile.id, provider: "devin", expectedProcessGeneration: 0,
+      });
+      expect(advanced.processGeneration).toBe(1);
+      const owned = profilePaths(paths, profile.id);
+      const authority = {
+        id: profile.id,
+        generation: advanced.processGeneration,
+        codexHome: owned.codexHome,
+        desktopUserData: owned.desktopUserData,
+        provider: "devin" as const,
+        providerAccountId: advanced.providerAccountId,
+        bindingGeneration: advanced.bindingGeneration,
+      };
+      for (const provider of ["codex", "claude", "devin"] as const) {
+        expect(providerRuntimeAuthorityPredicate(store, provider)(authority))
+          .toBe(provider === "devin");
+      }
+      expect(providerRuntimeAuthorityPredicate(store, "devin")({
+        ...authority, generation: store.requireProfileById(profile.id).processGeneration,
+      })).toBe(false);
+      expect(providerRuntimeAuthorityPredicate(store, "devin")({
+        ...authority, bindingGeneration: advanced.bindingGeneration + 1,
+      })).toBe(false);
+    } finally {
+      store.close();
+      await rm(runRoot, { recursive: true, force: true });
+    }
   });
 
   test("redirects acceptance personal Claude account reads and processes into fixture custody", async () => {

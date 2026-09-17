@@ -10766,7 +10766,7 @@ export class OompaService {
       return {
         account: this.#publicIsolatedProviderAccount(profile),
         authentication: { provider: "devin", signedIn: null },
-        providerGeneration: profile.processGeneration,
+        providerGeneration: this.#providerAuthority(profile, "devin").processGeneration,
         recovery: this.#devinLoginRecovery(unsettled),
         usage: {
           allowance: "unknown",
@@ -10782,7 +10782,7 @@ export class OompaService {
         provider: "devin",
         signedIn: account.readiness === "unverified" ? null : account.readiness === "signed_in",
       },
-      providerGeneration: profile.processGeneration,
+      providerGeneration: this.#providerAuthority(profile, "devin").processGeneration,
       usage: {
         allowance: "unknown",
         reason: "Devin ACP reports context and optional cumulative session cost, but exposes no account allowance or reset window.",
@@ -11027,6 +11027,10 @@ export class OompaService {
       ? devinLoginTerminalReceiptSchema.safeParse(attempt.result)
       : undefined;
     let signedIn: boolean;
+    // Only a completion that actually observed Devin inside this account's
+    // isolated boundary may record durable readiness. A replayed receipt or a
+    // proven no-effect launch never fabricates an observation.
+    let observedReadiness: "signed_in" | "signed_out" | undefined;
     if (priorReceipt?.success === true) {
       signedIn = priorReceipt.data.signedIn;
     } else if (command.outcome.state === "not_started") {
@@ -11036,6 +11040,7 @@ export class OompaService {
       signedIn = false;
     } else {
       signedIn = await this.#readForegroundLoginSignedIn(profile, attempt, "devin", signal);
+      observedReadiness = signedIn ? "signed_in" : "signed_out";
     }
     try {
       this.#store.settleDevinLoginMutation({
@@ -11056,6 +11061,35 @@ export class OompaService {
         )
       ) throw new CommandFailure("CONFLICT", "The Devin login completion conflicts with its durable terminal receipt.");
       throw error;
+    }
+    // The settled login proved this exact Devin process fence. Record the
+    // readiness it observed so the account is durably signed in without
+    // waiting for a later session effect to reread the provider. The write is
+    // fenced on the same process generation the login settled under and never
+    // crosses an account rotation.
+    if (observedReadiness !== undefined) {
+      const settledAuthority = this.#providerAuthority(profile, "devin");
+      if (settledAuthority.processGeneration === command.providerGeneration) {
+        try {
+          this.#store.observeProviderAccountReadiness({
+            profileId: profile.id,
+            provider: "devin",
+            expectedBindingGeneration: settledAuthority.bindingGeneration,
+            readiness: observedReadiness,
+          });
+        } catch (error: unknown) {
+          // The login receipt is already durable. A concurrent rotation or a
+          // newer readiness observation supersedes this one; neither may turn
+          // a settled login into a command failure.
+          if (
+            !(error instanceof Error)
+            || ![
+              "PROVIDER_ACCOUNT_AUTHORITY_STALE",
+              "PROVIDER_READINESS_OBSERVATION_STALE",
+            ].includes(error.message)
+          ) throw error;
+        }
+      }
     }
     return {
       account: this.#publicIsolatedProviderAccount(profile),

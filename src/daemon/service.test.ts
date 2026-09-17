@@ -13732,6 +13732,73 @@ describe("OompaService", () => {
     expect(value.providerSessionCalls).toEqual([]);
   });
 
+  test("records signed-in Devin readiness and one exact generation after a joined foreground login", async () => {
+    const value = await devinAccountFixture();
+    const added = await value.service.execute(
+      { kind: "account.add", label: "Devin readiness" },
+      { signal },
+    ) as { account: { id: `acct_${string}` } };
+    const key = "00000000-0000-4000-8000-000000000713";
+    const prepared = await value.service.execute({
+      kind: "account.devin-login.prepare",
+      account: added.account.id,
+      idempotencyKey: key,
+      manualTokenFlow: false,
+    }, { signal }) as {
+      login: { attemptId: `attempt_${string}`; providerGeneration: number };
+    };
+    const granted = value.store.requireProviderAccountAuthority(added.account.id, "devin");
+    expect(value.store.requireProviderAccountForProfile(added.account.id, "devin"))
+      .toMatchObject({ readiness: "unverified", readinessObservedAt: null });
+
+    value.setDevinSignedIn(true);
+    await expect(value.service.execute({
+      kind: "account.devin-login.complete",
+      account: added.account.id,
+      attemptId: prepared.login.attemptId,
+      idempotencyKey: key,
+      providerGeneration: prepared.login.providerGeneration,
+      outcome: { state: "joined", exitCode: 0, interruptedBy: null },
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: true },
+      login: { status: "signed_in" },
+    });
+
+    const settled = value.store.requireProviderAccountForProfile(added.account.id, "devin");
+    expect(settled.readiness).toBe("signed_in");
+    expect(settled.readinessObservedAt).not.toBeNull();
+    // One readiness change is exactly one binding advance, and the login never
+    // rotates the Devin process fence it settled under.
+    expect(settled.bindingGeneration).toBe(granted.bindingGeneration + 1);
+    expect(settled.processGeneration).toBe(prepared.login.providerGeneration);
+    const current = value.store.requireProviderAccountAuthority(added.account.id, "devin");
+    expect(current).toMatchObject({
+      providerAccountId: granted.providerAccountId,
+      processGeneration: granted.processGeneration,
+      bindingGeneration: granted.bindingGeneration + 1,
+    });
+
+    // Replaying the same terminal receipt must stay idempotent.
+    value.setDevinReadError(new Error("terminal replay must not inspect Devin auth"));
+    await expect(value.service.execute({
+      kind: "account.devin-login.complete",
+      account: added.account.id,
+      attemptId: prepared.login.attemptId,
+      idempotencyKey: key,
+      providerGeneration: prepared.login.providerGeneration,
+      outcome: { state: "joined", exitCode: 0, interruptedBy: null },
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: true },
+    });
+    expect(value.store.requireProviderAccountForProfile(added.account.id, "devin"))
+      .toMatchObject({
+        readiness: "signed_in",
+        bindingGeneration: granted.bindingGeneration + 1,
+        processGeneration: granted.processGeneration,
+      });
+    expect(value.providerSessionCalls).toEqual([]);
+  });
+
   test("grants Claude foreground login once and accepts a status-versus-complete race", async () => {
     const value = await claudeAccountFixture();
     const added = await value.service.execute(
@@ -14910,6 +14977,23 @@ describe("OompaService", () => {
       requirement: presetRequirements.astra,
     });
     expect(started.effectiveRuntimeProfile).not.toHaveProperty("isolatedHome");
+
+    // Devin owns its own process fence. The first session start advances it
+    // past the profile's Codex generation, and status must report that exact
+    // Devin generation rather than the unrelated Codex counter.
+    const devinAuthority = value.store.requireProviderAccountAuthority(added.account.id, "devin");
+    expect(devinAuthority.processGeneration).toBe(1);
+    expect(value.store.requireProfileById(added.account.id).processGeneration).toBe(0);
+    expect(value.store.requireProviderAccountForProfile(added.account.id, "devin"))
+      .toMatchObject({ readiness: "signed_in" });
+    await expect(value.service.execute({
+      kind: "account.show",
+      account: added.account.id,
+      provider: "devin",
+    }, { signal })).resolves.toMatchObject({
+      authentication: { provider: "devin", signedIn: true },
+      providerGeneration: devinAuthority.processGeneration,
+    });
   });
 
   test("archives and unarchives a session and filters the default listing", async () => {
