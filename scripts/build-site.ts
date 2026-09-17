@@ -512,16 +512,6 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-
-  // The /pr/ page renders this committed snapshot; publish the raw dataset
-  // beside it so the feed stays inspectable without the markup.
-  for (const name of ["snapshot.json", "history.json"]) {
-    const source = join(sourceRoot, "pr/data", name);
-    const parsed: unknown = JSON.parse(await readFile(source, "utf8"));
-    const destination = join(options.repositoryRoot, "dist/site/pr/data", name);
-    await mkdir(dirname(destination), { recursive: true });
-    await writeFile(destination, `${JSON.stringify(parsed)}\n`, { flag: "wx", mode: 0o644 });
-  }
   return mismatches;
 };
 

@@ -163,7 +163,6 @@ const siteRoutes = [
   { path: "docs/sessions/index.html", pathname: "/docs/sessions/", heading: "h1", label: "docs-sessions" },
   { path: "docs/reference/index.html", pathname: "/docs/reference/", heading: "h1", label: "docs-reference" },
   { path: "docs/status/index.html", pathname: "/docs/status/", heading: "h1", label: "docs-status" },
-  { path: "pr/index.html", pathname: "/pr/", heading: "h1", label: "pr" },
 ] as const;
 const siteMarkdownPaths = new Set(siteRoutes.filter(({ pathname }) => pathname.startsWith("/docs/")).map(({ path }) => path.replace(/\.html$/u, ".md")));
 const productPreviewCsp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'";
@@ -185,7 +184,6 @@ const sitePresetAttributions = [
 const sitePublicSupport = [
   "analytics.js", "appearance.js", "site.js", "favicon.svg", "og.png", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
   ".well-known/security.txt", ".well-known/hra.json",
-  "pr/data/snapshot.json", "pr/data/history.json",
   "icons/agents-one-place.svg", "icons/next-turn.svg", "icons/separate-accounts.svg",
   "fonts/nebula-sans/LICENSE.txt", "fonts/nebula-sans/PROVENANCE.md",
   "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md",

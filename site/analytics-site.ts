@@ -27,7 +27,6 @@ export const oompaPostHogSite = {
     { match: "exact", path: "/docs/sessions", pageKind: "guide", contentGroup: "documentation" },
     { match: "exact", path: "/docs/reference", pageKind: "reference", contentGroup: "documentation" },
     { match: "exact", path: "/docs/status", pageKind: "status", contentGroup: "documentation" },
-    { match: "exact", path: "/pr", pageKind: "status_board", contentGroup: "public" },
   ],
   customEvents: [],
   delegatedEvents: [],

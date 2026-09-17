@@ -205,7 +205,6 @@ function staticSiteFixture(sanitized = false) {
   const files = new Map<string, Buffer>([
     ["index.html", html], ["privacy/index.html", html], ["preview/index.html", inertHtml],
     ...docsRoutes.map((path) => [`${path}/index.html`, html] as const),
-    ["pr/index.html", html],
     ...productFixture(),
     [foundation, Buffer.from(css)], ["stylex.css", Buffer.from("@layer components.hraness-stylex{.x123{font-size:40px}}")],
     ...fontPaths.map((path, index) => [path, Buffer.from(`public:${fontNames[index]}`)] as const),
@@ -213,7 +212,7 @@ function staticSiteFixture(sanitized = false) {
     ...attributions.map(([path, source]) => [path, preset.get(source)!] as const),
     ...["analytics.js", "appearance.js", "site.js", "favicon.svg", "og.png", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
       ".well-known/security.txt", ".well-known/hra.json", "fonts/nebula-sans/LICENSE.txt", "fonts/nebula-sans/PROVENANCE.md",
-      "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md", "pr/data/snapshot.json", "pr/data/history.json",
+      "fonts/geist-mono/OFL.txt", "fonts/geist-mono/PROVENANCE.md",
       "icons/agents-one-place.svg", "icons/next-turn.svg", "icons/separate-accounts.svg", ...docsRoutes.map((path) => `${path}/index.md`)].map((path) => [path, Buffer.from(`support:${path}`)] as const),
   ]);
   return { files, publicFonts, preset, foundation, fontPaths, texturePaths, attributions, css, html };
@@ -285,7 +284,7 @@ describe("static site graph acceptance", () => {
       expect(graph.fonts).toEqual([...fixture.fontPaths].sort());
       expect(graph.textures).toEqual([...fixture.texturePaths].sort());
       expect(graph.routes.map(({ pathname }) => pathname)).toEqual([
-        "/", "/privacy/", "/preview/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/", "/pr/",
+        "/", "/privacy/", "/preview/", "/docs/", "/docs/start/", "/docs/web/", "/docs/sessions/", "/docs/reference/", "/docs/status/",
       ]);
       expect(graph.routes[1].heading).toBe("#privacy-heading");
       for (const path of graph.fonts) {

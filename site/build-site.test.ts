@@ -34,7 +34,6 @@ import {
   renderPrivacyHtml,
   renderSiteHtml,
 } from "./template.ts";
-import { renderPrHtml } from "./pr-template.ts";
 import { OOMPA_RELEASE_VERSION } from "../scripts/release-evidence";
 import { mobileHeaderFlowClassName } from "./marketing.stylex.ts";
 import { createSiteCompilerCase, siteCompilerHookMs, siteCompilerOuterMs } from "./build-site-test-owner";
@@ -382,9 +381,6 @@ describe("static-site build", () => {
       "dist/site/social-card.svg",
       "dist/site/social-card.png",
       "dist/site/stylex.css",
-      "dist/site/pr/index.html",
-      "dist/site/pr/data/snapshot.json",
-      "dist/site/pr/data/history.json",
       "dist/site/icons/agents-one-place.svg",
       "dist/site/icons/next-turn.svg",
       "dist/site/icons/separate-accounts.svg",
@@ -401,7 +397,7 @@ describe("static-site build", () => {
     const html = await readFile(join(root, "dist/site/index.html"), "utf8");
     const { foundationPath, authoredHtml } = compiledStylesheetJoin(html);
     expect(authoredHtml).toBe(renderSiteHtml());
-    for (const [path, render] of [["privacy/index.html", renderPrivacyHtml], ["preview/index.html", renderPreviewHtml], ["pr/index.html", renderPrHtml]] as const) {
+    for (const [path, render] of [["privacy/index.html", renderPrivacyHtml], ["preview/index.html", renderPreviewHtml]] as const) {
       const route = compiledStylesheetJoin(await readFile(join(root, "dist/site", path), "utf8"));
       expect(route.foundationPath).toBe(foundationPath);
       expect(route.authoredHtml).toBe(render());
