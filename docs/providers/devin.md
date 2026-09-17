@@ -65,6 +65,14 @@ Devin owns every provider-private file in that boundary, including
 uploads that credential. It runs the bounded `devin auth status` command inside
 the same isolated boundary and reduces the result to `signedIn` only.
 
+When the foreground login child exits, Oompa runs that bounded status command
+once under the login's exact authority and records the readiness it observed on
+the Devin provider account. A replayed login receipt and a launch that provably
+never started record nothing. Devin owns its own account process generation,
+separate from the Codex profile generation: `oompa account show <profile>
+--provider devin` reports that Devin generation, and a Devin session start
+advances only that fence.
+
 If the foreground Oompa parent or daemon fails after granting a login launch,
 `oompa account show <profile> --provider devin` reports the exact unsettled
 attempt. Confirm that the original child has exited before running the complete
