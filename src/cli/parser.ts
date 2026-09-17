@@ -1097,7 +1097,7 @@ export const devinAccountLoginCommand = (
   manualTokenFlow: boolean,
   idempotencyKey?: string,
 ): string => [
-  "hra account login",
+  "oompa account login",
   shellArgument(account),
   "--provider devin",
   ...(manualTokenFlow ? ["--manual-token-flow"] : []),

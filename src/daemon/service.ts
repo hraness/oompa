@@ -553,13 +553,13 @@ const devinCommandFailure = (error: DevinError): CommandFailure => {
       return new CommandFailure(
         "UNAVAILABLE",
         "The exact Devin process authority changed before the operation finished. Inspect daemon status before starting a fresh attempt.",
-        { reason: "devin_authority_stale", nextCommand: "hra daemon status --json" },
+        { reason: "devin_authority_stale", nextCommand: "oompa daemon status --json" },
       );
     case "DEADLINE_EXPIRED":
       return new CommandFailure(
         "CONFLICT",
         "The Devin interaction deadline expired before HRA could apply the response. Refresh pending interactions instead of replaying the expired response.",
-        { reason: "devin_interaction_deadline_expired", nextCommand: "hra interaction list --pending --json" },
+        { reason: "devin_interaction_deadline_expired", nextCommand: "oompa interaction list --pending --json" },
       );
     case "INVALID_INPUT":
     case "UNSUPPORTED_CAPABILITY":

@@ -223,7 +223,7 @@ describe("CLI parser", () => {
       },
       json: true,
       kind: "account.devin-login",
-      replayCommand: `hra account login personal --provider devin --manual-token-flow --idempotency-key ${key}`,
+      replayCommand: `oompa account login personal --provider devin --manual-token-flow --idempotency-key ${key}`,
     });
     expect(parseCli(["account", "show", "personal", "--provider", "devin", "--json"]))
       .toEqual({

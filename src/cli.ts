@@ -5280,7 +5280,7 @@ const devinAccountStatusResponseSchema = z.object({
     });
   }
   if (value.recovery === undefined) return;
-  if (value.recovery.statusCommand !== `hra account show ${value.account.id} --provider devin`) {
+  if (value.recovery.statusCommand !== `oompa account show ${value.account.id} --provider devin`) {
     context.addIssue({ code: "custom", path: ["recovery", "statusCommand"], message: "Devin recovery status command is not exact." });
   }
   if (value.recovery.sameKeyReplayCommand !== devinAccountLoginCommand(
@@ -5423,7 +5423,7 @@ const devinLoginRecovery = (
   details: {
     ...(input.accountId === undefined ? {} : {
       accountSelector: input.accountId,
-      statusCommand: `hra account show ${input.accountId} --provider devin`,
+      statusCommand: `oompa account show ${input.accountId} --provider devin`,
     }),
     ...(input.attemptId === undefined ? {} : { attemptId: input.attemptId }),
     idempotencyKey: input.idempotencyKey,
@@ -5444,7 +5444,7 @@ const devinLoginRecovery = (
           }
     ),
   },
-  message: "Devin login may have started, but HRA could not prove its terminal result. The same-key command identifies this attempt and will never relaunch Devin. If its HRA parent is gone, confirm the Devin child exited before using the exact acknowledged local abandon command; abandon does not stop Devin or change or delete credentials.",
+  message: "Devin login may have started, but Oompa could not prove its terminal result. The same-key command identifies this attempt and will never relaunch Devin. If its HRA parent is gone, confirm the Devin child exited before using the exact acknowledged local abandon command; abandon does not stop Devin or change or delete credentials.",
 }, json, output);
 
 async function executeClaudeAccountAuthentication(
@@ -5756,7 +5756,7 @@ async function executeDevinAccountAuthentication(
     if (!(error instanceof LocalDaemonIndeterminateError)) throw error;
     return renderFailure({
       code: "UNAVAILABLE",
-      message: "HRA could not preflight the exact Devin account. No login launch was granted.",
+      message: "Oompa could not preflight the exact Devin account. No login launch was granted.",
     }, invocation.json, output);
   }
   if (!statusResponse.ok) return renderFailure(statusResponse.error, invocation.json, output);

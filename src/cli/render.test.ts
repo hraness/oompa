@@ -765,7 +765,7 @@ describe("CLI rendering", () => {
     const data = {
       account: { id: accountId, label: "Devin private" },
       authentication: { provider: "devin", signedIn: false },
-      nextCommand: `hra account login ${accountId} --provider devin`,
+      nextCommand: `oompa account login ${accountId} --provider devin`,
       providerGeneration: 2,
       usage: {
         allowance: "unknown",
@@ -785,7 +785,7 @@ describe("CLI rendering", () => {
       "Label: Devin private",
       `ID: ${accountId}`,
       "Provider generation: 2",
-      `Next: hra account login ${accountId} --provider devin`,
+      `Next: oompa account login ${accountId} --provider devin`,
       "Account allowance: unknown",
       "  Devin ACP reports context and optional cumulative session cost, but exposes no account allowance or reset window.",
       "",
