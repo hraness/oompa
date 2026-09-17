@@ -19423,6 +19423,10 @@ const migrateWritableDatabase = (
       // refusal triggers that fenced the retired provider; live Devin
       // admission now rides the same authority guards as every other provider.
       dropRetiredProviderAdmissionTriggers(database);
+      // A schema-60 root already carries the joined queue transcript guard,
+      // but v0.8.4 installed it without Devin in the admitted provider list.
+      // Recreate it so the readmitted provider shares the same guard.
+      applyJoinedQueueTranscriptGuard(database, schemaVersion43FinalizationTriggerSql("queue_transcript_finalization_guard"));
       database.query("INSERT INTO migrations(version,applied_at) VALUES(61,?)").run(now());
       database.exec("PRAGMA user_version=61");
       assertJoinedStateSchema(database);

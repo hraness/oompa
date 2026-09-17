@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 
 import { applyJoinedQueueTranscriptGuard, assertJoinedQueueTranscriptGuard, joinedQueueTranscriptGuardSql } from "./joined-queue-transcript-guard";
 import { normalizeSchemaSql } from "./schema-cohort";
@@ -112,5 +113,114 @@ describe("joined queue transcript provider authority guard", () => {
     expect(() => f.db.transaction(() => { applyJoinedQueueTranscriptGuard(f.db, predecessor); throw new Error("late failure"); }).immediate()).toThrow("late failure");
     expect(f.snapshot()).toEqual(before);
     expect(normalizeSchemaSql(predecessor)).not.toBe(normalizeSchemaSql(joinedQueueTranscriptGuardSql(predecessor)));
+  });
+});
+
+// Verbatim mirror of the released v0.8.4 producer, `git show
+// 749d0e6:src/storage/joined-queue-transcript-guard.ts`. A state root that
+// v0.8.4 migrated to schema 60 already carries this joined trigger, so schema
+// 61 must recognize it rather than refuse it as a foreign guard.
+function releasedJoinedGuardSql(frozen: string): string {
+  const before = `    AND json_extract(NEW.transcript_intent_json,'$.accountId')=(
+      SELECT s.profile_id FROM sessions s WHERE s.id=NEW.session_id)
+    AND json_extract(NEW.transcript_intent_json,'$.providerGeneration')=(
+      SELECT p.process_generation FROM sessions s JOIN profiles p
+      ON p.id=s.profile_id WHERE s.id=NEW.session_id)`;
+  if (frozen.split(before).length !== 2) throw new Error("Frozen queue guard anchor missing");
+  return frozen.replace(before, `    AND EXISTS(
+      SELECT 1 FROM queue_provider_authorities captured
+      JOIN session_provider_authorities current ON current.session_id=NEW.session_id
+      JOIN sessions s ON s.id=current.session_id
+      JOIN provider_accounts account ON account.id=captured.provider_account_id
+      JOIN profiles profile ON profile.id=captured.profile_id
+      WHERE captured.queue_id=NEW.id AND NEW.session_id=OLD.session_id
+        AND captured.provider IN ('codex','claude')
+        AND s.profile_id=captured.profile_id AND s.provider_v39=captured.provider
+        AND current.provider_account_id=captured.provider_account_id
+        AND current.profile_id=captured.profile_id AND current.provider=captured.provider
+        AND current.binding_generation=captured.binding_generation
+        AND current.process_generation=captured.process_generation
+        AND account.profile_id=captured.profile_id AND account.provider=captured.provider
+        AND account.binding_generation=captured.binding_generation
+        AND account.process_generation=captured.process_generation
+        AND account.readiness!='removed' AND profile.state!='removed'
+        AND json_extract(OLD.transcript_intent_json,'$.accountId')=captured.profile_id
+        AND json_extract(OLD.transcript_intent_json,'$.providerGeneration')=captured.process_generation
+        AND json_extract(NEW.transcript_intent_json,'$.accountId')=captured.profile_id
+        AND json_extract(NEW.transcript_intent_json,'$.providerGeneration')=captured.process_generation
+    )`);
+}
+const released = releasedJoinedGuardSql(predecessor);
+const installed = (db: Database): string => z.object({ sql: z.string() }).strict().parse(
+  db.query("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='queue_transcript_finalization_guard'").get(),
+).sql;
+const replace = (db: Database, sql: string) => {
+  db.exec("DROP TRIGGER queue_transcript_finalization_guard");
+  db.exec(sql);
+};
+
+describe("joined queue transcript guard predecessor admission", () => {
+  test("the released v0.8.4 joined guard differs from the current one only in the admitted provider list", () => {
+    const current = joinedQueueTranscriptGuardSql(predecessor);
+    expect(normalizeSchemaSql(released)).not.toBe(normalizeSchemaSql(current));
+    expect(normalizeSchemaSql(released)).not.toBe(normalizeSchemaSql(predecessor));
+    expect(released.replace("IN ('codex','claude')", "IN ('codex','claude','devin')")).toBe(current);
+  });
+
+  test.each(["frozen v43 predecessor", "released v0.8.4 joined guard", "current joined guard"] as const)(
+    "%s upgrades to exactly the Devin-admitting joined guard", (origin) => {
+      const f = fixture();
+      if (origin === "released v0.8.4 joined guard") replace(f.db, released);
+      else if (origin === "current joined guard") f.install();
+      const rows = f.snapshot().rows;
+      f.install();
+      expect(normalizeSchemaSql(installed(f.db))).toBe(normalizeSchemaSql(joinedQueueTranscriptGuardSql(predecessor)));
+      expect(installed(f.db)).toContain("captured.provider IN ('codex','claude','devin')");
+      expect(() => assertJoinedQueueTranscriptGuard(f.db, predecessor)).not.toThrow();
+      expect(f.snapshot().rows).toEqual(rows);
+      // Re-running the installer over the settled guard writes nothing.
+      const settled = f.snapshot();
+      f.install();
+      expect(f.snapshot()).toEqual(settled);
+    });
+
+  test("upgrading the released v0.8.4 guard keeps the frozen terminal clauses and admits Devin capture", () => {
+    const f = fixture();
+    replace(f.db, released);
+    f.install();
+    expect(f.update().changes).toBe(1);
+    f.db.exec("UPDATE provider_accounts SET provider='devin';UPDATE sessions SET provider_v39='devin';"
+      + "UPDATE session_provider_authorities SET provider='devin';UPDATE queue_provider_authorities SET provider='devin'");
+    expect(f.update(intent({ providerConnectionId: "00000000-0000-4000-8000-000000000002" })).changes).toBe(1);
+  });
+
+  test.each([
+    "IN ('codex')",
+    "IN ('codex','claude','devin','other')",
+    "IN ('codex','devin')",
+  ])("a joined guard admitting a different provider list is refused without writes: %s", (list) => {
+    const f = fixture();
+    replace(f.db, released.replace("IN ('codex','claude')", list));
+    const before = f.snapshot();
+    expect(f.install).toThrow(failure);
+    expect(() => assertJoinedQueueTranscriptGuard(f.db, predecessor)).toThrow(failure);
+    expect(f.snapshot()).toEqual(before);
+  });
+
+  test("the released joined guard is not accepted as settled at schema 61", () => {
+    const f = fixture();
+    replace(f.db, released);
+    expect(() => assertJoinedQueueTranscriptGuard(f.db, predecessor)).toThrow(failure);
+  });
+
+  test("a rolled-back upgrade from the released joined guard restores it exactly", () => {
+    const f = fixture();
+    replace(f.db, released);
+    const before = f.snapshot();
+    expect(() => f.db.transaction(() => {
+      applyJoinedQueueTranscriptGuard(f.db, predecessor);
+      throw new Error("late failure");
+    }).immediate()).toThrow("late failure");
+    expect(f.snapshot()).toEqual(before);
   });
 });

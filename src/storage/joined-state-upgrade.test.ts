@@ -75,6 +75,45 @@ describe("private joined migration candidate", () => {
     expect(snapshot(paths.database)).toEqual(before);
   });
 
+  test("upgrades a schema-60 root whose joined queue guard predates Devin readmission", async () => {
+    const paths = await pathsFor();
+    open(paths);
+    const fresh = snapshot(paths.database);
+    // Mirror the released v0.8.4 state: schema 60 already carries the joined
+    // queue transcript guard, admitting the provider list it shipped with.
+    const admitted = "captured.provider IN ('codex','claude','devin')";
+    const database = new Database(paths.database, { create: false, strict: true });
+    try {
+      const current = z.object({ sql: z.string() }).strict().parse(database.query(
+        `SELECT sql FROM sqlite_master WHERE type='trigger'
+         AND name='queue_transcript_finalization_guard'`,
+      ).get()).sql;
+      expect(current.split(admitted)).toHaveLength(2);
+      database.transaction(() => {
+        database.exec("DROP TRIGGER queue_transcript_finalization_guard");
+        database.exec(current.replace(admitted, "captured.provider IN ('codex','claude')"));
+        database.query("DELETE FROM migrations WHERE version=?").run(61);
+        database.exec("PRAGMA user_version=60");
+      }).immediate();
+    } finally { database.close(false); }
+    const before = snapshot(paths.database);
+    expect(before.version).toEqual({ user_version: 60 });
+    expect(JSON.stringify(before.schema)).not.toContain(admitted);
+    open(paths);
+    const after = snapshot(paths.database);
+    expect(after.version).toEqual({ user_version: 61 });
+    expect(after.foreignKeys).toEqual([]);
+    expect(ledger(after.rows.migrations).map(({ version }) => version))
+      .toEqual(Array.from({ length: 61 }, (_, index) => index + 1));
+    // The guard, and every other schema object, settles on the fresh form.
+    expect(after.schema).toEqual(fresh.schema);
+    expect(JSON.stringify(after.schema)).toContain(admitted);
+    open(paths);
+    expect(snapshot(paths.database)).toEqual(after);
+    open(paths, true);
+    expect(snapshot(paths.database)).toEqual(after);
+  });
+
   for (const damage of ["joined guard", "provenance anchor guard", "ledger"] as const) {
     test(`current schema refuses a missing ${damage} without reconstructing authority`, async () => {
       const paths = await pathsFor();
