@@ -160,7 +160,10 @@ export const collectSnapshot = async (options: CollectOptions): Promise<PrSnapsh
   }));
   health.sort((a, b) => a.id.localeCompare(b.id));
 
-  let signals = normalizeSignals(collected);
+  const nowMs = now.getTime();
+  let signals = normalizeSignals(collected).filter(
+    (signal) => signal.expiresAt === undefined || Date.parse(signal.expiresAt) > nowMs,
+  );
 
   const environment = options.environment ?? {};
   const aiConfig = options.ai === "auto" || options.ai === undefined

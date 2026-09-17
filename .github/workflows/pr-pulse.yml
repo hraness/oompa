@@ -2,9 +2,11 @@ name: Puerto Rico pulse
 
 on:
   schedule:
-    # Near-realtime refresh for the public /pr/ crisis board. GitHub may delay
-    # scheduled runs; the pulse also skips writes when nothing changed.
-    - cron: "*/20 * * * *"
+    # Twice-daily refresh (morning and evening Atlantic) for the public /pr/
+    # crisis board. GitHub may delay scheduled runs; the pulse also skips
+    # writes when nothing changed.
+    - cron: "21 11 * * *"
+    - cron: "53 23 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -41,8 +43,10 @@ jobs:
       - name: Collect signals and write the snapshot
         env:
           # AI enrichment is optional. Without a provider key the pulse records
-          # aiStatus "disabled" and ships deterministic data only.
+          # aiStatus "disabled" and ships deterministic data only. The gateway
+          # key drives Spanish translation and relevance curation when set.
           PR_PULSE_AI_PROVIDER: auto
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.PR_PULSE_ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.PR_PULSE_OPENAI_API_KEY }}
         run: bun run pr/pulse.ts
