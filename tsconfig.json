@@ -27,6 +27,7 @@
     "plugins/**/*.ts",
     "pr/**/*.ts",
     "scripts/**/*.ts",
+    "scripts/**/*.tsx",
     "scripts/app-browser-runner.mjs",
     "site/**/*.ts",
     "site/**/*.tsx",
