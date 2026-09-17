@@ -25,6 +25,7 @@ const allowedPublicScopes = new Set([
 ]);
 const allowedPublicScopedPackages = new Set([
   "@ai-sdk/anthropic",
+  "@ai-sdk/gateway",
   "@ai-sdk/openai",
   "@anthropic-ai/claude-code",
   "@anthropic-ai/claude-code-darwin-arm64",

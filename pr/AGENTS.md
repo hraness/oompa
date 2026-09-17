@@ -8,7 +8,7 @@
 - `source.ts` defines the adapter contract each upstream collector implements.
 - `sources/` holds the registered collectors for official, infrastructure, scientific, regional, and news feeds. `sources/index.ts` is the registry.
 - `pipeline.ts` runs sources concurrently under per-source budgets, normalizes, classifies, deduplicates, validates, and derives headline metrics and source health.
-- `ai.ts` is the optional, environment-gated Vercel AI SDK enrichment layer; it never replaces deterministic fields.
+- `ai.ts` is the optional, environment-gated AI enrichment layer (Vercel AI Gateway or provider SDKs); it translates headings and summaries into Spanish, marks low-value signals as `noise`, and never replaces deterministic fields.
 - `pulse.ts` is the CLI entry that collects and writes `pr/data/snapshot.json` and `history.json`.
 - `resources.ts` owns the curated emergency-resource directory rendered by the route.
 - `pr.test.ts` covers model validation, geography, classification, feed parsing, adapter fixtures, pipeline isolation, AI gating, and the resource directory.
@@ -20,6 +20,6 @@
 - Every collector must fetch through `http.ts`, keep responses bounded, and surface failures as source health rather than aborting the pulse.
 - Parse every upstream payload from `unknown` with Zod before it becomes a signal. Keep signal ids stable and bounded; dedupe by id.
 - Keep all source and resource URLs HTTPS-only. Preserve each signal's source identity and link; media headlines are not authoritative without provenance.
-- AI enrichment stays disabled unless `PR_PULSE_AI_PROVIDER` and a provider key are configured, and AI failure must never fail the pulse.
-- Severity and region inference are deterministic; prefer the source's own severity and zones and use `classifyText` only to fill gaps.
+- AI enrichment stays disabled unless `PR_PULSE_AI_PROVIDER` and a provider key are configured, and AI failure must never fail the pulse. Relevance demotion never applies to warning-or-higher signals.
+- Severity and region inference are deterministic; prefer the source's own severity and zones and use `classifyText` only to fill gaps. Signals past `expiresAt` are dropped at collection time.
 - Regenerate data only through `bun run pulse:pr`; never hand-edit `snapshot.json` or `history.json`.
