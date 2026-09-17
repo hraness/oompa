@@ -1,10 +1,6 @@
-import { attachFoil } from "@hraness/design-kit/browser";
-
 import { isProductScene, parsePreviewMessage, productScenes, type ProductScene } from "./product-scenes.ts";
 import { createPreviewLoading } from "./preview-loading.ts";
 import { initWonkaArtifact } from "./wonka-renderer.ts";
-
-attachFoil(document.documentElement);
 
 for (const artifact of document.querySelectorAll<HTMLElement>("[data-wonka-artifact]")) {
   const dispose = initWonkaArtifact(artifact);
