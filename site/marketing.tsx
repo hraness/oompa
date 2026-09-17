@@ -84,7 +84,7 @@ function injectPillarIcons(html: string, pillars: readonly HeroPillar[]): string
     if (termStart === -1 || !/^<dt\s[^<]*>$/u.test(openTag)) {
       throw new Error(`Pillar label is not inside a rendered term: ${pillar.label}`);
     }
-    const icon = `<img alt="" aria-hidden="true" class="${iconClass}" decoding="async" height="44" loading="lazy" src="/icons/${pillar.icon}.svg" width="44" />`;
+    const icon = `<img alt="" aria-hidden="true" class="${iconClass}" decoding="async" height="88" loading="lazy" src="/icons/${pillar.icon}.svg" width="88" />`;
     rendered = rendered.slice(0, termStart) + icon + rendered.slice(termStart);
   }
   return rendered;
