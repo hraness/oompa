@@ -8,6 +8,7 @@ import {
   MarketingSiteHeader,
   MarketingTrustBoundary,
   ProductHero,
+  type MarketingLink,
 } from "@hraness/design-kit/react/server";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -35,20 +36,28 @@ function inlineContent(content: readonly InlineContent[]): ReactNode {
   });
 }
 
+/** The authored Oompa mark: the favicon's orange circle. Decorative inside brand links that carry their own accessible name. */
+export const OompaMark = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#f58220" stroke="#ad430d" strokeWidth={2}/></svg>
+);
+
+/** The public site navigation shared by the marketing header and the in-flow content footer. */
+export const oompaSiteLinks = (content: PublicContent, currentPath: string): readonly MarketingLink[] => [
+  { href: "/#product-preview", label: "Product", current: currentPath === "/" },
+  { href: "/docs/", label: "Docs", current: currentPath.startsWith("/docs/") },
+  { href: "/docs/status/", label: "Status" },
+  { href: content.links.github, label: "GitHub" },
+];
+
 export function renderMarketingHeader(content: PublicContent, currentPath: string): string {
   return renderToStaticMarkup(
     <MarketingSiteHeader
       className={`${mobileHeaderFlowClassName()} hraness-material-chrome${currentPath === "/" ? " hraness-marketing-header-surface" : ""}`}
       trailing={<SiteAppearanceMenu />}
       action={{ emphasis: "primary", href: content.links.app, label: "Open Oompa" }}
-      brand={<><span aria-hidden="true">🟠</span> {content.productName}</>}
+      brand={<><OompaMark />{content.productName}</>}
       brandHref="/"
-      links={[
-        { href: "/#product-preview", label: "Product", current: currentPath === "/" },
-        { href: "/docs/", label: "Docs", current: currentPath.startsWith("/docs/") },
-        { href: "/docs/status/", label: "Status" },
-        { href: content.links.github, label: "GitHub" },
-      ]}
+      links={oompaSiteLinks(content, currentPath)}
     />,
   );
 }
