@@ -43,6 +43,8 @@ const allowedPublicScopedPackages = new Set([
   "@hraness/support-foundation",
   "@hraness/slopcamera",
   "@hraness/ui",
+  "@hraness/web-discovery",
+  "@resvg/resvg-js",
   "@stylexjs/babel-plugin",
   "@stylexjs/stylex",
   "@vercel/routing-utils",
