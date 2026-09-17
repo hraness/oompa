@@ -8,6 +8,7 @@ import {
 } from "./attachment-schemas";
 import { isAttachmentName } from "./attachments";
 import { autorespondAfterHoursPolicySchema } from "./autorespond-after-hours";
+import { autoCompactPolicySchema } from "./compact-policy";
 import {
   oompaMemoryExplainInputSchema,
   oompaMemoryQueryInputSchema,
@@ -337,6 +338,18 @@ export const publicPeerSessionPolicySchema = z.object({
 
 export type PublicPeerSessionPolicy = z.infer<typeof publicPeerSessionPolicySchema>;
 
+export const publicSessionCompactPolicySchema = z.object({
+  version: z.literal(1),
+  sessionId: sessionIdSchema,
+  enabled: z.boolean(),
+  triggerTokens: autoCompactPolicySchema.shape.triggerTokens,
+  minIntervalMs: autoCompactPolicySchema.shape.minIntervalMs,
+  revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  updatedAt: unixMillisecondsSchema,
+}).strict();
+
+export type PublicSessionCompactPolicy = z.infer<typeof publicSessionCompactPolicySchema>;
+
 export const localCommandSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("doctor"), offline: z.boolean() }).strict(),
   z.object({ kind: z.literal("daemon.status") }).strict(),
@@ -488,6 +501,19 @@ export const localCommandSchema = z.discriminatedUnion("kind", [
     session: selectorSchema,
     mode: peerSessionPolicyModeSchema,
     expectedRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  }).strict(),
+  z.object({
+    kind: z.literal("session.compact-policy.get"),
+    session: selectorSchema,
+  }).strict(),
+  z.object({
+    kind: z.literal("session.compact-policy.set"),
+    session: selectorSchema,
+    enabled: z.boolean(),
+    triggerTokens: autoCompactPolicySchema.shape.triggerTokens.optional(),
+    minIntervalMs: autoCompactPolicySchema.shape.minIntervalMs.optional(),
+    expectedRevision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+      .optional(),
   }).strict(),
   z.object({
     kind: z.literal("session.events"),

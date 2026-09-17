@@ -92,7 +92,7 @@
     "redactCompleteSensitiveText": 1
   },
   "src/daemon/service.ts": {
-    "assertCurrent": 102
+    "assertCurrent": 103
   },
   "src/daemon/session-event-cursor.ts": {
     "timingSafeEqual": 1
@@ -167,7 +167,7 @@
   "src/storage/state-store.ts": {
     "O_NOFOLLOW": 2,
     "mode0600": 3,
-    "immediateTransaction": 207,
+    "immediateTransaction": 208,
     "secureDelete": 2,
     "synchronousFull": 1,
     "redactCompleteSensitiveText": 3

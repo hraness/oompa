@@ -116,6 +116,7 @@ import {
   type SessionEventPage,
   type SessionMessageActor,
 } from "../domain/session-events";
+import { evaluateAutoCompact } from "../domain/compact-policy";
 import {
   boundSessionTranscriptSerializedBytes,
   buildSessionTranscript,
@@ -203,6 +204,7 @@ import {
   mutationRequestDigest,
   sessionStartMutationRequest,
   PeerSessionRefusalError,
+  SessionCompactPolicyError,
   StateSecurityScrubRequiredError,
   UnusableProjectRootError,
   USAGE_LOCAL_RETAIN_AGE_MS,
@@ -219,6 +221,7 @@ import {
   type ProviderRuntimeAccountRevocationRecord,
   type ProjectRecord,
   type SessionAdoptionCandidateRecord,
+  type SessionCompactPolicyRecord,
   type SessionRecord,
   type SessionProviderAuthority,
   type SessionSwitchCas,
@@ -1044,6 +1047,35 @@ const publicPeerSessionPolicy = (policy: PeerSessionPolicyRecord) => ({
   revision: policy.revision,
   updatedAt: policy.updatedAt,
 });
+const publicSessionCompactPolicy = (policy: SessionCompactPolicyRecord) => ({
+  version: 1 as const,
+  sessionId: policy.sessionId,
+  enabled: policy.enabled,
+  triggerTokens: policy.triggerTokens,
+  minIntervalMs: policy.minIntervalMs,
+  revision: policy.revision,
+  updatedAt: policy.updatedAt,
+});
+/*
+ * One deterministic compaction command per session per usage bucket. The
+ * preimage is exactly `session.compact-policy:<sessionId>:<bucket>` where the
+ * bucket is the observed turn id, or — for a usage observation that carries
+ * no turn — the current policy-interval bucket. The digest is folded into an
+ * RFC 4122 version-5-shaped UUID, so a second token_usage observation in the
+ * same bucket replays the same durable command instead of dispatching twice.
+ */
+const sessionCompactPolicyIdempotencyKey = (
+  sessionId: SessionRecord["id"],
+  bucket: string,
+): string => {
+  const digest = createHash("sha256")
+    .update(`session.compact-policy:${sessionId}:${bucket}`, "utf8")
+    .digest();
+  digest[6] = (digest[6] ?? 0) & 0x0f | 0x50;
+  digest[8] = (digest[8] ?? 0) & 0x3f | 0x80;
+  const hex = digest.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+};
 const conversationAutomationIdempotencyKey = (
   authority: ProfileAuthority,
   call: ConversationAutomationToolCall,
@@ -1261,6 +1293,7 @@ export const BACKGROUND_DIAGNOSTIC_CODES = [
   "queue_pre_effect_retry_failed",
   "recovery_observation_failed",
   "session_adoption_failed",
+  "session_compact_policy_failed",
   "session_state_tracking_failed",
   "usage_refresh_failed",
   "usage_poll_account_failed",
@@ -2543,6 +2576,36 @@ export class OompaService {
             { allowDuringProjectionRecovery: true },
           );
         }
+        case "session.compact-policy.get": {
+          const session = this.#store.requireSession(command.session);
+          return await this.#serializeSessionAuthority(
+            session,
+            () => publicSessionCompactPolicy(
+              this.#store.requireSessionCompactPolicy(session.id),
+            ),
+            { allowDuringProjectionRecovery: true },
+          );
+        }
+        case "session.compact-policy.set": {
+          const session = this.#store.requireSession(command.session);
+          return await this.#serializeSessionAuthority(
+            session,
+            () => {
+              // Omitted policy fields retain the persisted values. An omitted
+              // revision compare-and-swaps against the value read inside this
+              // serializer; an explicit one fences against a concurrent writer.
+              const current = this.#store.requireSessionCompactPolicy(session.id);
+              return publicSessionCompactPolicy(this.#store.setSessionCompactPolicy({
+                sessionId: session.id,
+                expectedRevision: command.expectedRevision ?? current.revision,
+                enabled: command.enabled,
+                triggerTokens: command.triggerTokens ?? current.triggerTokens,
+                minIntervalMs: command.minIntervalMs ?? current.minIntervalMs,
+              }));
+            },
+            { allowDuringProjectionRecovery: true },
+          );
+        }
         case "autorespond.status": {
           const session = command.session === undefined ? null : this.#store.requireSession(command.session);
           const mode = session === null
@@ -3336,6 +3399,18 @@ export class OompaService {
             details,
           );
         }
+      }
+      if (error instanceof SessionCompactPolicyError) {
+        if (error.code === "SESSION_COMPACT_POLICY_NOT_FOUND") {
+          throw new CommandFailure(
+            "NOT_FOUND",
+            "The selected session has no compact policy record.",
+          );
+        }
+        throw new CommandFailure(
+          "CONFLICT",
+          "The session compact policy revision changed. Read it again and retry with the current revision.",
+        );
       }
       if (error instanceof SelectionError) throw new CommandFailure(error.code, error.message, { candidates: error.candidates });
       if (
@@ -9202,7 +9277,106 @@ export class OompaService {
       });
       this.#eventWaiters.notify(write.sessionId);
       this.#trackSessionState(write, write.providerAuthority);
+      if (write.body.type === "token_usage") {
+        this.#evaluateSessionCompactPolicy(write);
+      }
     }
+  }
+
+  /*
+   * Opt-in auto-compaction: after a token_usage event is durable, evaluate
+   * the session's policy and, on `compact`, schedule the existing bound
+   * `session.compact` effect under the session serializer. The deterministic
+   * bucket key makes the dispatch itself the rate limiter; the deferred task
+   * runs outside whatever serialization this persistence path holds, and its
+   * failure can never roll back the already-persisted usage event.
+   */
+  #evaluateSessionCompactPolicy(write: SessionEventWrite): void {
+    if (write.body.type !== "token_usage") return;
+    try {
+      const body = write.body;
+      if (body.totalTokens === null) return;
+      const policy = this.#store.readSessionCompactPolicy(write.sessionId);
+      if (!policy.enabled) return;
+      const session = this.#store.requireSession(write.sessionId);
+      const now = this.#now();
+      const decision = evaluateAutoCompact({
+        enabled: policy.enabled,
+        totalTokens: body.totalTokens,
+        modelContextWindow: body.modelContextWindow,
+        triggerTokens: policy.triggerTokens,
+        minIntervalMs: policy.minIntervalMs,
+        lastCompactionAtMs: this.#store.readLatestSessionCompactionAt(write.sessionId),
+        turnInFlight: session.activeTurnId !== undefined,
+        nowMs: now,
+      });
+      if (decision.action !== "compact") return;
+      this.#scheduleSessionCompactPolicy(
+        session.id,
+        sessionCompactPolicyIdempotencyKey(
+          session.id,
+          body.turnId
+            ?? `interval-${String(Math.floor(now / policy.minIntervalMs))}`,
+        ),
+        body.totalTokens,
+        body.modelContextWindow,
+      );
+    } catch (error: unknown) {
+      this.recordBackgroundDiagnostic("session_compact_policy_failed", error);
+    }
+  }
+
+  #scheduleSessionCompactPolicy(
+    sessionId: SessionRecord["id"],
+    idempotencyKey: string,
+    totalTokens: number,
+    modelContextWindow: number | null,
+  ): void {
+    if (this.#state !== "open") return;
+    const tracked = (async () => {
+      const session = this.#store.requireSession(sessionId);
+      await this.#serializeSessionAuthority(
+        session,
+        async () => {
+          // The admission decision is stale by the time this serialized
+          // closure runs: re-evaluate against fresh policy, interval, and
+          // turn state so a policy toggle or an earlier dispatch in a
+          // different bucket still bounds the dispatch rate.
+          const policy = this.#store.readSessionCompactPolicy(session.id);
+          const current = this.#store.requireSession(session.id);
+          const decision = evaluateAutoCompact({
+            enabled: policy.enabled,
+            totalTokens,
+            modelContextWindow,
+            triggerTokens: policy.triggerTokens,
+            minIntervalMs: policy.minIntervalMs,
+            lastCompactionAtMs: this.#store.readLatestSessionCompactionAt(session.id),
+            turnInFlight: current.activeTurnId !== undefined,
+            nowMs: this.#now(),
+          });
+          if (decision.action !== "compact") return;
+          await this.#compact(
+            session.id,
+            idempotencyKey,
+            this.#backgroundAbort.signal,
+            "policy",
+          );
+        },
+      );
+    })().then(
+      () => undefined,
+      (error: unknown) => {
+        if (error instanceof StateSecurityScrubRequiredError) this.#requestStop();
+        else if (error instanceof CommandFailure && error.code === "CONFLICT") {
+          // A refused dispatch (for example a turn started during the
+          // serialized wait) is expected suppression, not a policy failure.
+        } else if (!this.#backgroundAbort.signal.aborted) {
+          this.recordBackgroundDiagnostic("session_compact_policy_failed", error);
+        }
+      },
+    );
+    this.#background.add(tracked);
+    void tracked.then(() => this.#background.delete(tracked));
   }
 
   /*
@@ -20523,7 +20697,12 @@ export class OompaService {
   // provider's own `threadCompaction` fact, which the projection renders as a
   // `compaction` session event. An uncertain attempt reconciles against that
   // same event stream, never a replay.
-  async #compact(selector: string, idempotencyKey: string | undefined, signal: AbortSignal): Promise<unknown> {
+  async #compact(
+    selector: string,
+    idempotencyKey: string | undefined,
+    signal: AbortSignal,
+    trigger: "manual" | "policy" = "manual",
+  ): Promise<unknown> {
     const session = this.#requireBoundSession(selector);
     const profile = this.#store.requireProfile(session.profileId);
     this.#assertProviderReady(profile, this.#sessionProviderAuthority(session), { session });
@@ -20578,7 +20757,7 @@ export class OompaService {
       this.#appendSessionEvent(runtimeAuthority, session.id, observedProviderConnectionId, {
         type: "compaction",
         outcome: "requested",
-        trigger: "manual",
+        trigger,
         turnId: null,
       });
       return { requested: true, session: this.#store.requireSession(session.id), idempotencyKey: key };

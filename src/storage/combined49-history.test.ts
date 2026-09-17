@@ -88,13 +88,14 @@ const exactRow = (value: Snapshot, table: string, key: string, expected: string 
 };
 
 const assertMigratedHistory = (original: Snapshot, migrated: Snapshot): void => {
-  expect(migrated.version).toEqual({ user_version: 60 });
+  expect(migrated.version).toEqual({ user_version: 61 });
   const ledger = z.array(z.object({ version: z.number(), applied_at: z.number() }).strict()).parse(original.ledger);
   expect(migrated.ledger).toEqual([
     ...ledger.filter((row) => row.version <= 40),
     ...Array.from({ length: 10 }, (_, index) => ({ version: index + 41, applied_at: migratedAt })),
     ...ledger.filter((row) => row.version >= 41).map((row) => ({ ...row, version: row.version + 10 })),
     { version: 60, applied_at: migratedAt },
+    { version: 61, applied_at: migratedAt },
   ]);
   for (const [table, names] of Object.entries(original.columns)) {
     for (const name of names) expect(migrated.columns[table]).toContain(name);
@@ -172,7 +173,7 @@ const preserveHistory = async (
     expect(exactRow(original, "notification_hours", "singleton", 1).time_zone).toBe("UTC");
     const originalBytes = hash(await readFile(paths.database));
     expect(() => new StateStore(paths, { readonly: true }))
-      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:60");
+      .toThrow("STATE_SCHEMA_MIGRATION_REQUIRED:49:61");
     expectCapturedEqual(snapshot(paths.database), original);
     expect(hash(await readFile(paths.database))).toBe(originalBytes);
     const upgrading = new StateStore(paths, { now: () => migratedAt, resolveMachineTimeZone: () => "UTC" });

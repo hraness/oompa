@@ -26,7 +26,7 @@ import { finished } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 
 export const OOMPA_INSTALL_BUN_VERSION = "1.3.14";
-export const OOMPA_INSTALL_CLI_SHA256 = "5b609e5d8a17484f9c16cd4164a80befef05c5ceeb6fe07fdbb85d0a76dbb580";
+export const OOMPA_INSTALL_CLI_SHA256 = "31eb7f6a34ef72caf8ca711152154a767d4a67074a43eaec6ac2b8b80ddcebf8";
 
 const expectedPackageName = "@hraness/oompa";
 const expectedPackageVersion = "0.8.0";

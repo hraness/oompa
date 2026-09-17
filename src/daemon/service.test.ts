@@ -8292,7 +8292,7 @@ describe("OompaService personal-session adoption", () => {
     const store = new StateStore(paths, { now: () => personalAdoptionNow });
     stores.push(store);
     const migrated = new Database(paths.database, { readonly: true, strict: true });
-    expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+    expect(migrated.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
     expect(migrated.query(
       "SELECT evidence_json,evidence_digest FROM mutation_effect_evidence WHERE attempt_id=?",
     ).get(origin.attemptId)).toEqual(before);
@@ -18591,7 +18591,7 @@ describe("OompaService", () => {
     });
     const inspector = new Database(paths.database, { readonly: true, strict: true });
     try {
-      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 60 });
+      expect(inspector.query("PRAGMA user_version").get()).toEqual({ user_version: 61 });
       expect(inspector.query(
         "SELECT id,label,state,process_generation,provider_email,provider_plan,created_at,updated_at,label_key FROM profiles WHERE id=?",
       ).get(accountId)).toEqual(canonical24ResetFixture.profileRow);
@@ -18600,7 +18600,7 @@ describe("OompaService", () => {
       ).all()).toEqual([...canonical24ResetFixture.migrations]);
       expect(inspector.query(
         "SELECT version FROM migrations WHERE version>=25 ORDER BY version",
-      ).all()).toEqual(Array.from({ length: 36 }, (_, index) => ({ version: index + 25 })));
+      ).all()).toEqual(Array.from({ length: 37 }, (_, index) => ({ version: index + 25 })));
     } finally {
       inspector.close(false);
     }
@@ -24495,6 +24495,187 @@ describe("OompaService", () => {
     const recovered = await service.execute({ kind: "session.recover", session: sessionId }, { signal });
     expect(recovered).toMatchObject({ recovery: { resolved: true, resolution: "proven_applied" } });
     expect(codex.calls.filter((call) => call === "compact")).toHaveLength(1);
+  });
+
+  test("session.compact-policy get/set round-trips the durable policy", async () => {
+    const value = await fixture();
+    const { service } = value;
+    const { sessionId } = await createIdleSession(value, "Compact policy");
+    expect(await service.execute({
+      kind: "session.compact-policy.get",
+      session: sessionId,
+    }, { signal })).toEqual({
+      version: 1,
+      sessionId,
+      enabled: false,
+      triggerTokens: 250_000,
+      minIntervalMs: 300_000,
+      revision: 1,
+      updatedAt: expect.any(Number),
+    });
+    expect(await service.execute({
+      kind: "session.compact-policy.set",
+      session: sessionId,
+      expectedRevision: 1,
+      enabled: true,
+      triggerTokens: 200_000,
+    }, { signal })).toMatchObject({
+      enabled: true,
+      triggerTokens: 200_000,
+      minIntervalMs: 300_000,
+      revision: 2,
+    });
+    // A stale revision conflicts; a get still answers the persisted row.
+    await expect(service.execute({
+      kind: "session.compact-policy.set",
+      session: sessionId,
+      expectedRevision: 1,
+      enabled: false,
+    }, { signal })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await service.execute({
+      kind: "session.compact-policy.get",
+      session: sessionId,
+    }, { signal })).toMatchObject({ enabled: true, revision: 2 });
+  });
+
+  test("a disabled compact policy never dispatches on crossing usage", async () => {
+    const value = await fixture();
+    const { service, codex, store } = value;
+    const { sessionId } = await createIdleSession(value, "Auto compact off");
+    const session = store.requireSession(sessionId);
+    if (session.providerThreadId === undefined) throw new Error("Expected provider binding.");
+    const profile = store.requireProfileById(session.profileId);
+    await service.observeCodexFact(liveAuthorityFor(store, profile.id), {
+      type: "tokenUsageUpdated",
+      threadId: session.providerThreadId,
+      turnId: "turn-off",
+      inputTokens: null,
+      cachedInputTokens: null,
+      outputTokens: null,
+      reasoningOutputTokens: null,
+      totalTokens: 4_000_000,
+      modelContextWindow: null,
+    });
+    await service.settled();
+    // The usage event persists; only the provider call is withheld.
+    expect(store.listSessionEvents({ afterSequence: 0, sessionId }).events
+      .some((event) => event.body.type === "token_usage")).toBe(true);
+    expect(codex.calls).not.toContain("compact");
+    expect(store.listSessionEvents({ afterSequence: 0, sessionId }).events
+      .some((event) => event.body.type === "compaction")).toBe(false);
+  });
+
+  test("an enabled compact policy dispatches exactly once per usage bucket", async () => {
+    let now = 10_000_000;
+    const value = await fixture(undefined, new FakeCloud(), () => undefined, () => now);
+    const { service, codex, store } = value;
+    const { sessionId } = await createIdleSession(value, "Auto compact on");
+    const session = store.requireSession(sessionId);
+    if (session.providerThreadId === undefined) throw new Error("Expected provider binding.");
+    const profile = store.requireProfileById(session.profileId);
+    const threadId = session.providerThreadId;
+    await service.execute({
+      kind: "session.compact-policy.set",
+      session: sessionId,
+      expectedRevision: 1,
+      enabled: true,
+      triggerTokens: 200_000,
+      minIntervalMs: 30_000,
+    }, { signal });
+    const authority = liveAuthorityFor(store, profile.id);
+    const usage = (totalTokens: number, turnId = "turn-auto") =>
+      service.observeCodexFact(authority, {
+        type: "tokenUsageUpdated",
+        threadId,
+        turnId,
+        inputTokens: null,
+        cachedInputTokens: null,
+        outputTokens: null,
+        reasoningOutputTokens: null,
+        totalTokens,
+        modelContextWindow: 1_000_000,
+      });
+    const compactions = () => store.listSessionEvents({ afterSequence: 0, sessionId })
+      .events.filter((event) => event.body.type === "compaction");
+    const compactCalls = () => codex.calls.filter((call) => call === "compact").length;
+
+    // Under the trigger nothing is scheduled.
+    await usage(150_000);
+    await service.settled();
+    expect(compactCalls()).toBe(0);
+    // Crossing the trigger schedules exactly one policy compaction.
+    await usage(260_000);
+    await service.settled();
+    expect(compactCalls()).toBe(1);
+    expect(compactions().map((event) => event.body)).toMatchObject([
+      { type: "compaction", outcome: "requested", trigger: "policy", turnId: null },
+    ]);
+    // A second observation in the same turn bucket replays the durable
+    // command: no second dispatch and no second request event, even after
+    // the minimum interval has elapsed.
+    now += 31_000;
+    await usage(280_000);
+    await service.settled();
+    expect(compactCalls()).toBe(1);
+    expect(compactions()).toHaveLength(1);
+    // A fresh turn bucket after the interval is a new durable command.
+    await usage(290_000, "turn-auto-2");
+    await service.settled();
+    expect(compactCalls()).toBe(2);
+    expect(compactions()).toHaveLength(2);
+  });
+
+  test("the compact policy never dispatches while a turn is in flight", async () => {
+    const value = await fixture();
+    const { service, codex, store } = value;
+    const { sessionId } = await createIdleSession(value, "Auto compact mid-turn");
+    const session = store.requireSession(sessionId);
+    if (session.providerThreadId === undefined) throw new Error("Expected provider binding.");
+    const profile = store.requireProfileById(session.profileId);
+    const threadId = session.providerThreadId;
+    store.setSessionCompactPolicy({
+      sessionId,
+      expectedRevision: 1,
+      enabled: true,
+      triggerTokens: 20_000,
+      minIntervalMs: 30_000,
+    });
+    const authority = liveAuthorityFor(store, profile.id);
+    const usage = (totalTokens: number, turnId = "turn-live") =>
+      service.observeCodexFact(authority, {
+        type: "tokenUsageUpdated",
+        threadId,
+        turnId,
+        inputTokens: null,
+        cachedInputTokens: null,
+        outputTokens: null,
+        reasoningOutputTokens: null,
+        totalTokens,
+        modelContextWindow: null,
+      });
+    await service.observeCodexFact(authority, {
+      type: "turnStarted",
+      threadId,
+      turn: { id: "turn-live", items: [], status: "inProgress", startedAt: 1, completedAt: null, durationMs: null },
+    });
+    // Over the trigger but mid-turn: observe only, no dispatch.
+    await usage(250_000);
+    await service.settled();
+    expect(codex.calls).not.toContain("compact");
+    await service.observeCodexFact(authority, {
+      type: "turnCompleted",
+      threadId,
+      turn: { id: "turn-live", items: [], status: "completed", startedAt: 1, completedAt: 2, durationMs: 1 },
+    });
+    // The first post-turn observation over the trigger fires once.
+    await usage(260_000);
+    await service.settled();
+    expect(codex.calls.filter((call) => call === "compact")).toHaveLength(1);
+    expect(store.listSessionEvents({ afterSequence: 0, sessionId }).events
+      .filter((event) => event.body.type === "compaction")
+      .map((event) => event.body)).toMatchObject([
+        { type: "compaction", outcome: "requested", trigger: "policy", turnId: null },
+      ]);
   });
 
   test("fences incomplete pending transcript replay without manufacturing source runtime authority", async () => {

@@ -3,6 +3,12 @@ import { isAbsolute, resolve } from "node:path";
 
 import { CODEX_PIN } from "../codex/pin";
 import { ATTACHMENT_MAX_COUNT } from "../domain/attachments";
+import {
+  AUTO_COMPACT_MAX_MIN_INTERVAL_MS,
+  AUTO_COMPACT_MAX_TRIGGER_TOKENS,
+  AUTO_COMPACT_MIN_INTERVAL_FLOOR_MS,
+  AUTO_COMPACT_MIN_TRIGGER_TOKENS,
+} from "../domain/compact-policy";
 import type { LocalCommand } from "../domain/contracts";
 import { localCommandSchema } from "../domain/contracts";
 import { canonicalizeNotificationTimeZone } from "../domain/notification-hours";
@@ -237,7 +243,7 @@ Usage:
   oompa plugin show <account> <plugin> [--project <project>] [--refresh]
   oompa project add|list|use
   oompa memory status|list|get|search|explain|remember|share|hosted
-  oompa session list|show|status|watch|start|send|queue|steer|stop|peer-policy
+  oompa session list|show|status|watch|start|send|queue|steer|stop|peer-policy|compact-policy
   oompa session adoption status [--provider codex|claude]
   oompa session adoption enable <account> --provider codex|claude
   oompa session adoption disable --provider codex|claude
@@ -489,6 +495,8 @@ Usage:
   oompa session state <session> [--json]
   oompa session peer-policy get <session> [--json]
   oompa session peer-policy set <session> <off|inspect|coordinate> --revision <n> [--json]
+  oompa session compact-policy <session> [--json]
+  oompa session compact-policy <session> on|off [--trigger-tokens <20000..4000000>] [--min-interval-ms <30000..86400000>] [--expected-revision <n>] [--json]
   oompa autorespond on|workspace|off|default|status [--session <session>] [--json]
   oompa autorespond gateway set [--from-fd <fd>] [--json]
   oompa autorespond gateway clear [--json]
@@ -531,6 +539,8 @@ Examples:
   oompa session send my-session --attach diagram.png --attach notes.md "what changed here?"
   oompa session peer-policy get my-session
   oompa session peer-policy set my-session inspect --revision 1
+  oompa session compact-policy my-session
+  oompa session compact-policy my-session on --trigger-tokens 200000
   oompa session task create my-session --name daily-review --every-minutes 1440 -- "review the release queue"`,
   work: `Oompa work
 
@@ -1565,6 +1575,68 @@ const parseSessionPeerPolicy = (cursor: Cursor): LocalCommand => {
   );
 };
 
+/*
+ * `compact-policy <session>` reads; `compact-policy <session> on|off
+ * [--trigger-tokens <n>] [--min-interval-ms <n>] [--expected-revision <n>]`
+ * writes. The toggle is required for a write — it is the change every write
+ * makes — while omitted fields keep their persisted values and an omitted
+ * revision compare-and-swaps against the value the daemon reads under the
+ * session serializer.
+ */
+const parseSessionCompactPolicy = (cursor: Cursor): LocalCommand => {
+  const rawExpectedRevision = option(cursor, "--expected-revision");
+  const rawTriggerTokens = option(cursor, "--trigger-tokens");
+  const rawMinIntervalMs = option(cursor, "--min-interval-ms");
+  const session = take(cursor, "session");
+  const toggle = takeOptional(cursor);
+  finish(cursor);
+  if (toggle === undefined) {
+    if (
+      rawExpectedRevision !== undefined
+      || rawTriggerTokens !== undefined
+      || rawMinIntervalMs !== undefined
+    ) {
+      throw new CliUsageError("Session compact-policy writes require `on` or `off`.");
+    }
+    return { kind: "session.compact-policy.get", session };
+  }
+  if (toggle !== "on" && toggle !== "off") {
+    throw new CliUsageError("Session compact policy must be toggled `on` or `off`.");
+  }
+  const expectedRevision = rawExpectedRevision === undefined
+    ? undefined
+    : boundedDecimal(
+      rawExpectedRevision,
+      "Session compact policy --expected-revision",
+      1,
+      Number.MAX_SAFE_INTEGER,
+    );
+  const triggerTokens = rawTriggerTokens === undefined
+    ? undefined
+    : boundedDecimal(
+      rawTriggerTokens,
+      "Session compact policy --trigger-tokens",
+      AUTO_COMPACT_MIN_TRIGGER_TOKENS,
+      AUTO_COMPACT_MAX_TRIGGER_TOKENS,
+    );
+  const minIntervalMs = rawMinIntervalMs === undefined
+    ? undefined
+    : boundedDecimal(
+      rawMinIntervalMs,
+      "Session compact policy --min-interval-ms",
+      AUTO_COMPACT_MIN_INTERVAL_FLOOR_MS,
+      AUTO_COMPACT_MAX_MIN_INTERVAL_MS,
+    );
+  return command({
+    kind: "session.compact-policy.set",
+    session,
+    enabled: toggle === "on",
+    ...(triggerTokens === undefined ? {} : { triggerTokens }),
+    ...(minIntervalMs === undefined ? {} : { minIntervalMs }),
+    ...(expectedRevision === undefined ? {} : { expectedRevision }),
+  });
+};
+
 const parseSessionTask = (
   cursor: Cursor,
   idempotencyKey: string | undefined,
@@ -1682,6 +1754,7 @@ const parseSession = (
     case "status": { const session = take(cursor, "session"); finish(cursor); return { kind: "session.status", session }; }
     case "state": { const session = take(cursor, "session"); finish(cursor); return { kind: "session.state", session }; }
     case "peer-policy": return parseSessionPeerPolicy(cursor);
+    case "compact-policy": return parseSessionCompactPolicy(cursor);
     case "events": {
       const followFlag = flag(cursor, "--follow");
       const follow = followFlag || jsonl;

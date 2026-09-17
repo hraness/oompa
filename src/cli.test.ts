@@ -150,7 +150,7 @@ const installPrivateTask48State = (databasePath: string): void => {
 // An install written by a newer Oompa build than this one. No migration exists for
 // it, so every entry point must refuse instead of guessing.
 // Keep this expectation independent of the implementation's schema constant.
-const expectedStateSchemaVersion = 60;
+const expectedStateSchemaVersion = 61;
 const advanceStateSchema = (databasePath: string): void => {
   const database = new Database(databasePath, { create: false, strict: true });
   try {

@@ -1487,6 +1487,101 @@ describe("CLI parser", () => {
     ].join("\n"));
   });
 
+  test("parses exact compact-policy reads and compare-and-set updates", () => {
+    expect(parseCli(["session", "compact-policy", "release", "--json"]))
+      .toEqual({
+        command: { kind: "session.compact-policy.get", session: "release" },
+        json: true,
+        kind: "command",
+      });
+    // A bare toggle carries only the enabled change; an omitted revision
+    // compare-and-swaps against the value the daemon reads.
+    expect(parseCli(["session", "compact-policy", "release", "on"]))
+      .toEqual({
+        command: {
+          enabled: true,
+          kind: "session.compact-policy.set",
+          session: "release",
+        },
+        json: false,
+        kind: "command",
+      });
+    expect(parseCli(["session", "compact-policy", "release", "off"]))
+      .toEqual({
+        command: {
+          enabled: false,
+          kind: "session.compact-policy.set",
+          session: "release",
+        },
+        json: false,
+        kind: "command",
+      });
+    expect(parseCli([
+      "session",
+      "compact-policy",
+      "release",
+      "on",
+      "--trigger-tokens",
+      "200000",
+      "--min-interval-ms",
+      "60000",
+      "--expected-revision",
+      "7",
+    ])).toEqual({
+      command: {
+        enabled: true,
+        expectedRevision: 7,
+        kind: "session.compact-policy.set",
+        minIntervalMs: 60_000,
+        session: "release",
+        triggerTokens: 200_000,
+      },
+      json: false,
+      kind: "command",
+    });
+    // Options may precede the toggle.
+    expect(parseCli([
+      "session", "compact-policy", "release", "--trigger-tokens", "300000", "off",
+    ])).toEqual({
+      command: {
+        enabled: false,
+        kind: "session.compact-policy.set",
+        session: "release",
+        triggerTokens: 300_000,
+      },
+      json: false,
+      kind: "command",
+    });
+
+    for (const argv of [
+      // The session selector is required.
+      ["session", "compact-policy"],
+      // Write options without the on|off toggle are rejected.
+      ["session", "compact-policy", "release", "--trigger-tokens", "200000"],
+      ["session", "compact-policy", "release", "--expected-revision", "1"],
+      ["session", "compact-policy", "release", "--min-interval-ms", "60000"],
+      // The toggle is exactly `on` or `off`.
+      ["session", "compact-policy", "release", "enabled"],
+      // Bounds are enforced at parse time.
+      ["session", "compact-policy", "release", "on", "--expected-revision", "0"],
+      ["session", "compact-policy", "release", "on", "--trigger-tokens", "19999"],
+      ["session", "compact-policy", "release", "on", "--trigger-tokens", "4000001"],
+      ["session", "compact-policy", "release", "on", "--min-interval-ms", "29999"],
+      ["session", "compact-policy", "release", "on", "--min-interval-ms", "86400001"],
+      // Unknown flags and extra positionals are rejected.
+      ["session", "compact-policy", "release", "extra", "on"],
+      ["session", "compact-policy", "release", "on", "extra"],
+      ["session", "compact-policy", "release", "on", "--bogus"],
+      ["session", "compact-policy", "release", "on", "--expected-revision"],
+    ]) expect(() => parseCli(argv)).toThrow(CliUsageError);
+
+    expect(resolveUsage("session", "compact-policy").usage).toContain([
+      "Usage:",
+      "  oompa session compact-policy <session> [--json]",
+      "  oompa session compact-policy <session> on|off [--trigger-tokens <20000..4000000>] [--min-interval-ms <30000..86400000>] [--expected-revision <n>] [--json]",
+    ].join("\n"));
+  });
+
   test("parses bounded session status, event pages, follow mode, and interactions", () => {
     const eventCursor = `hra1.Y3Vyc29yLXYx.${"A".repeat(43)}`;
     expect(parseCli(["session", "status", "release"])).toEqual({

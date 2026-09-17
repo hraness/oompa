@@ -173,3 +173,12 @@ From `get-bb/bb` (MIT), `packages/provider-bridge-protocol/recordings/claude-cod
 | `system` `init` | see above | session bootstrap (not a per-turn event) | Carries `model`, `permissionMode`, `claude_code_version`; useful for the daemon to confirm which preset/effort is actually active. |
 | `rate_limit_event` | `rate_limit_info.{status, unifiedWindows}` | no current Oompa mapping | Candidate signal for a future budget/quota surface; out of scope for W1/W3 as planned. |
 | `control_request` `hook_callback`, `mcp_message`, `set_permission_mode`, `initialize` | see above | no current Oompa mapping | Claude-internal plumbing (hooks, MCP passthrough, bootstrap); the plan's adapter does not need to translate these. |
+
+## Compaction (shipped, `session.compact`)
+
+Oompa compacts a live Claude session by writing one user line whose text is `/compact` on the session's stream-json input: the provider's own compaction, never transcript surgery. Verified on the pinned 2.1.270 runtime (`claude-fixtures/stream-json-compaction-2.1.270.jsonl.txt`):
+
+- The write is admitted only while the session is open and idle; `claude/client.ts` `steer()` requires an active turn, so `compact()` is a separate idle-session user-line write that refuses `INVALID_INPUT` on a closed client or an in-flight turn.
+- The runtime answers with a `system` line carrying `status: "compacting"`, then a `compact_result` fact, then a post-compact `init`; there is no restart and no argv change. On a nearly empty session it returns `compact_result: "failed"` with `compact_error`; that is a normal outcome, not a protocol error.
+- The assembler reduces these facts to the shared `threadCompaction` timeline fact (`turnId: null`), which the daemon persists as a provider-neutral `compaction` event with `outcome: "completed" | "failed"` and `trigger: "manual" | "policy" | "provider"`. No transcript text enters the event.
+- A compaction requested through `oompa session compact` or the per-session auto-compact policy (`oompa session compact-policy <session> on`) is recorded `outcome: "requested"` before dispatch; an indeterminate dispatch reconciles against the event stream rather than replaying.
