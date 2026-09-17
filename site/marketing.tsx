@@ -12,7 +12,7 @@ import {
 } from "@hraness/design-kit/react/server";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { isAdmittedRelease, type InlineContent, type PublicContent } from "./content.ts";
+import { isAdmittedRelease, type HeroPillar, type InlineContent, type PublicContent } from "./content.ts";
 import { ProductPreview } from "./product-preview.tsx";
 import { productHeroClassName, mobileHeaderFlowClassName } from "./marketing.stylex.ts";
 import { sitePresentationClasses, type SitePresentationSlot } from "./presentation.stylex.ts";
@@ -54,9 +54,37 @@ export function renderMarketingHeader(content: PublicContent, currentPath: strin
   );
 }
 
+/** Match the escaping React applies to text children so authored labels line up
+ * with their serialized form inside the pillar definition terms. */
+function escapeMarkupText(text: string): string {
+  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/** Insert each pillar's decorative topic icon before its definition term. The
+ * design-kit pillar contract stays text-only, so icons join the emitted markup
+ * inside the owning item rather than replacing the shared component. */
+function injectPillarIcons(html: string, pillars: readonly HeroPillar[]): string {
+  const iconClass = sitePresentationClasses("topicIcon");
+  let rendered = html;
+  for (const pillar of pillars) {
+    if (!/^[a-z0-9-]+$/u.test(pillar.icon)) throw new Error(`Pillar icon must be a lowercase-hyphen slug: ${pillar.icon}`);
+    const labelNeedle = `>${escapeMarkupText(pillar.label)}</dt>`;
+    const labelIndex = rendered.indexOf(labelNeedle);
+    if (labelIndex === -1) throw new Error(`Pillar label missing from rendered marketing page: ${pillar.label}`);
+    const termStart = rendered.lastIndexOf("<dt", labelIndex);
+    const openTag = rendered.slice(termStart, labelIndex + 1);
+    if (termStart === -1 || !/^<dt\s[^<]*>$/u.test(openTag)) {
+      throw new Error(`Pillar label is not inside a rendered term: ${pillar.label}`);
+    }
+    const icon = `<img alt="" aria-hidden="true" class="${iconClass}" decoding="async" height="44" loading="lazy" src="/icons/${pillar.icon}.svg" width="44" />`;
+    rendered = rendered.slice(0, termStart) + icon + rendered.slice(termStart);
+  }
+  return rendered;
+}
+
 /** The homepage explains the product; procedural and operator detail lives in docs. */
 export function renderMarketingPage(content: PublicContent): string {
-  return renderToStaticMarkup(
+  const html = renderToStaticMarkup(
     <MarketingPage className={sitePresentationClasses("marketingPage")}>
       <ProductHero
         actions={[
@@ -128,4 +156,5 @@ export function renderMarketingPage(content: PublicContent): string {
       />
     </MarketingPage>,
   );
+  return injectPillarIcons(html, content.hero.pillars);
 }
