@@ -975,15 +975,15 @@ describe("released Oh SQLite facts-memory adapter", () => {
     );
   });
 
-  test("pins the immutable public v0.4.1 release without installing optional semantic peers", async () => {
+  test("pins the immutable public v0.10.8 release without installing optional semantic peers", async () => {
     const packageDocument = JSON.parse(
       await readFile(join(import.meta.dir, "..", "..", "package.json"), "utf8"),
     ) as { dependencies?: Record<string, string> };
     expect(packageDocument.dependencies?.["@hraness/oh"])
-      .toBe("0.4.1");
+      .toBe("0.10.8");
     const lockfile = await readFile(join(import.meta.dir, "..", "..", "bun.lock"), "utf8");
-    expect(lockfile).toContain('"@hraness/oh": ["@hraness/oh@0.4.1"');
-    expect(lockfile).toContain("sha512-J4JMsGvd2wwacwLn2NT98ZmgBQ/8diaMkxSSBh3oUkOyeBa5V91BIbgfEev2jNDzw1DEAls330q1p1jEZQLrvQ==");
+    expect(lockfile).toContain('"@hraness/oh": ["@hraness/oh@0.10.8"');
+    expect(lockfile).toContain("sha512-rtm+D1pzlxTE84zAnIFq3dxQulU/HpstnaUYYW1Cl9HjNG1p+Z0Oy0oNTUQpxtYHh3XClDS2MLsV693WcUwOOA==");
     expect(lockfile).not.toContain("@hraness/oh@github:");
     expect(OH_LIBSQL_STORE_LIMITS_V1.snapshotComponentBytes).toBe(6 * 1024 * 1024);
     expect(OH_LIBSQL_STORE_LIMITS_V1.providerResponseBytes).toBe(9_000_000);

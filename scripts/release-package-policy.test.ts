@@ -11,7 +11,7 @@ import {
 
 const readyManifest = {
   bin: { oompa: "./src/cli.ts" },
-  dependencies: { "@hraness/oh": "0.4.1", zod: "4.4.3" },
+  dependencies: { "@hraness/oh": "0.10.8", zod: "4.4.3" },
   license: "MIT",
   name: "@hraness/oompa",
   publishConfig: { access: "public", registry: "https://registry.npmjs.org" },
@@ -20,7 +20,7 @@ const readyManifest = {
 
 describe("Oompa public release package policy", () => {
   test("accepts one public MIT scoped package with the exact public Oh release", () => {
-    expect(OOMPA_RELEASE_OH_VERSION).toBe("0.4.1");
+    expect(OOMPA_RELEASE_OH_VERSION).toBe("0.10.8");
     expect(assertReleasePackageReady(readyManifest)).toEqual({
       blockers: [],
       name: "@hraness/oompa",
@@ -31,10 +31,10 @@ describe("Oompa public release package policy", () => {
 
   test("fails closed on GitHub, URL, workspace, range, moving, and wrong exact Oh dependencies", () => {
     for (const version of [
-      "github:hraness/oh#v0.4.1",
+      "github:hraness/oh#v0.10.8",
       "https://example.com/oh.tgz",
       "workspace:*",
-      "^0.4.1",
+      "^0.10.8",
       "latest",
       "0.4.0",
       "0.4.2",

@@ -1001,7 +1001,7 @@ describe("release workflow", () => {
     expect(releaseRecord).toContain("`artifacts/SHA256SUMS`");
     expect(releaseRecord).toContain("rejected that extensionless workflow file as `UNREVIEWED_FILE_TYPE`");
     expect(releaseRecord).toContain("moved generated and downloaded release bytes under `RUNNER_TEMP`");
-    expect(releaseRecord).toContain("immutable public registry release `@hraness/oh@0.4.1`");
+    expect(releaseRecord).toContain("immutable public registry release `@hraness/oh@0.10.8`");
     expect(releaseRecord).toContain("## Immutable v0.1.2 partial failure record");
     expect(releaseRecord).toContain("Release workflow run `33373504473`, attempts 1 and 2");
     expect(releaseRecord).toContain("immutable GitHub Release `379612601`");
