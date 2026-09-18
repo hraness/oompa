@@ -88,7 +88,13 @@ describe("authority supervisor build verifier", () => {
     )) as { scripts: Record<string, string> }).scripts;
     expect(packageScripts.check).toContain("bun run test");
     expect(packageScripts.test).toContain("bun test ./scripts --isolate --max-concurrency=1");
+    // The remainder lane is split: the scripts suite (and with it the
+    // runtime custody test) runs inside check:ci-remainder-suites.
     expect(packageScripts["check:ci-remainder"])
+      .toContain("bun run check:ci-remainder-checks");
+    expect(packageScripts["check:ci-remainder"])
+      .toContain("bun run check:ci-remainder-suites");
+    expect(packageScripts["check:ci-remainder-suites"])
       .toContain("bun test ./scripts --isolate --max-concurrency=1");
     expect(packageScripts["test:source"]).toBe("bun test ./src --isolate --max-concurrency=1");
     const enable = workflow.indexOf(

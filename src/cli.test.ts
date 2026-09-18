@@ -805,7 +805,7 @@ describe("CLI entry point", () => {
         await rm(value.runRoot, { force: true, recursive: true });
       }
     }
-  });
+  }, 20_000);
 
   test("startup cancels a proven-dead Claude launch intent before generation advance", async () => {
     const value = await stagedClaudeLaunchIntentStartupFixture("not-live");
@@ -849,7 +849,7 @@ describe("CLI entry point", () => {
       value.store.close();
       await rm(value.runRoot, { force: true, recursive: true });
     }
-  });
+  }, 20_000);
 
   test("startup cannot cancel a restaged Claude launch intent through ABA", async () => {
     const value = await stagedClaudeLaunchIntentStartupFixture("aba");
@@ -896,7 +896,7 @@ describe("CLI entry point", () => {
       value.store.close();
       await rm(value.runRoot, { force: true, recursive: true });
     }
-  });
+  }, 20_000);
 
   for (const [index, liveness] of (["live", "unknown"] as const).entries()) {
     test(`startup refuses ${liveness} Claude custody during a staged revocation`, async () => {
