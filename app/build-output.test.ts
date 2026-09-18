@@ -66,6 +66,7 @@ const pinnedConvexOrigins = new Set([
   "wss://qualified-hummingbird-537.convex.cloud",
   "https://qualified-hummingbird-537.convex.site",
 ]);
+const reviewedProductOrigins = new Set(["https://oompa.app"]);
 
 const originPattern = /(?:https?|wss?):\/\/[A-Za-z0-9._-]+/gu;
 
@@ -403,12 +404,12 @@ describe("bundle invariants", () => {
     }
   });
 
-  test("every absolute URL is a pinned Convex origin or a reviewed vendor literal", () => {
+  test("every absolute URL is a pinned Convex, product, or reviewed vendor origin", () => {
     const unexpected = new Set<string>();
     for (const artifact of artifacts) {
       for (const match of artifact.text.matchAll(originPattern)) {
         const origin = match[0];
-        if (pinnedConvexOrigins.has(origin) || reviewedVendorOrigins.has(origin)) continue;
+        if (pinnedConvexOrigins.has(origin) || reviewedProductOrigins.has(origin) || reviewedVendorOrigins.has(origin)) continue;
         if (isReviewedVendorSchemaLiteral(artifact.text, match.index)) continue;
         unexpected.add(`${artifact.name}: ${origin}`);
       }

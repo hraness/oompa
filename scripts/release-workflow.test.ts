@@ -19,6 +19,8 @@ import {
 const reviewedActions = {
   checkout: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
   downloadArtifact: "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+  rustCache: "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6",
+  rustToolchain: "dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87",
   setupBun: "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6",
   setupNode: "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
   uploadArtifact: "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
@@ -999,7 +1001,7 @@ describe("release workflow", () => {
     expect(releaseRecord).toContain("`artifacts/SHA256SUMS`");
     expect(releaseRecord).toContain("rejected that extensionless workflow file as `UNREVIEWED_FILE_TYPE`");
     expect(releaseRecord).toContain("moved generated and downloaded release bytes under `RUNNER_TEMP`");
-    expect(releaseRecord).toContain("immutable public registry release `@hraness/oh@0.4.1`");
+    expect(releaseRecord).toContain("immutable public registry release `@hraness/oh@0.10.8`");
     expect(releaseRecord).toContain("## Immutable v0.1.2 partial failure record");
     expect(releaseRecord).toContain("Release workflow run `33373504473`, attempts 1 and 2");
     expect(releaseRecord).toContain("immutable GitHub Release `379612601`");
@@ -1221,7 +1223,7 @@ describe("release workflow", () => {
     expect(workflow).not.toContain("convex");
   });
 
-  test("requires all six source shards and remainder on both operating systems with complete governed history", async () => {
+  test("requires all six source shards and both remainder lanes on both operating systems with complete governed history", async () => {
     const workflow = await readFile(
       join(import.meta.dir, "..", ".github", "workflows", "ci.yml"),
       "utf8",
@@ -1234,14 +1236,14 @@ describe("release workflow", () => {
     expect(Object.keys(jobs).sort()).toEqual(["browser", "check", "menubar", "required"]);
     expect(check.name).toBe("Check (${{ matrix.os }}, ${{ matrix.gate }})");
     expect(check["runs-on"]).toBe("${{ matrix.os }}");
-    expect(check["timeout-minutes"]).toBe("${{ matrix.gate == 'remainder' && (matrix.os == 'macos-15' && 25 || 20) || 75 }}");
+    expect(check["timeout-minutes"]).toBe("${{ startsWith(matrix.gate, 'remainder') && (matrix.os == 'macos-15' && 25 || 20) || 75 }}");
     expect(check.if).toBeUndefined();
     expect(check["continue-on-error"]).toBeUndefined();
     expect(check.strategy).toEqual({
       "fail-fast": false,
       matrix: {
         os: ["macos-15", "ubuntu-24.04"],
-        gate: ["source-1", "source-2", "source-3", "source-4", "source-5", "source-6", "remainder"],
+        gate: ["source-1", "source-2", "source-3", "source-4", "source-5", "source-6", "remainder-checks", "remainder-suites"],
       },
     });
     const steps = check.steps;
@@ -1311,7 +1313,7 @@ describe("release workflow", () => {
     const gateStep = asRecord(gate, "CI gate step");
     expect(gateStep.if).toBeUndefined();
     expect(String(gateStep.run).trim().replace(/\s+/gu, " ")).toBe(
-      'set -euo pipefail case "$CI_GATE" in source-1) bun run test:source --shard=1/6 ;; source-2) bun run test:source --shard=2/6 ;; source-3) bun run test:source --shard=3/6 ;; source-4) bun run test:source --shard=4/6 ;; source-5) bun run test:source --shard=5/6 ;; source-6) bun run test:source --shard=6/6 ;; remainder) bun run check:ci-remainder ;; *) echo "::error::Unexpected CI gate" exit 1 ;; esac',
+      'set -euo pipefail case "$CI_GATE" in source-1) bun run test:source --shard=1/6 ;; source-2) bun run test:source --shard=2/6 ;; source-3) bun run test:source --shard=3/6 ;; source-4) bun run test:source --shard=4/6 ;; source-5) bun run test:source --shard=5/6 ;; source-6) bun run test:source --shard=6/6 ;; remainder-checks) bun run check:ci-remainder-checks ;; remainder-suites) bun run check:ci-remainder-suites ;; *) echo "::error::Unexpected CI gate" exit 1 ;; esac',
     );
     expect(asRecord(asRecord(gate, "CI gate step").env, "CI gate environment")).toEqual({
       NODE_OPTIONS: "--max-old-space-size=4096",
@@ -1345,12 +1347,18 @@ describe("release workflow", () => {
     expect(menubarSteps
       .map((step) => step.uses)
       .filter((value): value is string => typeof value === "string"))
-      .toEqual([reviewedActions.checkout]);
+      .toEqual([
+        reviewedActions.checkout,
+        reviewedActions.rustToolchain,
+        reviewedActions.rustCache,
+      ]);
     expect(menubarSteps.map((step) => step.name)).toEqual([
       "Check out exact source",
+      "Install Rust",
+      "Restore Rust dependencies",
       "Build and test the menu-bar companion",
     ]);
-    const menubarBuild = asRecord(menubarSteps[1], "CI menubar build step");
+    const menubarBuild = asRecord(menubarSteps[3], "CI menubar build step");
     expect(String(menubarBuild.run).trim().replace(/\s+/gu, " ")).toBe(
       "set -euo pipefail cargo build --release --locked --manifest-path desktop/Cargo.toml cargo test --locked --manifest-path desktop/Cargo.toml",
     );

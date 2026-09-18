@@ -1,6 +1,6 @@
 const stableSemver = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
 const exactRegistryVersion = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/u;
-export const OOMPA_RELEASE_OH_VERSION = "0.4.1";
+export const OOMPA_RELEASE_OH_VERSION = "0.10.8";
 
 type JsonRecord = Record<string, unknown>;
 

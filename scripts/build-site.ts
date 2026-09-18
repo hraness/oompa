@@ -165,7 +165,7 @@ const siteTextOutputs = (
   },
 ];
 
-const staticAssets = ["favicon.svg"] as const;
+const staticAssets = ["favicon.svg", "og.png"] as const;
 const analyticsEntryPath = fileURLToPath(
   new URL("../site/analytics-entry.ts", import.meta.url),
 );

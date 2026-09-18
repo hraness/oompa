@@ -55,6 +55,7 @@ test("collects a deadline-stalled native compiler before a fresh isolated builde
     await fresh.run(async () => {
       await mkdir(join(freshRoot, "site"));
       await writeFile(join(freshRoot, "site/favicon.svg"), "fixture:favicon\n");
+      await writeFile(join(freshRoot, "site/og.png"), "fixture:og.png\n");
       await writeFile(join(freshRoot, "site/styles.css"), "fixture:styles\n");
       expect(await fresh.buildSite({ check: false, repositoryRoot: freshRoot, sourceRoot })).toEqual([]);
       expect((await readFile(join(freshRoot, "dist/site/index.html"), "utf8"))).toContain("<!doctype html>");

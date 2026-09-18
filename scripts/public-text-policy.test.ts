@@ -104,6 +104,10 @@ describe("public text policy", () => {
       .not.toThrow();
     expect(() => assertPublicText("@hraness/design-kit", "public dependency"))
       .not.toThrow();
+    expect(() => assertPublicText("@hraness/web-discovery", "public dependency"))
+      .not.toThrow();
+    expect(() => assertPublicText("@resvg/resvg-js", "public dependency"))
+      .not.toThrow();
     expect(() => assertPublicText("@hraness/oh", "public dependency"))
       .not.toThrow();
     expect(() => assertPublicText("@hraness/posthog", "public dependency"))

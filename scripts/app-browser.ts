@@ -182,7 +182,7 @@ const sitePresetAttributions = [
   ["marketing-preset/marketing-assets/UPSTREAM.md", "marketing-assets/UPSTREAM.md"],
 ] as const;
 const sitePublicSupport = [
-  "analytics.js", "appearance.js", "site.js", "favicon.svg", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
+  "analytics.js", "appearance.js", "site.js", "favicon.svg", "og.png", "social-card.svg", "social-card.png", "robots.txt", "sitemap.xml", "llms.txt",
   ".well-known/security.txt", ".well-known/hra.json",
   "icons/agents-one-place.svg", "icons/hra.svg", "icons/next-turn.svg", "icons/separate-accounts.svg",
   "marks/hra.svg",

@@ -295,6 +295,18 @@ describe("public content contract", () => {
     expect(llms.indexOf(publicContent.thesis)).toBeLessThan(llms.indexOf(publicContent.installCommand));
   });
 
+  test("ships the shared social card backing the app shell metadata", async () => {
+    const png = new Uint8Array(await readFile(new URL("./og.png", import.meta.url)));
+    expect(Array.from(png.subarray(1, 4))).toEqual([80, 78, 71]);
+    const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+    expect(view.getUint32(16, false)).toBe(1200);
+    expect(view.getUint32(20, false)).toBe(630);
+    const shell = await readFile(new URL("../app/index.html", import.meta.url), "utf8");
+    expect(shell).toContain('<meta property="og:image" content="https://oompa.app/og.png" />');
+    expect(shell).toContain('<meta name="twitter:card" content="summary_large_image" />');
+    expect(shell).toContain('<meta name="twitter:image" content="https://oompa.app/og.png" />');
+  });
+
   test("publishes the stable memory, peer, and exact provider surfaces", () => {
     const markdown = renderDocumentationMarkdown("/docs/reference/", "/docs/sessions/");
     const html = renderDocumentationHtml("/docs/reference/", "/docs/sessions/");
