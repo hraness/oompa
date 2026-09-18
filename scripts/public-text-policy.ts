@@ -43,6 +43,8 @@ const allowedPublicScopedPackages = new Set([
   "@hraness/support-foundation",
   "@hraness/slopcamera",
   "@hraness/ui",
+  "@hraness/web-discovery",
+  "@resvg/resvg-js",
   "@stylexjs/babel-plugin",
   "@stylexjs/stylex",
   "@vercel/routing-utils",
@@ -250,7 +252,7 @@ async function scanPublicTree(root: string, skipCheckoutTmp: boolean): Promise<v
         await assertAuthoritySupervisorArtifactPublicFile(root, label);
       } else if (entry.isFile() && editorialWebp.test(label)) {
         await assertEditorialWebp(child, label);
-      } else if (entry.isFile() && desktopIconPng.test(label)) {
+      } else if (entry.isFile() && (label === "site/og.png" || desktopIconPng.test(label))) {
         await assertDesktopIconPng(child, label);
       } else if (entry.isFile() && desktopIconRgba.test(label)) {
         await assertDesktopIconRgba(child, label);

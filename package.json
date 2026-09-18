@@ -62,7 +62,8 @@
     "test:package-policy": "sh -c 'umask 077; exec bun test ./scripts/package-policy.test.ts --isolate --max-concurrency=1'",
     "typecheck": "tsc --noEmit",
     "build:support-runtime": "bun ./scripts/build-support-runtime.ts --write",
-    "check:support-runtime": "bun ./scripts/build-support-runtime.ts --check"
+    "check:support-runtime": "bun ./scripts/build-support-runtime.ts --check",
+    "generate:og": "bun scripts/generate-og.tsx"
   },
   "files": [
     "src",
@@ -124,8 +125,11 @@
     "@hraness/direct": "github:hraness/direct#v0.7.0",
     "@hraness/posthog": "github:hraness/posthog#v0.1.2",
     "@hraness/site-footer": "github:hraness/site-footer#v0.15.0",
+    "@hraness/support-foundation": "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed",
     "@hraness/ui": "github:hraness/ui#v0.5.13",
+    "@hraness/web-discovery": "github:hraness/web-discovery#v0.6.0",
     "@letta-ai/trajectory": "0.3.0",
+    "@resvg/resvg-js": "2.6.2",
     "@stylexjs/babel-plugin": "0.19.0",
     "@stylexjs/stylex": "0.19.0",
     "@types/babel__core": "7.20.5",
@@ -146,10 +150,10 @@
     "react-dom": "19.2.8",
     "react-markdown": "10.1.0",
     "remark-gfm": "4.0.1",
+    "satori": "0.33.4",
     "sigstore": "4.1.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.67.0",
-    "vite": "7.3.6",
-    "@hraness/support-foundation": "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed"
+    "vite": "7.3.6"
   }
 }
