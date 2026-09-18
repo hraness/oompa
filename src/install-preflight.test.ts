@@ -860,7 +860,7 @@ describe("transactional Oompa installer", () => {
     expect(sourcePackageManifest.dependencies).toEqual({
       "@agentclientprotocol/sdk": "1.4.0",
       "@hraness/local-custody": "0.5.1",
-      "@hraness/oh": "0.4.1",
+      "@hraness/oh": "0.10.8",
       "@openai/codex": "0.153.2",
       convex: "1.45.0",
       effect: "3.22.1",

@@ -31,10 +31,10 @@ describe("Oompa public release package policy", () => {
 
   test("fails closed on GitHub, URL, workspace, range, moving, and wrong exact Oh dependencies", () => {
     for (const version of [
-      "github:hraness/oh#v0.4.1",
+      "github:hraness/oh#v0.10.8",
       "https://example.com/oh.tgz",
       "workspace:*",
-      "^0.4.1",
+      "^0.10.8",
       "latest",
       "0.4.0",
       "0.4.2",
