@@ -61,7 +61,7 @@ const ENTRY_TAG = '<script type="module" src="/src/main.tsx"></script>';
 const HTML_TAG = '<html lang="en" data-hraness-theme="paper" data-palette="paper" data-theme="light">';
 // This one authored image is already held by the shell under img-src data:.
 // Its exact SVG bytes are reviewed independently of the website runtime.
-const APP_FAVICON_SHA256 = "8b3323b41b8c95bfa39af9af23152105b87b205959834ff096aa7c5b6f83b98d";
+const APP_FAVICON_SHA256 = "67f21cf459583129fdd80b6def6e727ed27fb6e182595e94f8c62905a34be8e1";
 export const APP_CSS_PLACEHOLDER = "__HRANESS_STYLEX_CSS__";
 
 export type AppPublicationFailureBoundary =
@@ -211,7 +211,7 @@ export function prepareAppShell(
   assert.equal((source.match(/<script\b/giu) ?? []).length, 1);
   assert.equal(source.split("</head>").length - 1, 1);
   assert.ok(!/<!--|<\?|<!\[CDATA\[|<(?:template|noscript|svg|math)\b/iu.test(source), "The app shell must retain its active native HTML boundary");
-  const icons = [...source.matchAll(/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml;base64,([A-Za-z0-9+/=]{1,512})">/gu)];
+  const icons = [...source.matchAll(/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml;base64,([A-Za-z0-9+/=]{1,32768})">/gu)];
   assert.equal(icons.length, 1, "The app must have exactly one canonical favicon");
   const icon = icons[0];
   assert.ok(icon !== undefined && icon[1] !== undefined);

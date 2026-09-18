@@ -512,6 +512,23 @@ export const buildSite = async (options: BuildOptions): Promise<readonly string[
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
+
+  const marksDirectory = join(options.repositoryRoot, "site", "marks");
+  try {
+    const markNames = (await readdir(marksDirectory)).sort();
+    assert.ok(markNames.length <= 32, `Site brand mark count ${markNames.length} exceeds 32`);
+    for (const name of markNames) {
+      assert.match(name, /^[a-z0-9-]+\.svg$/u, `Unexpected site brand mark name ${name}`);
+      const source = join(marksDirectory, name);
+      const bytes = await readFile(source);
+      assert.ok(bytes.byteLength <= 128 * 1024, `Site brand mark ${name} exceeds 128 KiB`);
+      const destination = join(options.repositoryRoot, "dist/site/marks", name);
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, bytes, { flag: "wx", mode: 0o644 });
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   return mismatches;
 };
 

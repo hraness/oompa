@@ -1447,9 +1447,8 @@ describe("public content contract", () => {
       expect(brand?.getAttribute("href")).toBe("/");
       expect(brand?.getAttribute("aria-label")).toBe(`${publicContent.productName} home`);
       expect(brand?.textContent).toBe(publicContent.productName);
-      const mark = brand?.querySelector('svg[aria-hidden="true"] > circle');
-      expect(mark?.getAttribute("fill")).toBe("#f58220");
-      expect(mark?.getAttribute("stroke")).toBe("#ad430d");
+      const mark = brand?.querySelector('img[aria-hidden="true"]');
+      expect(mark?.getAttribute("src")).toBe("/marks/hra.svg");
       const links = [...(contentFooter?.querySelectorAll('.hraness-marketing-footer__nav > a') ?? [])];
       expect(links.map((link) => [link.getAttribute("href"), link.textContent])).toEqual([
         ["/#product-preview", "Product"], ["/docs/", "Docs"], ["/docs/status/", "Status"],

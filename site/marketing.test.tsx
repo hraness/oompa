@@ -29,9 +29,8 @@ describe("public server marketing composition", () => {
       expect(brand?.textContent).toBe(publicContent.productName);
       expect(brand?.getAttribute("href")).toBe("/");
       expect(brand?.getAttribute("data-foil")).toBe("");
-      const mark = brand?.querySelector('svg[aria-hidden="true"] > circle');
-      expect(mark?.getAttribute("fill")).toBe("#f58220");
-      expect(mark?.getAttribute("stroke")).toBe("#ad430d");
+      const mark = brand?.querySelector('img[aria-hidden="true"]');
+      expect(mark?.getAttribute("src")).toBe("/marks/hra.svg");
       const links = [...document.querySelectorAll('nav[aria-label="Site"] > a')];
       expect(links.map((link) => [link.getAttribute("href"), link.textContent])).toEqual([
         ["/#product-preview", "Product"], ["/docs/", "Docs"], ["/docs/status/", "Status"],
