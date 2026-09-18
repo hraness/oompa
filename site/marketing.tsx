@@ -36,9 +36,9 @@ function inlineContent(content: readonly InlineContent[]): ReactNode {
   });
 }
 
-/** The authored Oompa mark: the favicon's orange circle. Decorative inside brand links that carry their own accessible name. */
+/** The canonical product mark shared with the favicon. Decorative inside brand links that carry their own accessible name. */
 export const OompaMark = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="#f58220" stroke="#ad430d" strokeWidth={2}/></svg>
+  <img alt="" aria-hidden="true" height={24} src="/marks/hra.svg" width={24} />
 );
 
 /** The public site navigation shared by the marketing header and the in-flow content footer. */
