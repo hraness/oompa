@@ -19,6 +19,8 @@ import {
 const reviewedActions = {
   checkout: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
   downloadArtifact: "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+  rustCache: "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6",
+  rustToolchain: "dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87",
   setupBun: "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6",
   setupNode: "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
   uploadArtifact: "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
@@ -1345,12 +1347,18 @@ describe("release workflow", () => {
     expect(menubarSteps
       .map((step) => step.uses)
       .filter((value): value is string => typeof value === "string"))
-      .toEqual([reviewedActions.checkout]);
+      .toEqual([
+        reviewedActions.checkout,
+        reviewedActions.rustToolchain,
+        reviewedActions.rustCache,
+      ]);
     expect(menubarSteps.map((step) => step.name)).toEqual([
       "Check out exact source",
+      "Install Rust",
+      "Restore Rust dependencies",
       "Build and test the menu-bar companion",
     ]);
-    const menubarBuild = asRecord(menubarSteps[1], "CI menubar build step");
+    const menubarBuild = asRecord(menubarSteps[3], "CI menubar build step");
     expect(String(menubarBuild.run).trim().replace(/\s+/gu, " ")).toBe(
       "set -euo pipefail cargo build --release --locked --manifest-path desktop/Cargo.toml cargo test --locked --manifest-path desktop/Cargo.toml",
     );
