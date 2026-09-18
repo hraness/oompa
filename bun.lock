@@ -7,7 +7,7 @@
       "dependencies": {
         "@agentclientprotocol/sdk": "1.4.0",
         "@hraness/local-custody": "0.5.1",
-        "@hraness/oh": "0.4.1",
+        "@hraness/oh": "0.10.8",
         "@openai/codex": "0.153.2",
         "convex": "1.45.0",
         "effect": "3.22.1",
@@ -27,6 +27,7 @@
         "@hraness/site-footer": "github:hraness/site-footer#v0.15.0",
         "@hraness/support-foundation": "github:hraness/support-foundation#2d034b357680353574411217d68b02b6755b07ed",
         "@hraness/ui": "github:hraness/ui#v0.5.13",
+        "@hraness/web-discovery": "github:hraness/web-discovery#v0.6.0",
         "@letta-ai/trajectory": "0.3.0",
         "@resvg/resvg-js": "2.6.2",
         "@stylexjs/babel-plugin": "0.19.0",
@@ -42,7 +43,6 @@
         "convex-test": "0.0.56",
         "eslint": "9.34.0",
         "fast-check": "4.3.0",
-        "@hraness/web-discovery": "github:hraness/web-discovery#v0.6.0",
         "lightningcss": "1.33.0",
         "linkedom": "0.18.12",
         "playwright-core": "1.62.0",
@@ -199,7 +199,7 @@
 
     "@hraness/local-custody": ["@hraness/local-custody@0.5.1", "", {}, "sha512-Rmtm6+d7nSXVhSMw1Fesa+t+w2UxtPKJe8qCC/wiacKz6eGZ7RI1OhIOYOnnPW6itNTcXfjFMJV6RRoY9RtAVg=="],
 
-    "@hraness/oh": ["@hraness/oh@0.4.1", "", { "peerDependencies": { "@libsql/client": ">=0.17.4 <1", "@suss/datalog": "0.20.0", "@tobilu/qmd": "2.5.3" }, "optionalPeers": ["@libsql/client", "@suss/datalog", "@tobilu/qmd"], "bin": { "oh": "dist/cli.js" } }, "sha512-J4JMsGvd2wwacwLn2NT98ZmgBQ/8diaMkxSSBh3oUkOyeBa5V91BIbgfEev2jNDzw1DEAls330q1p1jEZQLrvQ=="],
+    "@hraness/oh": ["@hraness/oh@0.10.8", "", { "peerDependencies": { "@libsql/client": ">=0.17.4 <1", "@suss/datalog": "0.20.0", "@tobilu/qmd": "2.5.3" }, "optionalPeers": ["@libsql/client", "@suss/datalog", "@tobilu/qmd"], "bin": { "oh": "dist/cli.js" } }, "sha512-rtm+D1pzlxTE84zAnIFq3dxQulU/HpstnaUYYW1Cl9HjNG1p+Z0Oy0oNTUQpxtYHh3XClDS2MLsV693WcUwOOA=="],
 
     "@hraness/posthog": ["@hraness/posthog@github:hraness/posthog#792e958", { "dependencies": { "@posthog/nextjs-config": "1.9.68", "posthog-js": "1.412.1", "posthog-node": "5.47.11" }, "peerDependencies": { "next": ">=16.2.0 <17.0.0", "react": ">=19.2.0 <20.0.0" }, "optionalPeers": ["next", "react"] }, "hraness-posthog-792e958", "sha512-0Do23IlpZjnbvHa2RLYqGJ9BskXg/d4Rt8+H6FWMxLfkQj5+O9pzJsF6yELfytDycbLEJg8YbieXl7I2WDoo0Q=="],
 
