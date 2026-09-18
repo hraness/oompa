@@ -1223,7 +1223,7 @@ describe("release workflow", () => {
     expect(workflow).not.toContain("convex");
   });
 
-  test("requires all six source shards and remainder on both operating systems with complete governed history", async () => {
+  test("requires all six source shards and both remainder lanes on both operating systems with complete governed history", async () => {
     const workflow = await readFile(
       join(import.meta.dir, "..", ".github", "workflows", "ci.yml"),
       "utf8",
@@ -1236,14 +1236,14 @@ describe("release workflow", () => {
     expect(Object.keys(jobs).sort()).toEqual(["browser", "check", "menubar", "required"]);
     expect(check.name).toBe("Check (${{ matrix.os }}, ${{ matrix.gate }})");
     expect(check["runs-on"]).toBe("${{ matrix.os }}");
-    expect(check["timeout-minutes"]).toBe("${{ matrix.gate == 'remainder' && (matrix.os == 'macos-15' && 25 || 20) || 75 }}");
+    expect(check["timeout-minutes"]).toBe("${{ startsWith(matrix.gate, 'remainder') && (matrix.os == 'macos-15' && 25 || 20) || 75 }}");
     expect(check.if).toBeUndefined();
     expect(check["continue-on-error"]).toBeUndefined();
     expect(check.strategy).toEqual({
       "fail-fast": false,
       matrix: {
         os: ["macos-15", "ubuntu-24.04"],
-        gate: ["source-1", "source-2", "source-3", "source-4", "source-5", "source-6", "remainder"],
+        gate: ["source-1", "source-2", "source-3", "source-4", "source-5", "source-6", "remainder-checks", "remainder-suites"],
       },
     });
     const steps = check.steps;
@@ -1313,7 +1313,7 @@ describe("release workflow", () => {
     const gateStep = asRecord(gate, "CI gate step");
     expect(gateStep.if).toBeUndefined();
     expect(String(gateStep.run).trim().replace(/\s+/gu, " ")).toBe(
-      'set -euo pipefail case "$CI_GATE" in source-1) bun run test:source --shard=1/6 ;; source-2) bun run test:source --shard=2/6 ;; source-3) bun run test:source --shard=3/6 ;; source-4) bun run test:source --shard=4/6 ;; source-5) bun run test:source --shard=5/6 ;; source-6) bun run test:source --shard=6/6 ;; remainder) bun run check:ci-remainder ;; *) echo "::error::Unexpected CI gate" exit 1 ;; esac',
+      'set -euo pipefail case "$CI_GATE" in source-1) bun run test:source --shard=1/6 ;; source-2) bun run test:source --shard=2/6 ;; source-3) bun run test:source --shard=3/6 ;; source-4) bun run test:source --shard=4/6 ;; source-5) bun run test:source --shard=5/6 ;; source-6) bun run test:source --shard=6/6 ;; remainder-checks) bun run check:ci-remainder-checks ;; remainder-suites) bun run check:ci-remainder-suites ;; *) echo "::error::Unexpected CI gate" exit 1 ;; esac',
     );
     expect(asRecord(asRecord(gate, "CI gate step").env, "CI gate environment")).toEqual({
       NODE_OPTIONS: "--max-old-space-size=4096",

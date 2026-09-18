@@ -21,7 +21,7 @@ jobs:
     # retaining every test's own deadline. The measured serial source suites
     # need a larger finite job budget than the ordered remainder. macOS also
     # needs headroom for setup and post-job cleanup after its measured gate.
-    timeout-minutes: ${{ matrix.gate == 'remainder' && (matrix.os == 'macos-15' && 25 || 20) || 75 }}
+    timeout-minutes: ${{ startsWith(matrix.gate, 'remainder') && (matrix.os == 'macos-15' && 25 || 20) || 75 }}
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +35,8 @@ jobs:
           - source-4
           - source-5
           - source-6
-          - remainder
+          - remainder-checks
+          - remainder-suites
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -116,7 +117,8 @@ jobs:
             source-4) bun run test:source --shard=4/6 ;;
             source-5) bun run test:source --shard=5/6 ;;
             source-6) bun run test:source --shard=6/6 ;;
-            remainder) bun run check:ci-remainder ;;
+            remainder-checks) bun run check:ci-remainder-checks ;;
+            remainder-suites) bun run check:ci-remainder-suites ;;
             *)
               echo "::error::Unexpected CI gate"
               exit 1

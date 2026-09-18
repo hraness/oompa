@@ -222,7 +222,7 @@ export default tseslint.config(
     ]),
   },
   {
-    files: ["**/*.test.ts", "**/*.test.tsx"],
+    files: ["**/*.test.ts", "**/*.test.tsx", "scripts/fixtures/*-testkit.ts"],
     rules: {
       "@typescript-eslint/await-thenable": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
