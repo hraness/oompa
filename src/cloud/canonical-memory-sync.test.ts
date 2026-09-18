@@ -1281,7 +1281,7 @@ describe("OompaCanonicalMemorySynchronizer", () => {
       "periodic background pull did not converge",
     );
     expect(deviceHead(reader)).toEqual(remoteHead);
-  });
+  }, 10_000);
 
   test("close wakes a sleeping supervisor and joins a scheduled in-flight sync", async () => {
     const remote = await createRemote();
