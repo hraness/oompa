@@ -2,6 +2,8 @@
 
 `@hraness/oompa` supplies the `oompa` command and local daemon. It manages isolated Codex, Claude Code, and Devin profiles, persistent sessions and command records, and optional encrypted sync. Provider tools own authentication and execution; Oompa does not broker model access.
 
+> **Retired on September 19, 2026.** [Excalibur (xcb)](https://xcb.dev) supersedes Oompa. Follow the [xcb repository](https://github.com/hraness/xcb) for current development. The documentation below preserves Oompa's historical release and recovery contracts; it is no longer an active product or an installation recommendation.
+
 Local CLI v0.8.5 is a release candidate, not an admitted artifact; v0.8.4 remains the admitted canonical GitHub artifact and exact-byte npm release. Current daemon and hosted command-writer rollout remains blocked on capacity.
 
 [CLI reference](https://oompa.app/docs/reference/) · [Availability](https://oompa.app/docs/status/)
