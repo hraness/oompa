@@ -14,6 +14,12 @@ tags:
 
 # Oompa v1
 
+## Retirement (2026-09-19)
+
+The owner retired Oompa in favor of [Excalibur (xcb)](https://xcb.dev). This decision supersedes the development and rollout plans below. Retain their dated evidence and recovery contracts as history; do not treat an unfinished phase as authorization to resume Oompa delivery.
+
+The retirement change adds the README successor notice. Its source delivery requires focused release-workflow and package checks, independent review, and the unchanged current-base `Required` CI gate. Archiving the repository and pausing the current website, browser app, and hosted backend are separate operational steps, with exact target readback and data preservation. A pending provider confirmation is not evidence of shutdown. Existing release artifacts, stored data, and separately installed host-scheduling tools remain preserved.
+
 Domain update, 2026-09-10: [the current domain plan](./oompa-app-domain.md) supersedes earlier host choices in this record. Current website and app destinations are `oompa.app` and `app.oompa.app`; prior hosts grant no current routing or authentication authority. Dated delivery evidence remains historical.
 
 ## Canonical site response headers (2026-09-10)
