@@ -137,7 +137,11 @@ async function readAccountMetadataDocument(path: string): Promise<unknown> {
   // The personal-home path is user-controlled and can change between scans.
   // The stable read opens nonblocking so a FIFO swapped in before stat cannot
   // stall daemon admission, then re-proves identity and metadata after the
-  // bounded read.
+  // bounded read. A missing document must surface as a raw `ENOENT`
+  // `ErrnoException` so the projection reads null rather than stale, while a
+  // permissions failure keeps failing closed; the local-custody Rust engine
+  // reports both as `CustodyError` domain failures without the errno, so this
+  // read keeps the direct TypeScript import.
   let bytes: Buffer;
   try {
     bytes = (await readOwnedFileStable(path, ACCOUNT_DOCUMENT_MAX_BYTES)).bytes;
