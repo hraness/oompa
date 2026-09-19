@@ -61,3 +61,10 @@
 - Keep authenticated browser, interactive auth, 2FA, private local data, Mac-native, signing, release, deployment, production, agent-phase secret, agent-phase network, and exact-model work on its authoritative local or CI lane.
 - Give every editable Cloud task one unique branch and owner. Cloud workers may run focused validation but may not merge, weaken gates, release, deploy, or replace the repository's final exact-tree validation.
 <!-- oompa-cloud-efficiency:end -->
+
+<!-- system-one-skills:start -->
+- Use `system-one-*` skills for repeated evidence gathering only when their bounded result fits the task. Include startup, invocation, retries, and follow-up reads when assessing savings; smaller output alone does not prove lower token cost or preserved correctness.
+- When the task benefits and installation is authorized, install the current pack for Claude Code, Codex, and Devin for Terminal with `bunx skills add 0thernet/system-one-skills --global --agent claude-code codex devin --skill '*' --copy --yes`; otherwise use repository-native tools.
+- Confirm installation with `bunx skills list --global`. If Bun or network access is unavailable, continue with repository-native tools.
+- Treat clipping as incomplete evidence: widen the read or use native tools before making claims that depend on omitted details. Typed output and replayable receipts do not establish semantic correctness; preserve required repository checks and independent review.
+<!-- system-one-skills:end -->
