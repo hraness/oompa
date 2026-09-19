@@ -61,3 +61,12 @@
 - Keep authenticated browser, interactive auth, 2FA, private local data, Mac-native, signing, release, deployment, production, agent-phase secret, agent-phase network, and exact-model work on its authoritative local or CI lane.
 - Give every editable Cloud task one unique branch and owner. Cloud workers may run focused validation but may not merge, weaken gates, release, deploy, or replace the repository's final exact-tree validation.
 <!-- oompa-cloud-efficiency:end -->
+
+<!-- algal-skills:start -->
+## ALGAL skills
+
+- Prefer the globally installed `algal-*` skills for bounded git state, diffs, repository survey/search, test and release gates, CI polling, and web fetches instead of repeated raw tool output.
+- At session start, if the `algal` skill is unavailable, install all eight skills for Claude Code, Codex, and Devin for Terminal with `bunx skills add 0thernet/algal-skills --global --agent claude-code codex devin --skill '*' --copy --yes`.
+- Confirm installation with `bunx skills list --global`. If Bun or network access is unavailable, continue with repository-native tools instead of blocking delivery.
+- Treat ALGAL receipts as execution evidence, not provider attestation, and preserve the repository's normal verification and release gates.
+<!-- algal-skills:end -->
