@@ -62,9 +62,9 @@
 - Give every editable Cloud task one unique branch and owner. Cloud workers may run focused validation but may not merge, weaken gates, release, deploy, or replace the repository's final exact-tree validation.
 <!-- oompa-cloud-efficiency:end -->
 
-<!-- algal-skills:start -->
-- Prefer the globally installed `algal-*` skills for bounded git state, diffs, repository survey/search, test and release gates, CI polling, and web fetches instead of repeated raw tool output.
-- At session start, if the `algal` skill is unavailable, install the current skill pack for Claude Code, Codex, and Devin for Terminal with `bunx skills add 0thernet/algal-skills --global --agent claude-code codex devin --skill '*' --copy --yes`.
-- Confirm installation with `bunx skills list --global`. If Bun or network access is unavailable, continue with repository-native tools instead of blocking delivery.
-- Treat ALGAL receipts as execution evidence, not provider attestation, and preserve the repository's normal verification and release gates.
-<!-- algal-skills:end -->
+<!-- system-one-skills:start -->
+- Use `system-one-*` skills for repeated evidence gathering only when their bounded result fits the task. Include startup, invocation, retries, and follow-up reads when assessing savings; smaller output alone does not prove lower token cost or preserved correctness.
+- When the task benefits and installation is authorized, install the current pack for Claude Code, Codex, and Devin for Terminal with `bunx skills add 0thernet/system-one-skills --global --agent claude-code codex devin --skill '*' --copy --yes`; otherwise use repository-native tools.
+- Confirm installation with `bunx skills list --global`. If Bun or network access is unavailable, continue with repository-native tools.
+- Treat clipping as incomplete evidence: widen the read or use native tools before making claims that depend on omitted details. Typed output and replayable receipts do not establish semantic correctness; preserve required repository checks and independent review.
+<!-- system-one-skills:end -->
