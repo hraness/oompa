@@ -4,7 +4,6 @@ import { createConnection, createServer, type Server, type Socket } from "node:n
 import { basename, dirname } from "node:path";
 
 import { assertOwnedPath, readOwnedFileStable } from "@hraness/local-custody/private-paths";
-import { publishPrivateFile } from "@hraness/local-custody/atomic-publish";
 import {
   commandEnvelopeSchema,
   commandResponseSchema,
@@ -16,6 +15,7 @@ import {
   type LocalCommand,
 } from "../domain/contracts";
 import { ensurePrivateDirectory, type StatePaths } from "../storage/paths";
+import { localCustodyEngine } from "./custody-engine";
 
 const maximumRequestBytes = LOCAL_COMMAND_REQUEST_MAX_BYTES;
 const maximumResponseBytes = LOCAL_COMMAND_RESPONSE_MAX_BYTES;
@@ -75,6 +75,12 @@ const boundedTimeoutMs = (value: number | undefined, fallback: number): number =
   return candidate;
 };
 
+// Every caller of this validator treats a raw `ENOENT` `ErrnoException` as
+// "the endpoint is absent": stale-endpoint cleanup skips it and the client
+// maps it onto `LocalDaemonUnavailableError`. The custody engine reports a
+// missing path as a `CustodyError` domain failure (sidecar code `stat`), not
+// `ENOENT`, so these checks keep the direct TypeScript import; the engine
+// covers only operations where a missing path is not a distinct outcome.
 async function validateOwnedFile(path: string, kind: "file" | "socket", mode?: number): Promise<void> {
   try {
     await assertOwnedPath(path, { kind, ...(mode === undefined ? {} : { exactMode: mode }) });
@@ -96,7 +102,8 @@ async function removeStaleEndpoint(paths: StatePaths): Promise<void> {
 }
 
 async function publishCapability(paths: StatePaths, capability: string): Promise<void> {
-  await publishPrivateFile(dirname(paths.capability), basename(paths.capability), `${capability}\n`);
+  const custody = await localCustodyEngine();
+  await custody.publishPrivateFile(dirname(paths.capability), basename(paths.capability), `${capability}\n`);
 }
 
 const publicFailureCodes = [

@@ -1,6 +1,7 @@
 # Contents
 
 - The daemon hosts the local command authority, long-running provider processes, and opaque session-memory lifecycle coordination.
+- `custody-engine.ts` holds the one process-wide local-custody engine: it prefers the packaged Rust sidecar and falls back per operation. Custody checks whose callers branch on `ENOENT` keep the direct TypeScript imports because the sidecar reports a missing path as a `CustodyError`, not an `ErrnoException`.
 - One session has one exact provider binding at a time. A durable switch journal alone may replace that binding; existing effects and interactions retain their original authority. The service selects the captured provider's `SessionRuntimePort` for start, turns, steering, interrupt, projection reads and interactions. Provider facts use one neutral timeline vocabulary.
 - The Unix socket transports one bounded authenticated request at a time.
 - The explicit live-acceptance daemon composition exposes a structural observer for actual personal-provider children. Its acceptance implementation and bounded status policy live under `scripts/`; the reusable exact-child adapter lives under `src/claude/`.

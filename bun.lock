@@ -6,7 +6,7 @@
       "name": "hra",
       "dependencies": {
         "@agentclientprotocol/sdk": "1.4.0",
-        "@hraness/local-custody": "0.5.1",
+        "@hraness/local-custody": "0.6.0",
         "@hraness/oh": "0.10.8",
         "@openai/codex": "0.153.2",
         "convex": "1.45.0",
@@ -197,7 +197,7 @@
 
     "@hraness/direct": ["@hraness/direct@github:hraness/direct#849f341", { "peerDependencies": { "agent-browser": "0.32.3", "react": ">=18 <20" }, "optionalPeers": ["agent-browser", "react"] }, "hraness-direct-849f341", "sha512-cvWcokL4EY871qpDMjaZm85pSMD3OjwmTAcN/xUgzeXDPeAt0S7+3gP0X/77MUA1hma5SoHiNJlKdnEXL3PVew=="],
 
-    "@hraness/local-custody": ["@hraness/local-custody@0.5.1", "", {}, "sha512-Rmtm6+d7nSXVhSMw1Fesa+t+w2UxtPKJe8qCC/wiacKz6eGZ7RI1OhIOYOnnPW6itNTcXfjFMJV6RRoY9RtAVg=="],
+    "@hraness/local-custody": ["@hraness/local-custody@0.6.0", "", {}, "sha512-vkAT2r8S98yilB4uWZyH0U1DCOzxUJ42hmDlA3IA0V/7YP6rEh4OKhnZCThabA4g1YzpetO8exTOlXx21taqwA=="],
 
     "@hraness/oh": ["@hraness/oh@0.10.8", "", { "peerDependencies": { "@libsql/client": ">=0.17.4 <1", "@suss/datalog": "0.20.0", "@tobilu/qmd": "2.5.3" }, "optionalPeers": ["@libsql/client", "@suss/datalog", "@tobilu/qmd"], "bin": { "oh": "dist/cli.js" } }, "sha512-rtm+D1pzlxTE84zAnIFq3dxQulU/HpstnaUYYW1Cl9HjNG1p+Z0Oy0oNTUQpxtYHh3XClDS2MLsV693WcUwOOA=="],
 

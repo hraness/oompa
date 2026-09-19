@@ -8,6 +8,7 @@ import type {
   ClaudeHostToolCallbackHandler,
 } from "../claude/index.ts";
 import { ensurePrivateDirectory, type StatePaths } from "../storage/paths.ts";
+import { localCustodyEngine } from "./custody-engine.ts";
 
 const CALLBACK_SOCKET_NAME = "claude-host-tools.sock";
 const CALLBACK_REQUEST_MAX_BYTES = 4 * 1_024 * 1_024;
@@ -25,10 +26,17 @@ export class ClaudeHostToolTransportShutdownTimeoutError extends Error {
 export const claudeHostToolCallbackSocketPath = (paths: StatePaths): string =>
   join(paths.runtime, CALLBACK_SOCKET_NAME);
 
+// The socket was just bound and chmodded, so a missing path is not a distinct
+// outcome here; the custody engine's Rust sidecar owns this re-validation.
 const assertPrivateSocket = async (path: string): Promise<void> => {
-  await assertOwnedPath(path, { kind: "socket", exactMode: 0o600 });
+  const custody = await localCustodyEngine();
+  await custody.assertOwnedPath(path, { kind: "socket", exactMode: 0o600 });
 };
 
+// A missing endpoint must surface as a raw `ENOENT` `ErrnoException` so the
+// stale-socket path is skipped; the custody engine reports a missing path as
+// a `CustodyError` domain failure (sidecar code `stat`), so this check keeps
+// the direct TypeScript import.
 const removeStaleSocket = async (path: string): Promise<void> => {
   try {
     await assertOwnedPath(path, { kind: "socket" });
